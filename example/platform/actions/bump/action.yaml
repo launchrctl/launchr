@@ -1,0 +1,16 @@
+action:
+  title: Verb
+  description: Handles some logic
+  arguments:
+    - name: arg1
+      title: Argument 1
+      description: Some additional info for arg
+    - name: arg2
+      title: Argument 2
+      description: Some additional info for arg
+  options: # TODO Use json schema. By default string. Do not allow complex data.
+    - name: opt1
+      title: Option 1
+      description: Some additional info for option
+  image: python:3.7-slim
+  command: python3 %s

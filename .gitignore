@@ -1,0 +1,6 @@
+/bin
+/build_*
+.launchr
+*.tar
+*.gz
+*.gen.go
