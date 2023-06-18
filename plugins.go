@@ -1,4 +1,4 @@
-package core
+package launchr
 
 import (
 	"fmt"
@@ -44,7 +44,7 @@ type PluginGeneratedData struct {
 // GeneratePlugin is an interface to generate supporting files before build.
 type GeneratePlugin interface {
 	Plugin
-	Generate(buildPath string) (*PluginGeneratedData, error)
+	Generate(buildPath string, workDir string) (*PluginGeneratedData, error)
 }
 
 // ToCamelCase converts a string to CamelCase

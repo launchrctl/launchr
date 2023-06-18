@@ -9,6 +9,7 @@ GIT_HASH:=$(shell git log --format="%h" -n 1 2> /dev/null)
 GIT_BRANCH:=$(shell git branch 2> /dev/null | grep '*' | cut -f2 -d' ')
 GO_VERSION:=$(shell go version)
 BUILD_TS:=$(shell date +%FT%T%z)
+GOPKG:=github.com/launchrctl/launchr
 
 # App version is sanitized CI branch name, if available.
 # Otherwise git branch or commit hash is used.
@@ -37,7 +38,7 @@ all: launchr
 
 .PHONY: launchr
 launchr: APP_NAME=launchr
-launchr: SRCPKG=./
+launchr: SRCPKG=./cmd/launchr
 launchr: deps test build
 
 # Install go dependencies
@@ -60,12 +61,12 @@ build:
         go run $(SRCPKG)/gen.go $(SRCPKG);\
     fi
 # Application related information available on build time.
-	$(eval LDFLAGS:=-X 'main.Name=$(APP_NAME)'\
-         -X 'main.Version=$(APP_VERSION)'\
-         -X 'main.GoVersion=$(GO_VERSION)'\
-         -X 'main.BuildDate=$(BUILD_TS)'\
-         -X 'main.GitHash=$(GIT_HASH)'\
-         -X 'main.GitBranch=$(GIT_BRANCH)' $(LDFLAGS_EXTRA)\
+	$(eval LDFLAGS:=-X '$(GOPKG).Name=$(APP_NAME)'\
+         -X '$(GOPKG).Version=$(APP_VERSION)'\
+         -X '$(GOPKG).GoVersion=$(GO_VERSION)'\
+         -X '$(GOPKG).BuildDate=$(BUILD_TS)'\
+         -X '$(GOPKG).GitHash=$(GIT_HASH)'\
+         -X '$(GOPKG).GitBranch=$(GIT_BRANCH)' $(LDFLAGS_EXTRA)\
     )
 	$(eval BIN?=$(LOCAL_BIN)/$(APP_NAME))
 	$(BUILD_ENVPARMS) go build -ldflags "$(LDFLAGS)" $(BUILD_OPTS) -o $(BIN) $(SRCPKG)

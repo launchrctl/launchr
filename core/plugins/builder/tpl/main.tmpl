@@ -1,0 +1,42 @@
+{{- if .BuildTags}}{{print "//go:build " .BuildTags}}{{end}}
+{{print "// Built by Launchr"}}
+package main
+
+import (
+	"os"
+
+	"github.com/launchrctl/launchr"
+
+    // Plugins
+	_ "{{.PkgName}}/gen"
+	{{- range .Plugins}}
+	_ "{{.}}"
+	{{- end}}
+)
+
+{{define "version"}}
+{{- with .BuildVersion -}}
+  {{.Name}} version {{.Version}} {{print .OS "/" .Arch .Arm}}
+{{- end}}
+Built with {{with .LaunchrVersion -}}
+  {{.Name}} ({{.Version}}) {{print .OS "/" .Arch .Arm}}
+{{- end -}}
+{{with .BuildVersion}} and {{.GoVersion}} at {{.BuildDate}}
+{{- end}}
+{{- if .Plugins}}
+
+Plugins:
+  {{- range .Plugins}}
+  - {{.}}
+  {{- end}}
+{{end}}
+{{- end}}
+
+
+{{- /* inline version in a multiline string */ -}}
+const version = `{{template "version" .}}`
+
+func main() {
+	launchr.SetCustomVersion(version)
+	os.Exit({{if .ExecFn}}{{.ExecFn}}{{else}}launchr.Run(){{end}})
+}

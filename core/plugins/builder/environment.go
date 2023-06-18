@@ -58,11 +58,18 @@ func (env *buildEnvironment) CreateProject(ctx context.Context, files []genGoFil
 	var err error
 	for _, f := range files {
 		buf.Reset()
-		err = f.Tpl.Execute(&buf, f.Vars)
+		// Render template.
+		err = tmplView.ExecuteTemplate(&buf, f.TmplName, f.Vars)
 		if err != nil {
 			return err
 		}
+		// Create target file with directories recursively.
 		target := filepath.Join(env.wd, f.Filename)
+		dir := filepath.Dir(target)
+		err = os.MkdirAll(dir, 0700)
+		if err != nil {
+			return err
+		}
 		err = os.WriteFile(target, buf.Bytes(), 0600)
 		if err != nil {
 			return err
@@ -70,7 +77,7 @@ func (env *buildEnvironment) CreateProject(ctx context.Context, files []genGoFil
 	}
 
 	// Create go.mod.
-	err = env.execGoMod(ctx, "init", "launchr")
+	err = env.execGoMod(ctx, "init", opts.PkgName)
 	if err != nil {
 		return err
 	}

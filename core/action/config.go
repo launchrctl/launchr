@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/launchrctl/launchr/core/action/jsonschema"
 	"github.com/launchrctl/launchr/core/cli"
+	"github.com/launchrctl/launchr/core/jsonschema"
 )
 
 var (

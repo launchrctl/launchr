@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/launchrctl/launchr/core/action"
-	"github.com/launchrctl/launchr/core/action/jsonschema"
+	"github.com/launchrctl/launchr/core/jsonschema"
 	"github.com/launchrctl/launchr/core/log"
 )
 

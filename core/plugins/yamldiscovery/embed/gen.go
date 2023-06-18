@@ -8,19 +8,19 @@ import (
 	"path/filepath"
 	"text/template"
 
-	"github.com/launchrctl/launchr/core"
-	"github.com/launchrctl/launchr/plugins/yamldiscovery"
+	"github.com/launchrctl/launchr"
+	"github.com/launchrctl/launchr/core/plugins/yamldiscovery"
 )
 
 const pluginTemplate = `
 {{- print "// GENERATED. DO NOT EDIT." }}
-package main
+package gen
 
 import (
 	_ "embed"
 
-	launchr "github.com/launchrctl/launchr/core"
-	"github.com/launchrctl/launchr/plugins/yamldiscovery"
+	"github.com/launchrctl/launchr"
+	yamlembed "github.com/launchrctl/launchr/core/plugins/yamldiscovery/embed"
 )
 
 //go:embed {{.ActionsTarPath}}
@@ -39,7 +39,7 @@ func (p *{{.StructName}}) PluginInfo() launchr.PluginInfo {
 
 // InitApp implements launchr.Plugin interface.
 func (p *{{.StructName}}) InitApp(app *launchr.App) error {
-	fs, err := yamldiscovery.UntarFsBytes(tarFsBytes)
+	fs, err := yamlembed.UntarFsBytes(tarFsBytes)
 	if err == nil {
 		app.SetFS(fs)
 	}
@@ -53,15 +53,11 @@ type pluginVars struct {
 	StructName     string
 }
 
-// Generate implements core.GeneratePlugin interface.
-func (p *Plugin) Generate(buildPath string) (*core.PluginGeneratedData, error) {
-	dp, err := yamldiscovery.GetDiscoveryPath()
-	if err != nil {
-		return nil, err
-	}
+// Generate implements launchr.GeneratePlugin interface.
+func (p *Plugin) Generate(buildPath string, workDir string) (*launchr.PluginGeneratedData, error) {
 	// Generate actions tar.
 	fmt.Println("[INFO] Discovering actions")
-	tarName, cmds, err := createActionTar(os.DirFS(dp), buildPath)
+	tarName, cmds, err := createActionTar(os.DirFS(workDir), buildPath)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +73,7 @@ func (p *Plugin) Generate(buildPath string) (*core.PluginGeneratedData, error) {
 
 	fmt.Println("[INFO] Generating embed actions go file")
 	var buf bytes.Buffer
-	structName := core.ToCamelCase(id, false)
+	structName := launchr.ToCamelCase(id, false)
 	err = tpl.Execute(&buf, &pluginVars{
 		ID:             id,
 		StructName:     structName,
@@ -92,7 +88,7 @@ func (p *Plugin) Generate(buildPath string) (*core.PluginGeneratedData, error) {
 		return nil, err
 	}
 
-	return &core.PluginGeneratedData{
+	return &launchr.PluginGeneratedData{
 		Plugins: []string{structName},
 	}, nil
 }

@@ -1,5 +1,5 @@
-// Package core has application implementation.
-package core
+// Package launchr has application implementation.
+package launchr
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/launchrctl/launchr/core/cli"
+	"github.com/launchrctl/launchr/core/log"
 )
 
 // App holds app related global variables.
@@ -86,9 +87,13 @@ func (app *App) Init() error {
 	return nil
 }
 
-func (app *App) gen(buildPath string) error {
+func (app *App) gen(buildPath string, wordDir string) error {
 	var err error
 	buildPath, err = filepath.Abs(buildPath)
+	if err != nil {
+		return err
+	}
+	wordDir, err = filepath.Abs(wordDir)
 	if err != nil {
 		return err
 	}
@@ -97,7 +102,7 @@ func (app *App) gen(buildPath string) error {
 	for _, p := range app.Plugins() {
 		p, ok := p.(GeneratePlugin)
 		if ok {
-			genData, err := p.Generate(buildPath)
+			genData, err := p.Generate(buildPath, wordDir)
 			if err != nil {
 				return err
 			}
@@ -133,10 +138,10 @@ func (app *App) gen(buildPath string) error {
 func (app *App) exec() error {
 	// Set root cobra command.
 	var rootCmd = &cobra.Command{
-		Use: "launchr", // @todo fix according to current name
+		Use: Name,
 		//Short: "", // @todo
 		//Long:  ``, // @todo
-		Version: "dev",
+		Version: Version,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			setCobraLogger()
 			return nil
@@ -168,11 +173,12 @@ func (app *App) exec() error {
 
 // Generate runs generation of included plugins.
 func (app *App) Generate() int {
-	buildPath := "./"
+	buildPath := "./gen"
+	wd := "./"
 	if len(os.Args) > 1 {
-		buildPath = os.Args[1]
+		wd = os.Args[1]
 	}
-	if err := app.gen(buildPath); err != nil {
+	if err := app.gen(buildPath, wd); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 125
 	}
@@ -181,11 +187,53 @@ func (app *App) Generate() int {
 
 // Execute is a cobra entrypoint to the launchr app.
 func (app *App) Execute() int {
+	app.version = GetVersion()
 	if err := app.exec(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	return 0
+}
+
+var verbosity = 0
+var quiet = false
+
+func setCobraLogger() {
+	if quiet {
+		// @todo it doesn't really work for cli and docker output, only for logging.
+		return
+	}
+	log.SetGlobalLogger(log.NewPlainLogger(os.Stdout, os.Stderr, nil))
+	if verbosity > int(log.ErrLvl) {
+		verbosity = int(log.ErrLvl)
+	}
+	log.SetLevel(log.Level(int(log.ErrLvl) - verbosity))
+}
+
+func verbosityFlags(cmd *cobra.Command) {
+	// @todo rework to plugins somehow
+	cmd.PersistentFlags().CountVarP(&verbosity, "verbose", "v", "log verbosity level, use -vvv DEBUG, -vv WARN, -v INFO")
+	cmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "disable stdOut")
+}
+
+// Run executes launchr application and returns os exit code.
+func Run() int {
+	app := NewApp()
+	if err := app.Init(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 125
+	}
+	return app.Execute()
+}
+
+// Gen generates application specific build files and returns os exit code.
+func Gen() int {
+	app := NewApp()
+	if err := app.Init(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 125
+	}
+	return app.Generate()
 }
 
 type initTplVars struct {
@@ -194,10 +242,10 @@ type initTplVars struct {
 
 const initGenTemplate = `
 {{- print "// GENERATED. DO NOT EDIT." }}
-package main
+package gen
 
 import (
-	launchr "github.com/launchrctl/launchr/core"
+	"github.com/launchrctl/launchr"
 )
 
 func init() {

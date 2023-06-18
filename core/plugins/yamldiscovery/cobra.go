@@ -20,7 +20,7 @@ var DiscoveredActionsGroup = &cobra.Group{
 	Title: "Discovered actions:",
 }
 
-// CobraAddCommands implements core.CobraPlugin interface to provide discovered actions.
+// CobraAddCommands implements launchr.CobraPlugin interface to provide discovered actions.
 func (p *Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
 	// CLI command to discover actions in file structure and provide
 	var discoverCmd = &cobra.Command{
