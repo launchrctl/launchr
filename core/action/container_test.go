@@ -1,4 +1,4 @@
-package exec
+package action
 
 import (
 	"bytes"
@@ -15,7 +15,6 @@ import (
 	"github.com/moby/moby/pkg/stdcopy"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/launchrctl/launchr/core/action"
 	"github.com/launchrctl/launchr/core/cli"
 	"github.com/launchrctl/launchr/core/driver"
 	mockdriver "github.com/launchrctl/launchr/core/driver/mocks"
@@ -25,22 +24,6 @@ var gCfgYaml = `
 images:
   build:global: ./global
 `
-
-type testActionLoader struct {
-	cfg *action.Config
-}
-
-func (l *testActionLoader) Content() ([]byte, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (l *testActionLoader) Load() (*action.Config, error) {
-	return l.cfg, nil
-}
-
-func (l *testActionLoader) LoadRaw() (*action.Config, error) {
-	return l.Load()
-}
 
 type eqImageOpts struct {
 	x driver.ImageOptions
@@ -76,9 +59,9 @@ func getFakeAppCli() cli.Cli {
 	return appCli
 }
 
-func testCmd(a *action.Action) *action.Command {
+func testContainerCmd(a *Action) *Command {
 	if a == nil {
-		a = &action.Action{
+		a = &Action{
 			Image: "myimage",
 			ExtraHosts: []string{
 				"my:host1",
@@ -90,9 +73,9 @@ func testCmd(a *action.Action) *action.Command {
 			},
 		}
 	}
-	return &action.Command{
+	return &Command{
 		CommandName: "test",
-		Loader:      &testActionLoader{cfg: &action.Config{Action: a}},
+		Loader:      &testActionLoader{cfg: &Config{Action: a}},
 		Filepath:    "my/action/test/action.yaml",
 	}
 }
@@ -113,7 +96,7 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 	t.Parallel()
 
 	appCli := getFakeAppCli()
-	cmdLocal := testCmd(&action.Action{
+	cmdLocal := testContainerCmd(&Action{
 		Image: "build:local",
 		Build: &cli.BuildDefinition{
 			Context: "./",
@@ -123,7 +106,7 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 	assert.NoError(t, err)
 	type testCase struct {
 		name     string
-		action   *action.Action
+		action   *Action
 		expBuild *cli.BuildDefinition
 		ret      []interface{}
 	}
@@ -144,13 +127,13 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 	tts := []testCase{
 		{
 			"image exists",
-			&action.Action{Image: "exists"},
+			&Action{Image: "exists"},
 			nil,
 			imgFn(driver.ImageExists, "", nil),
 		},
 		{
 			"image pulled",
-			&action.Action{Image: "pull"},
+			&Action{Image: "pull"},
 			nil,
 			imgFn(driver.ImagePull, "pulling image", nil),
 		},
@@ -162,13 +145,13 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 		},
 		{
 			"image build global",
-			&action.Action{Image: "build:global"},
+			&Action{Image: "build:global"},
 			appCli.Config().ImageBuildInfo("build:global"),
 			imgFn(driver.ImageBuild, "building image (global config)", nil),
 		},
 		{
 			"driver error",
-			&action.Action{Image: ""},
+			&Action{Image: ""},
 			nil,
 			imgFn(-1, "", fmt.Errorf("incorrect image")),
 		},
@@ -183,7 +166,7 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 			defer ctrl.Finish()
 			defer r.Close()
 			ctx := context.Background()
-			cmd := testCmd(tt.action)
+			cmd := testContainerCmd(tt.action)
 			err = cmd.Compile()
 			assert.NoError(err)
 			a := cmd.Action()
@@ -204,7 +187,7 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 	defer ctrl.Finish()
 	defer r.Close()
 
-	cmd := testCmd(nil)
+	cmd := testContainerCmd(nil)
 	assert.NoError(cmd.Compile())
 	act := cmd.Action()
 
@@ -409,7 +392,7 @@ func Test_ContainerExec(t *testing.T) {
 	t.Parallel()
 
 	cid := "cid"
-	cmd := testCmd(nil)
+	cmd := testContainerCmd(nil)
 	assert.NoError(t, cmd.Compile())
 	act := cmd.Action()
 	imgBuild := &driver.ImageStatusResponse{Status: driver.ImageExists}

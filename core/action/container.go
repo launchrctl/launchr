@@ -1,4 +1,4 @@
-package exec
+package action
 
 import (
 	"bufio"
@@ -12,7 +12,6 @@ import (
 	"github.com/moby/sys/signal"
 	"github.com/moby/term"
 
-	"github.com/launchrctl/launchr/core/action"
 	"github.com/launchrctl/launchr/core/cli"
 	"github.com/launchrctl/launchr/core/driver"
 	"github.com/launchrctl/launchr/core/log"
@@ -28,6 +27,11 @@ type containerExec struct {
 	dtype  driver.Type
 }
 
+// NewDockerExecutor creates a new action executor in Docker environment.
+func NewDockerExecutor() (Executor, error) {
+	return NewContainerExecutor(driver.Docker)
+}
+
 // NewContainerExecutor creates a new action executor in container environment.
 func NewContainerExecutor(t driver.Type) (Executor, error) {
 	r, err := driver.New(t)
@@ -37,7 +41,7 @@ func NewContainerExecutor(t driver.Type) (Executor, error) {
 	return &containerExec{r, t}, nil
 }
 
-func (c *containerExec) Exec(ctx context.Context, appCli cli.Cli, cmd *action.Command) error {
+func (c *containerExec) Exec(ctx context.Context, appCli cli.Cli, cmd *Command) error {
 	ctx, cancelFun := context.WithCancel(ctx)
 	defer cancelFun()
 	a := cmd.Action()
@@ -135,7 +139,7 @@ func (c *containerExec) Exec(ctx context.Context, appCli cli.Cli, cmd *action.Co
 	return nil
 }
 
-func genContainerName(cmd *action.Command, existing map[string]struct{}) string {
+func genContainerName(cmd *Command, existing map[string]struct{}) string {
 	// Replace command name "-", ":", and "." to "_".
 	replace := "-:."
 	od := make([]string, len(replace)*2)
@@ -159,7 +163,7 @@ func (c *containerExec) Close() error {
 	return c.driver.Close()
 }
 
-func (c *containerExec) imageEnsure(ctx context.Context, appCli cli.Cli, cmd *action.Command) error {
+func (c *containerExec) imageEnsure(ctx context.Context, appCli cli.Cli, cmd *Command) error {
 	a := cmd.Action()
 	image := a.Image
 	var build *cli.BuildDefinition
@@ -218,7 +222,7 @@ func (c *containerExec) imageEnsure(ctx context.Context, appCli cli.Cli, cmd *ac
 	return nil
 }
 
-func (c *containerExec) containerCreate(ctx context.Context, appCli cli.Cli, cmd *action.Command, config *driver.ContainerCreateOptions) (string, error) {
+func (c *containerExec) containerCreate(ctx context.Context, appCli cli.Cli, cmd *Command, config *driver.ContainerCreateOptions) (string, error) {
 	if err := c.imageEnsure(ctx, appCli, cmd); err != nil {
 		return "", err
 	}

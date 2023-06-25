@@ -24,7 +24,7 @@ func (l *testActionLoader) LoadRaw() (*Config, error) {
 	return l.Load()
 }
 
-func testCmd() *Command {
+func testLoaderCmd() *Command {
 	cfg := &Config{
 		Version: "1",
 		Action: &Action{
@@ -56,7 +56,7 @@ func Test_EnvProcessor(t *testing.T) {
 }
 
 func Test_InputProcessor(t *testing.T) {
-	cmd := testCmd()
+	cmd := testLoaderCmd()
 	proc := &inputProcessor{cmd: cmd}
 	cmd.SetArgsInput([]string{"arg1"})
 	cmd.SetOptsInput(map[string]interface{}{"optStr": "optVal1"})
@@ -73,7 +73,7 @@ func Test_InputProcessor(t *testing.T) {
 }
 
 func Test_PipeProcessor(t *testing.T) {
-	cmd := testCmd()
+	cmd := testLoaderCmd()
 	proc := &pipeProcessor{
 		[]LoadProcessor{
 			&envProcessor{},

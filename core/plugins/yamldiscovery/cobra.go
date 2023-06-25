@@ -9,9 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/launchrctl/launchr/core/action"
-	actionexec "github.com/launchrctl/launchr/core/action/exec"
 	"github.com/launchrctl/launchr/core/cli"
-	"github.com/launchrctl/launchr/core/driver"
 )
 
 // DiscoveredActionsGroup is a cobra command group definition
@@ -117,7 +115,7 @@ func runCmd(ctx context.Context, appCli cli.Cli, cmd *action.Command, args []str
 		return err
 	}
 
-	r, err := actionexec.NewContainerExecutor(driver.Docker)
+	r, err := action.NewDockerExecutor()
 	if err != nil {
 		return err
 	}
