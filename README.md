@@ -55,7 +55,7 @@ export PATH=$PATH:$GOPATH/bin
 
 The tool can be built and run locally:
 ```shell
-make launchr
+make
 bin/launchr --version
 ```
 
@@ -63,11 +63,11 @@ bin/launchr --version
 
 The `launchr`  can be built with a `make` to `bin` directory:
 ```shell
-make launchr
+make
 ```
 It is also supported to make a build to use with `dlv` for debug:
 ```shell
-make launchr DEBUG=1
+make DEBUG=1
 ```
 
 Useful make commands:

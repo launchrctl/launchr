@@ -11,16 +11,14 @@ GO_VERSION:=$(shell go version)
 BUILD_TS:=$(shell date +%FT%T%z)
 GOPKG:=github.com/launchrctl/launchr
 
-# App version is sanitized CI branch name, if available.
-# Otherwise git branch or commit hash is used.
-APP_VERSION:=$(if $(CI_COMMIT_REF_SLUG),$(CI_COMMIT_REF_SLUG),$(if $(GIT_BRANCH),$(GIT_BRANCH),$(GIT_HASH)))
+APP_VERSION:="$(GIT_BRANCH)-$(GIT_HASH)"
 
 DEBUG?=0
 ifeq ($(DEBUG), 1)
     LDFLAGS_EXTRA=
     BUILD_OPTS=-gcflags "all=-N -l"
 else
-    LDFLAGS_EXTRA=-w -s
+    LDFLAGS_EXTRA=-s -w
     BUILD_OPTS=-trimpath
 endif
 
@@ -34,12 +32,7 @@ GOLANGCI_BIN:=$(LOCAL_BIN)/golangci-lint
 GOLANGCI_TAG:=1.52.2
 
 .PHONY: all
-all: launchr
-
-.PHONY: launchr
-launchr: APP_NAME=launchr
-launchr: SRCPKG=./cmd/launchr
-launchr: deps test build
+all: deps test build
 
 # Install go dependencies
 .PHONY: deps
@@ -56,24 +49,15 @@ test:
 # Build launchr
 .PHONY: build
 build:
-	$(info Building $(APP_NAME)...)
-	@if [ -f $(SRCPKG)/gen.go ]; then\
-        go run $(SRCPKG)/gen.go $(SRCPKG);\
-    fi
+	$(info Building launchr...)
 # Application related information available on build time.
-	$(eval LDFLAGS:=-X '$(GOPKG).Name=$(APP_NAME)'\
-         -X '$(GOPKG).Version=$(APP_VERSION)'\
-         -X '$(GOPKG).GoVersion=$(GO_VERSION)'\
-         -X '$(GOPKG).BuildDate=$(BUILD_TS)'\
-         -X '$(GOPKG).GitHash=$(GIT_HASH)'\
-         -X '$(GOPKG).GitBranch=$(GIT_BRANCH)' $(LDFLAGS_EXTRA)\
-    )
-	$(eval BIN?=$(LOCAL_BIN)/$(APP_NAME))
-	$(BUILD_ENVPARMS) go build -ldflags "$(LDFLAGS)" $(BUILD_OPTS) -o $(BIN) $(SRCPKG)
+	$(eval LDFLAGS:=-X '$(GOPKG).Name=launchr' -X '$(GOPKG).Version=$(APP_VERSION)' $(LDFLAGS_EXTRA))
+	$(eval BIN?=$(LOCAL_BIN)/launchr)
+	go generate ./...
+	$(BUILD_ENVPARMS) go build -ldflags "$(LDFLAGS)" $(BUILD_OPTS) -o $(BIN) ./cmd/launchr
 
 # Install launchr
 .PHONY: install
-install: launchr
 install:
 	$(info Installing launchr to GOPATH...)
 	cp $(LOCAL_BIN)/launchr $(GOBIN)/launchr

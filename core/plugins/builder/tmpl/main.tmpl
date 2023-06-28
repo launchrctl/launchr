@@ -1,0 +1,21 @@
+// Built by Launchr
+//go:generate go run ./gen.go {{.Cwd}}
+package main
+
+import (
+	"os"
+
+	"github.com/launchrctl/launchr"
+	_ "{{.PkgName}}/gen"
+	{{range .Plugins}}
+	_ "{{.}}"
+	{{- end}}
+)
+
+{{/* inline version in a multiline string */}}
+const version = `{{template "version.tmpl" .}}`
+
+func main() {
+	launchr.SetCustomVersion(version)
+	os.Exit(launchr.Run())
+}

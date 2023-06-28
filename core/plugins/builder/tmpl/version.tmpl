@@ -1,0 +1,9 @@
+{{.BuildVersion -}}
+Built with {{.LaunchrVersion -}}
+
+{{- if .Plugins}}
+Plugins:
+  {{- range .Plugins}}
+  - {{.}}
+  {{- end}}
+{{end}}

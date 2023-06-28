@@ -1,14 +1,12 @@
 package builder
 
 import (
-	"bytes"
 	"context"
 	"embed"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"text/template"
 	"time"
 
@@ -52,17 +50,16 @@ type genGoFile struct {
 	Filename string
 }
 
-//go:embed tpl/*.tmpl
+//go:embed tmpl/*.tmpl
 var embedTmplFs embed.FS
-var tmplView = template.Must(template.ParseFS(embedTmplFs, "tpl/*.tmpl"))
+var tmplView = template.Must(template.ParseFS(embedTmplFs, "tmpl/*.tmpl"))
 
 type buildVars struct {
-	BuildTags      string
 	PkgName        string
 	LaunchrVersion *launchr.AppVersion
 	BuildVersion   *launchr.AppVersion
 	Plugins        []UsePluginInfo
-	ExecFn         string
+	Cwd            string
 }
 
 // NewBuilder creates build environment.
@@ -100,7 +97,7 @@ func (b *Builder) Build(ctx context.Context) error {
 	log.Printf("[INFO] Temporary folder: %s", b.env.wd)
 
 	// Generate app version info.
-	buildVer := b.getBuildVersion(ctx, b.LaunchrVersion)
+	buildVer := b.getBuildVersion(b.LaunchrVersion)
 
 	// Generate project files.
 	mainVars := buildVars{
@@ -108,13 +105,11 @@ func (b *Builder) Build(ctx context.Context) error {
 		PkgName:        b.PkgName,
 		BuildVersion:   buildVer,
 		Plugins:        b.Plugins,
+		Cwd:            b.wd,
 	}
-	genVars := mainVars
-	genVars.BuildTags = "ignore"
-	genVars.ExecFn = "launchr.Gen()"
 	files := []genGoFile{
 		{"main.tmpl", &mainVars, "main.go"},
-		{"main.tmpl", &genVars, "gen.go"},
+		{"gen.tmpl", &mainVars, "gen.go"},
 		{"genpkg.tmpl", nil, "gen/pkg.go"},
 	}
 
@@ -126,9 +121,15 @@ func (b *Builder) Build(ctx context.Context) error {
 	}
 
 	// Generate code for provided plugins.
-	genArgs := []string{"run", "gen.go", b.wd}
+	genArgs := []string{"generate", "./..."}
 	cmdGen := b.env.NewCommand(ctx, b.env.Go(), genArgs...)
 	err = b.env.RunCmd(ctx, cmdGen)
+	if err != nil {
+		return err
+	}
+
+	// Make sure all dependencies are met after generation.
+	err = b.env.execGoMod(ctx, "tidy")
 	if err != nil {
 		return err
 	}
@@ -181,26 +182,13 @@ func (b *Builder) goBuild(ctx context.Context) error {
 	return nil
 }
 
-func (b *Builder) getBuildVersion(ctx context.Context, version *launchr.AppVersion) *launchr.AppVersion {
+func (b *Builder) getBuildVersion(version *launchr.AppVersion) *launchr.AppVersion {
 	bv := *version
 	bv.Name = b.PkgName
-	bv.BuildDate = time.Now().Format(time.RFC3339)
 	// @todo get version from the fetched go.mod module
-
-	// Get go version that would build
-	bufOut := bytes.NewBuffer(nil)
-	bufErr := bytes.NewBuffer(nil)
-	cmd := b.env.NewCommand(ctx, b.env.Go(), "version")
-	cmd.Stdout = bufOut
-	cmd.Stderr = bufErr
-	err := b.env.RunCmd(ctx, cmd)
-	if err == nil {
-		bv.GoVersion = strings.TrimSpace(bufOut.String())[len("go version "):]
-	}
 
 	bv.OS = os.Getenv("GOOS")
 	bv.Arch = os.Getenv("GOARCH")
-	bv.Arm = os.Getenv("GOARM")
 	if bv.OS == "" {
 		bv.OS = runtime.GOOS
 	}

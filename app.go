@@ -97,6 +97,30 @@ func (app *App) gen(buildPath string, wordDir string) error {
 	if err != nil {
 		return err
 	}
+	// Clean build path before generating.
+	err = filepath.WalkDir(buildPath, func(path string, dir fs.DirEntry, err error) error {
+		if path == buildPath {
+			return nil
+		}
+		if dir.IsDir() {
+			errRem := os.RemoveAll(path)
+			if errRem != nil {
+				return errRem
+			}
+			return filepath.SkipDir
+		}
+		if dir.Name() != "pkg.go" {
+			errRem := os.Remove(path)
+			if errRem != nil {
+				return errRem
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	// Call generate functions on plugins.
 	plugins := app.Plugins()
 	initSet := make(map[string]struct{}, len(plugins))
 	for _, p := range app.Plugins() {

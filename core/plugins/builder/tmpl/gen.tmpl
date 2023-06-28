@@ -1,12 +1,14 @@
 //go:build ignore
-
+// Built by Launchr
 package main
 
 import (
 	"os"
 
 	"github.com/launchrctl/launchr"
-	_ "github.com/launchrctl/launchr/core/plugins"
+	{{range .Plugins}}
+	_ "{{.}}"
+	{{- end}}
 )
 
 func main() {
