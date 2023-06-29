@@ -35,3 +35,15 @@ checksum:
   name_template: 'checksums.txt'
 snapshot:
   name_template: "{{ .Branch }}-{{.ShortCommit}}"
+report_sizes: true
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^test:"
+      - "^chore"
+      - "merge conflict"
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+      - go mod tidy
