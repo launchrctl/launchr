@@ -4,14 +4,10 @@ GOPATH?=$(HOME)/go
 FIRST_GOPATH:=$(firstword $(subst :, ,$(GOPATH)))
 
 # Build available information.
-GIT_TAG:=$(shell git describe --exact-match --abbrev=0 --tags 2> /dev/null)
 GIT_HASH:=$(shell git log --format="%h" -n 1 2> /dev/null)
 GIT_BRANCH:=$(shell git branch 2> /dev/null | grep '*' | cut -f2 -d' ')
-GO_VERSION:=$(shell go version)
-BUILD_TS:=$(shell date +%FT%T%z)
-GOPKG:=github.com/launchrctl/launchr
-
 APP_VERSION:="$(GIT_BRANCH)-$(GIT_HASH)"
+GOPKG:=github.com/launchrctl/launchr
 
 DEBUG?=0
 ifeq ($(DEBUG), 1)
@@ -58,6 +54,7 @@ build:
 
 # Install launchr
 .PHONY: install
+install: all
 install:
 	$(info Installing launchr to GOPATH...)
 	cp $(LOCAL_BIN)/launchr $(GOBIN)/launchr
