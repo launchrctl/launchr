@@ -28,13 +28,13 @@ There are the following build options:
 Plugins is a way to extend launchr functionality.  
 The main difference from actions is that plugins must be written in `go` and run natively on a host machine.
 
-The plugin must implement `core.Plugin` interface. Here is an example:
+The plugin must implement `launchr.Plugin` interface. Here is an example:
 ```go
 package example
 
 import (
     ...
-    launchr "github.com/launchrctl/launchr/core"
+    "github.com/launchrctl/launchr"
     ...
 )
 
@@ -47,14 +47,14 @@ type Plugin struct {
 	app *launchr.App
 }
 
-// PluginInfo implements core.Plugin interface.
+// PluginInfo implements launchr.Plugin interface.
 func (p *Plugin) PluginInfo() launchr.PluginInfo {
 	return launchr.PluginInfo{
 		ID: ID,
 	}
 }
 
-// InitApp implements core.Plugin interface to provide discovered actions.
+// InitApp implements launchr.Plugin interface to provide discovered actions.
 func (p *Plugin) InitApp(app *launchr.App) error {
 	p.app = app
 	return nil

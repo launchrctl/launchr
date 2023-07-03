@@ -8,7 +8,7 @@ import (
 
 	"github.com/launchrctl/launchr"
 	_ "github.com/launchrctl/launchr/cmd/launchr/gen"
-	_ "github.com/launchrctl/launchr/core/plugins"
+	_ "github.com/launchrctl/launchr/pkg/plugins"
 )
 
 func main() {
