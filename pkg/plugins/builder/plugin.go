@@ -39,12 +39,12 @@ func (p *Plugin) InitApp(*launchr.App) error {
 func (p *Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
 	// Flag options.
 	var (
-		name    string
-		out     string
-		timeout int
-		plugins []string
-		replace []string
-		debug   bool
+		name       string
+		out        string
+		timeoutStr string
+		plugins    []string
+		replace    []string
+		debug      bool
 	)
 
 	var buildCmd = &cobra.Command{
@@ -52,13 +52,21 @@ func (p *Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Don't show usage help on a runtime error.
 			cmd.SilenceUsage = true
+
+			// Set build timeout.
 			ctx := cmd.Context()
+			timeout, err := time.ParseDuration(timeoutStr)
+			if err != nil {
+				return err
+			}
 			if timeout != 0 {
 				// Execute build.
 				var cancel context.CancelFunc
-				ctx, cancel = context.WithTimeout(ctx, time.Second*time.Duration(timeout))
+				ctx, cancel = context.WithTimeout(ctx, timeout)
 				defer cancel()
 			}
+
+			// Parse dependencies definition.
 			allplugs, err := parsePlugins(plugins)
 			if err != nil {
 				return err
@@ -68,6 +76,7 @@ func (p *Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
 				return err
 			}
 
+			// Set output path if it's not defined.
 			if len(out) == 0 && len(name) > 0 {
 				out = "./" + name
 			}
@@ -85,9 +94,10 @@ func (p *Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
 			return Execute(ctx, opts)
 		},
 	}
+	// Command flags.
 	buildCmd.Flags().StringVarP(&name, "name", "n", "launchr", `Result application name`)
 	buildCmd.Flags().StringVarP(&out, "output", "o", "", `Build output file, by default application name is used`)
-	buildCmd.Flags().IntVarP(&timeout, "timeout", "t", 120, `Build timeout in seconds`)
+	buildCmd.Flags().StringVarP(&timeoutStr, "timeout", "t", "120s", `Build timeout duration, example: 0, 100ms, 1h23m`)
 	buildCmd.Flags().StringSliceVarP(&plugins, "plugin", "p", nil, `Include PLUGIN into the build with an optional version`)
 	buildCmd.Flags().StringSliceVarP(&replace, "replace", "r", nil, `Replace go dependency, see "go mod edit -replace"`)
 	buildCmd.Flags().BoolVarP(&debug, "debug", "d", false, `Include debug flags into the build to support go debugging with "delve". If not specified, debugging info is trimmed`)

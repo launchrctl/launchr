@@ -20,7 +20,9 @@ func envFromOs() envVars {
 	osenv := os.Environ()
 	env := make(envVars, 0, 8)
 	for _, v := range osenv {
-		if strings.HasPrefix(v, "GO") || strings.HasPrefix(v, "HOME=") {
+		if strings.HasPrefix(v, "GO") ||
+			strings.HasPrefix(v, "HOME=") ||
+			strings.HasPrefix(v, "PATH=") {
 			env = append(env, v)
 		}
 	}
@@ -201,7 +203,7 @@ func (env *buildEnvironment) parseGoMod() error {
 	return nil
 }
 
-func (env *buildEnvironment) getPkgVersion(pkg string) string {
+func (env *buildEnvironment) GetPkgVersion(pkg string) string {
 	var vrep *modfile.Replace
 	for _, rep := range env.gomod.Replace {
 		if strings.HasPrefix(pkg, rep.Old.Path) {
@@ -222,4 +224,8 @@ func (env *buildEnvironment) getPkgVersion(pkg string) string {
 		v = vrep.New.Version
 	}
 	return v
+}
+
+func (env *buildEnvironment) SetEnv(k string, v string) {
+	env.env.Set(k, v)
 }

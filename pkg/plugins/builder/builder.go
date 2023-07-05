@@ -99,10 +99,11 @@ func (b *Builder) Build(ctx context.Context) error {
 			_ = b.Close()
 		}
 	}()
-	log.Printf("[INFO] Temporary folder: %s", b.env.wd)
+	log.Printf("[DEBUG] Temporary folder: %s", b.env.wd)
 
 	// Write files to dir and generate go mod.
 	log.Printf("[INFO] Creating project files and fetching dependencies")
+	b.env.SetEnv("CGO_ENABLE", "0")
 	err = b.env.CreateModFile(ctx, b.BuildOptions)
 	if err != nil {
 		return err
@@ -112,7 +113,7 @@ func (b *Builder) Build(ctx context.Context) error {
 	buildVer := b.getBuildVersion(b.LaunchrVersion)
 	for _, p := range b.Plugins {
 		if p.Version == "" {
-			p.Version = b.env.getPkgVersion(p.Package)
+			p.Version = b.env.GetPkgVersion(p.Package)
 		}
 	}
 
@@ -202,7 +203,7 @@ func (b *Builder) getBuildVersion(version *launchr.AppVersion) *launchr.AppVersi
 	bv.Name = b.PkgName
 
 	// Get version from the fetched go.mod module
-	bv.Version = b.env.getPkgVersion(b.CorePkg.Package)
+	bv.Version = b.env.GetPkgVersion(b.CorePkg.Package)
 
 	bv.OS = os.Getenv("GOOS")
 	bv.Arch = os.Getenv("GOARCH")
