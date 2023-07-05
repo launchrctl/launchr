@@ -3,12 +3,12 @@ package builder
 import (
 	"context"
 	"embed"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"text/template"
-	"time"
 
 	"github.com/launchrctl/launchr"
 )
@@ -29,6 +29,11 @@ type UsePluginInfo struct {
 }
 
 func (p UsePluginInfo) String() string {
+	return fmt.Sprintf("%s %s", p.Package, p.Version)
+}
+
+// GoGetString provides a package path for a go get.
+func (p UsePluginInfo) GoGetString() string {
 	dep := p.Package
 	if p.Version != "" {
 		dep += "@" + p.Version
@@ -39,6 +44,7 @@ func (p UsePluginInfo) String() string {
 // BuildOptions stores launchr build parameters.
 type BuildOptions struct {
 	LaunchrVersion *launchr.AppVersion
+	CorePkg        UsePluginInfo
 	PkgName        string
 	ModReplace     map[string]string
 	Plugins        []UsePluginInfo
@@ -59,7 +65,7 @@ var tmplView = template.Must(template.ParseFS(embedTmplFs, "tmpl/*.tmpl"))
 type buildVars struct {
 	PkgName        string
 	LaunchrVersion *launchr.AppVersion
-	LaunchrPkg     string
+	CorePkg        UsePluginInfo
 	BuildVersion   *launchr.AppVersion
 	Plugins        []UsePluginInfo
 	Cwd            string
@@ -80,10 +86,6 @@ func NewBuilder(opts *BuildOptions) (*Builder, error) {
 // Build prepares build environment, generates go files and build the binary.
 func (b *Builder) Build(ctx context.Context) error {
 	log.Printf("[INFO] Start building")
-	// Execute build.
-	ctx, cancel := context.WithTimeout(ctx, time.Second*60)
-	defer cancel()
-
 	// Prepare build environment dir and go executable.
 	var err error
 	b.env, err = newBuildEnvironment()
@@ -99,13 +101,25 @@ func (b *Builder) Build(ctx context.Context) error {
 	}()
 	log.Printf("[INFO] Temporary folder: %s", b.env.wd)
 
+	// Write files to dir and generate go mod.
+	log.Printf("[INFO] Creating project files and fetching dependencies")
+	err = b.env.CreateModFile(ctx, b.BuildOptions)
+	if err != nil {
+		return err
+	}
+
 	// Generate app version info.
 	buildVer := b.getBuildVersion(b.LaunchrVersion)
+	for _, p := range b.Plugins {
+		if p.Version == "" {
+			p.Version = b.env.getPkgVersion(p.Package)
+		}
+	}
 
 	// Generate project files.
 	mainVars := buildVars{
 		LaunchrVersion: b.LaunchrVersion,
-		LaunchrPkg:     launchrPkg,
+		CorePkg:        b.CorePkg,
 		PkgName:        b.PkgName,
 		BuildVersion:   buildVer,
 		Plugins:        b.Plugins,
@@ -117,9 +131,7 @@ func (b *Builder) Build(ctx context.Context) error {
 		{"genpkg.tmpl", nil, "gen/pkg.go"},
 	}
 
-	// Write files to dir and generate go mod.
-	log.Printf("[INFO] Creating project files and fetching dependencies")
-	err = b.env.CreateProject(ctx, files, b.BuildOptions)
+	err = b.env.CreateSourceFiles(ctx, files)
 	if err != nil {
 		return err
 	}
@@ -188,7 +200,9 @@ func (b *Builder) goBuild(ctx context.Context) error {
 func (b *Builder) getBuildVersion(version *launchr.AppVersion) *launchr.AppVersion {
 	bv := *version
 	bv.Name = b.PkgName
-	// @todo get version from the fetched go.mod module
+
+	// Get version from the fetched go.mod module
+	bv.Version = b.env.getPkgVersion(b.CorePkg.Package)
 
 	bv.OS = os.Getenv("GOOS")
 	bv.Arch = os.Getenv("GOARCH")

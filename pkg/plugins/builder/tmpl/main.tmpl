@@ -5,10 +5,10 @@ package main
 import (
 	"os"
 
-	"{{.LaunchrPkg}}"
+	"{{.CorePkg.Package}}"
 	_ "{{.PkgName}}/gen"
 	{{range .Plugins}}
-	_ "{{.}}"
+	_ "{{.Package}}"
 	{{- end}}
 )
 

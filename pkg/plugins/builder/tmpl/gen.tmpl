@@ -5,9 +5,9 @@ package main
 import (
 	"os"
 
-	"{{.LaunchrPkg}}"
+	"{{.CorePkg.Package}}"
 	{{range .Plugins}}
-	_ "{{.}}"
+	_ "{{.Package}}"
 	{{- end}}
 )
 

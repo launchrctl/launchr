@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"golang.org/x/mod/modfile"
 )
 
 type envVars []string
@@ -39,8 +41,9 @@ func (a *envVars) Set(k string, v string) {
 }
 
 type buildEnvironment struct {
-	wd  string
-	env envVars
+	wd    string
+	env   envVars
+	gomod *modfile.File
 }
 
 func newBuildEnvironment() (*buildEnvironment, error) {
@@ -52,7 +55,52 @@ func newBuildEnvironment() (*buildEnvironment, error) {
 	return &buildEnvironment{wd: tmpDir, env: envFromOs()}, nil
 }
 
-func (env *buildEnvironment) CreateProject(ctx context.Context, files []genGoFile, opts *BuildOptions) error {
+func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptions) error {
+	var err error
+	// Create go.mod.
+	err = env.execGoMod(ctx, "init", opts.PkgName)
+	if err != nil {
+		return err
+	}
+
+	// Replace requested modules.
+	for o, n := range opts.ModReplace {
+		repl := fmt.Sprintf("%s=%s", o, n)
+		err = env.execGoMod(ctx, "edit", "-replace", repl)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = env.execGoGet(ctx, opts.CorePkg.GoGetString())
+	if err != nil {
+		return err
+	}
+
+	// Download plugins.
+nextPlugin:
+	for _, p := range opts.Plugins {
+		// Do not get plugins of module subpath.
+		for repl := range opts.ModReplace {
+			if strings.HasPrefix(p.Package, repl) {
+				continue nextPlugin
+			}
+		}
+		err = env.execGoGet(ctx, p.GoGetString())
+		if err != nil {
+			return err
+		}
+	}
+
+	err = env.parseGoMod()
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
+func (env *buildEnvironment) CreateSourceFiles(ctx context.Context, files []genGoFile) error {
 	// Generate project files.
 	var buf bytes.Buffer
 	var err error
@@ -71,36 +119,6 @@ func (env *buildEnvironment) CreateProject(ctx context.Context, files []genGoFil
 			return err
 		}
 		err = os.WriteFile(target, buf.Bytes(), 0600)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Create go.mod.
-	err = env.execGoMod(ctx, "init", opts.PkgName)
-	if err != nil {
-		return err
-	}
-
-	// Replace requested modules.
-	for o, n := range opts.ModReplace {
-		repl := fmt.Sprintf("%s=%s", o, n)
-		err = env.execGoMod(ctx, "edit", "-replace", repl)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Download plugins.
-nextPlugin:
-	for _, p := range opts.Plugins {
-		// Do not get plugins of module subpath.
-		for repl := range opts.ModReplace {
-			if strings.HasPrefix(p.Package, repl) {
-				continue nextPlugin
-			}
-		}
-		err = env.execGoGet(ctx, p.String())
 		if err != nil {
 			return err
 		}
@@ -168,4 +186,40 @@ func (env *buildEnvironment) Go() string {
 
 func (env *buildEnvironment) Close() error {
 	return os.RemoveAll(env.wd)
+}
+
+func (env *buildEnvironment) parseGoMod() error {
+	var err error
+	modFile, err := os.ReadFile(filepath.Join(env.wd, "go.mod"))
+	if err != nil {
+		return err
+	}
+	env.gomod, err = modfile.Parse("go.mod", modFile, nil)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (env *buildEnvironment) getPkgVersion(pkg string) string {
+	var vrep *modfile.Replace
+	for _, rep := range env.gomod.Replace {
+		if strings.HasPrefix(pkg, rep.Old.Path) {
+			vrep = rep
+			break
+		}
+	}
+
+	var vreq *modfile.Require
+	for _, req := range env.gomod.Require {
+		if strings.HasPrefix(pkg, req.Mod.Path) {
+			vreq = req
+			break
+		}
+	}
+	v := vreq.Mod.Version
+	if vrep != nil && vrep.New.Version != "" {
+		v = vrep.New.Version
+	}
+	return v
 }
