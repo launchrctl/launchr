@@ -4,13 +4,14 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"text/template"
 
 	"github.com/launchrctl/launchr"
+	"github.com/launchrctl/launchr/pkg/cli"
+	"github.com/launchrctl/launchr/pkg/log"
 )
 
 const launchrPkg = "github.com/launchrctl/launchr"
@@ -85,7 +86,7 @@ func NewBuilder(opts *BuildOptions) (*Builder, error) {
 
 // Build prepares build environment, generates go files and build the binary.
 func (b *Builder) Build(ctx context.Context) error {
-	log.Printf("[INFO] Start building")
+	cli.Println("Starting building %s", b.PkgName)
 	// Prepare build environment dir and go executable.
 	var err error
 	b.env, err = newBuildEnvironment()
@@ -99,10 +100,10 @@ func (b *Builder) Build(ctx context.Context) error {
 			_ = b.Close()
 		}
 	}()
-	log.Printf("[DEBUG] Temporary folder: %s", b.env.wd)
+	log.Debug("Temporary folder: %s", b.env.wd)
 
 	// Write files to dir and generate go mod.
-	log.Printf("[INFO] Creating project files and fetching dependencies")
+	cli.Println("Creating project files and fetching dependencies")
 	b.env.SetEnv("CGO_ENABLE", "0")
 	err = b.env.CreateModFile(ctx, b.BuildOptions)
 	if err != nil {
@@ -138,9 +139,7 @@ func (b *Builder) Build(ctx context.Context) error {
 	}
 
 	// Generate code for provided plugins.
-	genArgs := []string{"generate", "./..."}
-	cmdGen := b.env.NewCommand(ctx, b.env.Go(), genArgs...)
-	err = b.env.RunCmd(ctx, cmdGen)
+	err = b.runGen(ctx)
 	if err != nil {
 		return err
 	}
@@ -152,19 +151,20 @@ func (b *Builder) Build(ctx context.Context) error {
 	}
 
 	// Build the main go package.
-	log.Printf("[INFO] Building Launchr")
+	cli.Println("Building %s", b.PkgName)
 	err = b.goBuild(ctx)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("[INFO] Build complete: %s", b.BuildOutput)
+	cli.Println("Build complete: %s", b.BuildOutput)
 	return nil
 }
 
 // Close does cleanup after build.
 func (b *Builder) Close() error {
 	if b.env != nil && !b.Debug {
+		log.Debug("Cleaning build environment: %s", b.env.wd)
 		return b.env.Close()
 	}
 	return nil
@@ -186,10 +186,6 @@ func (b *Builder) goBuild(ctx context.Context) error {
 		args = append(args, "-ldflags", "-w -s", "-trimpath")
 	}
 	cmd := b.env.NewCommand(ctx, b.env.Go(), args...)
-	cmd.Env = envFromOs()
-
-	log.Printf("[DEBUG] Go build command: %s", cmd)
-	log.Printf("[DEBUG] Environment variables: %v", cmd.Env)
 	err = b.env.RunCmd(ctx, cmd)
 	if err != nil {
 		return err
@@ -215,4 +211,16 @@ func (b *Builder) getBuildVersion(version *launchr.AppVersion) *launchr.AppVersi
 	}
 
 	return &bv
+}
+
+func (b *Builder) runGen(ctx context.Context) error {
+	genArgs := []string{"generate", "./..."}
+	cmd := b.env.NewCommand(ctx, b.env.Go(), genArgs...)
+	env := make(envVars, len(cmd.Env))
+	copy(env, cmd.Env)
+	// Exclude target platform information as it may break "go run".
+	env.Unset("GOOS")
+	env.Unset("GOARCH")
+	cmd.Env = env
+	return b.env.RunCmd(ctx, cmd)
 }

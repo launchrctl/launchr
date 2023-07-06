@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"golang.org/x/mod/modfile"
+
+	"github.com/launchrctl/launchr/pkg/log"
 )
 
 type envVars []string
@@ -40,6 +42,18 @@ func (a *envVars) Set(k string, v string) {
 		}
 	}
 	*a = append(*a, fmt.Sprintf("%s=%s", k, v))
+}
+
+func (a *envVars) Unset(k string) {
+	if k == "" {
+		return
+	}
+	for i := 0; i < len(*a); i++ {
+		if strings.HasPrefix((*a)[i], k+"=") {
+			*a = append((*a)[:i], (*a)[i+1:]...)
+			return
+		}
+	}
 }
 
 type buildEnvironment struct {
@@ -142,6 +156,7 @@ func (env *buildEnvironment) Filepath(s string) string {
 func (env *buildEnvironment) NewCommand(ctx context.Context, command string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.Dir = env.wd
+	cmd.Env = env.env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd
@@ -158,6 +173,8 @@ func (env *buildEnvironment) execGoGet(ctx context.Context, args ...string) erro
 }
 
 func (env *buildEnvironment) RunCmd(ctx context.Context, cmd *exec.Cmd) error {
+	log.Debug("Executing shell: %s", cmd)
+	log.Debug("Shell env variables: %s", cmd.Env)
 	err := cmd.Start()
 	if err != nil {
 		return err
