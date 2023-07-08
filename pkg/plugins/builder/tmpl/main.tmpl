@@ -5,10 +5,11 @@ package main
 import (
 	"os"
 
-	"{{.CorePkg.Package}}"
+	"{{.CorePkg.Path}}"
+	_ "{{.CorePkg.Path}}/pkg/plugins"
 	_ "{{.PkgName}}/gen"
 	{{range .Plugins}}
-	_ "{{.Package}}"
+	_ "{{.Path}}"
 	{{- end}}
 )
 

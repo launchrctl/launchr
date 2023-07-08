@@ -88,9 +88,19 @@ func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptio
 		}
 	}
 
-	err = env.execGoGet(ctx, opts.CorePkg.GoGetString())
-	if err != nil {
-		return err
+	// Download core.
+	var coreRepl bool
+	for repl := range opts.ModReplace {
+		if strings.HasPrefix(opts.CorePkg.Path, repl) {
+			coreRepl = true
+			break
+		}
+	}
+	if !coreRepl {
+		err = env.execGoGet(ctx, opts.CorePkg.GoGetString())
+		if err != nil {
+			return err
+		}
 	}
 
 	// Download plugins.
@@ -98,7 +108,7 @@ nextPlugin:
 	for _, p := range opts.Plugins {
 		// Do not get plugins of module subpath.
 		for repl := range opts.ModReplace {
-			if strings.HasPrefix(p.Package, repl) {
+			if strings.HasPrefix(p.Path, repl) {
 				continue nextPlugin
 			}
 		}
@@ -220,7 +230,7 @@ func (env *buildEnvironment) parseGoMod() error {
 	return nil
 }
 
-func (env *buildEnvironment) GetPkgVersion(pkg string) string {
+func (env *buildEnvironment) GetPkgVersion(pkg string) UsePluginInfo {
 	var vrep *modfile.Replace
 	for _, rep := range env.gomod.Replace {
 		if strings.HasPrefix(pkg, rep.Old.Path) {
@@ -236,9 +246,19 @@ func (env *buildEnvironment) GetPkgVersion(pkg string) string {
 			break
 		}
 	}
-	v := vreq.Mod.Version
-	if vrep != nil && vrep.New.Version != "" {
-		v = vrep.New.Version
+	var v UsePluginInfo
+	if vreq == nil {
+		v = UsePluginInfo{Path: pkg}
+	} else {
+		v = UsePluginInfo{
+			Path:    vreq.Mod.Path,
+			Version: vreq.Mod.Version,
+		}
+	}
+
+	if vrep != nil {
+		v.Replace.Path = vrep.New.Path
+		v.Replace.Version = vrep.New.Version
 	}
 	return v
 }

@@ -1,9 +1,9 @@
 {{.BuildVersion -}}
 Built with {{.LaunchrVersion -}}
-
+{{if .CorePkg.Replace.Path}}Core replace: {{.CorePkg}}{{end}}
 {{- if .Plugins}}
 Plugins:
   {{- range .Plugins}}
   - {{.}}
   {{- end}}
-{{end}}
+{{end -}}

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strings"
 	"text/template"
 
 	"github.com/launchrctl/launchr"
@@ -23,19 +25,47 @@ type Builder struct {
 	env *buildEnvironment
 }
 
-// UsePluginInfo stores plugin info.
-type UsePluginInfo struct {
-	Package string
+// ReplacePluginInfo has mod replace information.
+type ReplacePluginInfo struct {
+	Path    string
 	Version string
 }
 
+// UsePluginInfo stores plugin info.
+type UsePluginInfo struct {
+	Path    string
+	Version string
+	Replace ReplacePluginInfo
+}
+
+// UsePluginInfoFromString constructs mod plugin info.
+func UsePluginInfoFromString(s string) UsePluginInfo {
+	pv := strings.SplitN(s, "@", 2)
+	if len(pv) == 1 {
+		pv = append(pv, "")
+	}
+	return UsePluginInfo{pv[0], pv[1], ReplacePluginInfo{}}
+}
+
+// GetVersion returns package version.
+func (p UsePluginInfo) GetVersion() string {
+	if p.Replace.Path != "" {
+		return p.Replace.Version
+	}
+	return p.Version
+}
+
 func (p UsePluginInfo) String() string {
-	return fmt.Sprintf("%s %s", p.Package, p.Version)
+	v := fmt.Sprintf("%s %s", p.Path, p.Version)
+	if p.Replace.Path != "" {
+		v = fmt.Sprintf("%s => %s %s", v, p.Replace.Path, p.Replace.Version)
+	}
+	return v
 }
 
 // GoGetString provides a package path for a go get.
 func (p UsePluginInfo) GoGetString() string {
-	dep := p.Package
+	dep := p.Path
 	if p.Version != "" {
 		dep += "@" + p.Version
 	}
@@ -51,6 +81,16 @@ type BuildOptions struct {
 	Plugins        []UsePluginInfo
 	BuildOutput    string
 	Debug          bool
+}
+
+var validPkgNameRegex = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
+
+// Validate verifies build options.
+func (opts *BuildOptions) Validate() error {
+	if !validPkgNameRegex.MatchString(opts.PkgName) {
+		return fmt.Errorf(`invalid application name "%s"`, opts.PkgName)
+	}
+	return nil
 }
 
 type genGoFile struct {
@@ -111,12 +151,11 @@ func (b *Builder) Build(ctx context.Context) error {
 	}
 
 	// Generate app version info.
-	buildVer := b.getBuildVersion(b.LaunchrVersion)
-	for _, p := range b.Plugins {
-		if p.Version == "" {
-			p.Version = b.env.GetPkgVersion(p.Package)
-		}
+	b.CorePkg = b.env.GetPkgVersion(b.CorePkg.Path)
+	for i, p := range b.Plugins {
+		b.Plugins[i] = b.env.GetPkgVersion(p.Path)
 	}
+	buildVer := b.getBuildVersion(b.LaunchrVersion)
 
 	// Generate project files.
 	mainVars := buildVars{
@@ -175,16 +214,21 @@ func (b *Builder) goBuild(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	args := []string{
-		"build",
-		"-o",
-		out,
-	}
+	// Set build result file.
+	args := []string{"build", "-o", out}
+	// Collect ldflags
+	ldflags := make([]string, 0, 4)
+	// Set application name.
+	ldflags = append(ldflags, "-X", b.CorePkg.Path+".Name="+b.PkgName)
+	// Include or trim debug information.
 	if b.Debug {
 		args = append(args, "-gcflags", "all=-N -l")
 	} else {
-		args = append(args, "-ldflags", "-w -s", "-trimpath")
+		ldflags = append(ldflags, "-s", "-w")
+		args = append(args, "-trimpath")
 	}
+	args = append(args, "-ldflags", strings.Join(ldflags, " "))
+	// Run build.
 	cmd := b.env.NewCommand(ctx, b.env.Go(), args...)
 	err = b.env.RunCmd(ctx, cmd)
 	if err != nil {
@@ -197,10 +241,10 @@ func (b *Builder) goBuild(ctx context.Context) error {
 func (b *Builder) getBuildVersion(version *launchr.AppVersion) *launchr.AppVersion {
 	bv := *version
 	bv.Name = b.PkgName
-
-	// Get version from the fetched go.mod module
-	bv.Version = b.env.GetPkgVersion(b.CorePkg.Package)
-
+	bv.Version = b.CorePkg.GetVersion()
+	if bv.Version == "" {
+		bv.Version = "dev"
+	}
 	bv.OS = os.Getenv("GOOS")
 	bv.Arch = os.Getenv("GOARCH")
 	if bv.OS == "" {
