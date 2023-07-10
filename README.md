@@ -1,6 +1,9 @@
 # Launchr
 
-`launchr`
+Launchr is a CLI action runner that executes actions inside short-lived local containers.  
+Actions are defined in `action.yaml` files, which are automatically discovered in the filesystem. 
+They can be placed anywhere that makes sense semantically. You can find action examples [here](example) and in the [documentation](docs).  
+Launchr has a plugin system that allows to extend its functionality. See [core plugins](pkg/plugins), [compose](https://github.com/launchrctl/compose) and [documentation](docs).
 
 ## Table of contents
 

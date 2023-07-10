@@ -1,4 +1,4 @@
-package yamldiscovery
+package cobraadapter
 
 import (
 	"reflect"
@@ -10,9 +10,9 @@ import (
 	"github.com/launchrctl/launchr/pkg/log"
 )
 
-func setCobraFlag(ccmd *cobra.Command, opt *action.Option) interface{} {
+func setFlag(ccmd *cobra.Command, opt *action.Option) interface{} {
 	var val interface{}
-	desc := getCobraCmdDesc(opt.Title, opt.Description)
+	desc := getDesc(opt.Title, opt.Description)
 	switch opt.Type {
 	case jsonschema.String:
 		val = ccmd.Flags().String(opt.Name, opt.Default.(string), desc)
@@ -56,7 +56,7 @@ func derefOpt(v interface{}) interface{} {
 		return *v
 	default:
 		if reflect.ValueOf(v).Kind() == reflect.Ptr {
-			log.Panic("error on dereferencing value: unsupported %T", v)
+			log.Panic("error on a value dereferencing: unsupported %T", v)
 		}
 		return v
 	}

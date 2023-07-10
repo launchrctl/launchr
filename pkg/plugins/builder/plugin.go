@@ -50,7 +50,8 @@ func (p *Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
 	flags := builderInput{}
 
 	var buildCmd = &cobra.Command{
-		Use: "build",
+		Use:   "build",
+		Short: "Rebuilds application with specified configuration",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Don't show usage help on a runtime error.
 			cmd.SilenceUsage = true
