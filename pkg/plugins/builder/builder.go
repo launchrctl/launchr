@@ -144,7 +144,7 @@ func (b *Builder) Build(ctx context.Context) error {
 
 	// Write files to dir and generate go mod.
 	cli.Println("Creating project files and fetching dependencies")
-	b.env.SetEnv("CGO_ENABLE", "0")
+	b.env.SetEnv("CGO_ENABLED", "0")
 	err = b.env.CreateModFile(ctx, b.BuildOptions)
 	if err != nil {
 		return err
