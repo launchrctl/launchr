@@ -19,6 +19,8 @@ var (
 	errDuplicateActionName  = errors.New("argument or option is already defined")
 )
 
+var nameRgx = regexp.MustCompile("^[a-zA-Z](?:_?[a-zA-Z0-9]+)*$")
+
 type errUnsupportedActionVersion struct {
 	version string
 }
@@ -109,7 +111,6 @@ func validateV1(cfg *Config) error {
 	if len(cfg.Action.Command) == 0 {
 		return errEmptyActionCmd
 	}
-	nameRgx := regexp.MustCompile("^[a-zA-Z](?:_?[a-zA-Z0-9]+)*$")
 	dups := make(dupSet, (len(cfg.Action.Arguments)+len(cfg.Action.Options))*2)
 	// Validate all arguments have name.
 	for _, a := range cfg.Action.Arguments {

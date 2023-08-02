@@ -8,6 +8,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var configRegex = regexp.MustCompile(`^config\.(yaml|yml)$`)
+
 // GlobalConfig is a global config structure.
 type GlobalConfig struct {
 	root   fs.FS
@@ -20,6 +22,25 @@ type BuildDefinition struct {
 	Buildfile string             `yaml:"buildfile"`
 	Args      map[string]*string `yaml:"args"`
 	Tags      []string           `yaml:"tags"`
+}
+
+type yamlBuildOptions BuildDefinition
+
+// UnmarshalYAML implements yaml.Unmarshaler to parse build options from a string or a struct.
+func (l *BuildDefinition) UnmarshalYAML(n *yaml.Node) (err error) {
+	if n.Kind == yaml.ScalarNode {
+		var s string
+		err = n.Decode(&s)
+		*l = BuildDefinition{Context: s}
+		return err
+	}
+	var s yamlBuildOptions
+	err = n.Decode(&s)
+	if err != nil {
+		return err
+	}
+	*l = BuildDefinition(s)
+	return err
 }
 
 // GlobalConfigFromDir parses global app config.
@@ -46,9 +67,8 @@ func findConfig(root fs.FS) fs.DirEntry {
 	if err != nil {
 		return nil
 	}
-	r := regexp.MustCompile(`^config\.(yaml|yml)$`)
 	for _, f := range dir {
-		if !f.IsDir() && r.MatchString(f.Name()) {
+		if !f.IsDir() && configRegex.MatchString(f.Name()) {
 			return f
 		}
 	}

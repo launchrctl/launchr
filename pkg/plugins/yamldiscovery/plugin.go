@@ -41,8 +41,9 @@ func (p *Plugin) InitApp(app *launchr.App) error {
 	if err != nil {
 		return err
 	}
+	actionMngr := launchr.GetService[launchr.ActionManager](app)
 	for _, cmdDef := range cmds {
-		app.AddActionCommand(cmdDef)
+		actionMngr.Add(cmdDef)
 	}
 	return nil
 }

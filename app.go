@@ -8,7 +8,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/launchrctl/launchr/pkg/action"
 	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/cobraadapter"
 )
@@ -21,13 +20,14 @@ var ActionsGroup = &cobra.Group{
 
 // App holds app related global variables.
 type App struct {
-	cmd     *cobra.Command
-	cli     cli.Cli
-	workDir string
-	cfgDir  string
-	version *AppVersion
-	plugins map[PluginInfo]Plugin
-	actions map[string]*action.Command
+	rootCmd     *cobra.Command
+	cli         cli.Cli
+	workDir     string
+	cfgDir      string
+	version     *AppVersion
+	actionMngr  ActionManager
+	serviceMngr ServiceManager
+	pluginMngr  PluginManager
 }
 
 // NewApp constructs app implementation.
@@ -40,6 +40,11 @@ func (app *App) GetWD() string {
 	return app.workDir
 }
 
+// GetCfgDir returns config directory path.
+func (app *App) GetCfgDir() string {
+	return app.cfgDir
+}
+
 // GetCli returns application cli.
 func (app *App) GetCli() cli.Cli {
 	return app.cli
@@ -50,28 +55,18 @@ func (app *App) SetCli(c cli.Cli) {
 	app.cli = c
 }
 
-// Plugins returns installed app plugins.
-func (app *App) Plugins() map[PluginInfo]Plugin {
-	return app.plugins
+// ServiceManager returns application service manager.
+func (app *App) ServiceManager() ServiceManager {
+	return app.serviceMngr
 }
 
-// AddActionCommand adds an action to the app.
-func (app *App) AddActionCommand(cmd *action.Command) {
-	app.actions[cmd.CommandName] = cmd
-}
-
-func (app *App) GetActionCommands() map[string]*action.Command {
-	return app.actions
-}
-
-// Init initializes application and plugins.
-func (app *App) Init() error {
+// init initializes application and plugins.
+func (app *App) init() error {
 	var err error
 	app.version = GetVersion()
 	// Global configuration.
 	app.cfgDir = fmt.Sprintf(".%s", app.version.Name)
 	app.workDir, err = filepath.Abs("./")
-	app.actions = make(map[string]*action.Command)
 	if err != nil {
 		return err
 	}
@@ -83,10 +78,15 @@ func (app *App) Init() error {
 		return err
 	}
 	app.SetCli(appCli)
+	app.serviceMngr = newServiceManager()
+	app.actionMngr = newActionManager()
+	app.pluginMngr = pluginManagerMap(registeredPlugins)
+	app.serviceMngr.Add(ServiceManagerID, app.serviceMngr)
+	app.serviceMngr.Add(ActionManagerID, app.actionMngr)
+	app.serviceMngr.Add(PluginManagerID, app.pluginMngr)
 
 	// Initialize the plugins.
-	app.plugins = registeredPlugins
-	for _, p := range app.plugins {
+	for _, p := range app.pluginMngr.All() {
 		if err = p.InitApp(app); err != nil {
 			return err
 		}
@@ -101,7 +101,8 @@ func (app *App) exec() error {
 		Use: Name,
 		//Short: "", // @todo
 		//Long:  ``, // @todo
-		Version: Version,
+		SilenceErrors: true, // Handled manually.
+		Version:       Version,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
@@ -109,10 +110,11 @@ func (app *App) exec() error {
 	rootCmd.SetVersionTemplate(app.version.String())
 
 	// Convert actions to cobra commands.
-	if len(app.actions) > 0 {
+	actions := app.actionMngr.All()
+	if len(actions) > 0 {
 		rootCmd.AddGroup(ActionsGroup)
 	}
-	for _, cmdDef := range app.actions {
+	for _, cmdDef := range actions {
 		cobraCmd, err := cobraadapter.GetActionImpl(app.GetCli(), cmdDef, ActionsGroup)
 		if err != nil {
 			return err
@@ -121,38 +123,35 @@ func (app *App) exec() error {
 	}
 
 	// Add cobra commands from plugins.
-	for _, p := range app.Plugins() {
-		p, ok := p.(CobraPlugin)
-		if ok {
-			if err := p.CobraAddCommands(rootCmd); err != nil {
-				return err
-			}
+	for _, p := range GetPluginByType[CobraPlugin](app) {
+		if err := p.CobraAddCommands(rootCmd); err != nil {
+			return err
 		}
 	}
 
 	// Set io streams.
-	app.cmd = rootCmd
+	app.rootCmd = rootCmd
 	rootCmd.SetIn(app.cli.In())
 	rootCmd.SetOut(app.cli.Out())
 	rootCmd.SetErr(app.cli.Err())
-	return app.cmd.Execute()
+	return app.rootCmd.Execute()
 }
 
 // Execute is a cobra entrypoint to the launchr app.
 func (app *App) Execute() int {
-	if err := app.exec(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	var err error
+	if err = app.init(); err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		return 125
+	}
+	if err = app.exec(); err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
 		return 1
 	}
 	return 0
 }
 
-// Run executes launchr application and returns os exit code.
+// Run executes launchr application.
 func Run() int {
-	app := NewApp()
-	if err := app.Init(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 125
-	}
-	return app.Execute()
+	return NewApp().Execute()
 }

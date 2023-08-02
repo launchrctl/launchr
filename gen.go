@@ -43,18 +43,14 @@ func (app *App) gen(buildPath string, wordDir string) error {
 		return err
 	}
 	// Call generate functions on plugins.
-	plugins := app.Plugins()
-	initSet := make(map[string]struct{}, len(plugins))
-	for _, p := range app.Plugins() {
-		p, ok := p.(GeneratePlugin)
-		if ok {
-			genData, err := p.Generate(buildPath, wordDir)
-			if err != nil {
-				return err
-			}
-			for _, class := range genData.Plugins {
-				initSet[class] = struct{}{}
-			}
+	initSet := make(map[string]struct{})
+	for _, p := range GetPluginByType[GeneratePlugin](app) {
+		genData, err := p.Generate(buildPath, wordDir)
+		if err != nil {
+			return err
+		}
+		for _, class := range genData.Plugins {
+			initSet[class] = struct{}{}
 		}
 	}
 	if len(initSet) > 0 {
@@ -88,8 +84,13 @@ func (app *App) Generate() int {
 	if len(os.Args) > 1 {
 		wd = os.Args[1]
 	}
-	if err := app.gen(buildPath, wd); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	var err error
+	if err = app.init(); err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		return 125
+	}
+	if err = app.gen(buildPath, wd); err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
 		return 125
 	}
 	return 0
@@ -97,12 +98,7 @@ func (app *App) Generate() int {
 
 // Gen generates application specific build files and returns os exit code.
 func Gen() int {
-	app := NewApp()
-	if err := app.Init(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 125
-	}
-	return app.Generate()
+	return NewApp().Generate()
 }
 
 type initTplVars struct {

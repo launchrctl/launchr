@@ -26,11 +26,12 @@ type yamlDiscovery struct {
 	targetRgx *regexp.Regexp
 }
 
+var actionYamlRegex = regexp.MustCompile(`^action\.(yaml|yml)$`)
+
 // NewYamlDiscovery creates an instance of action discovery.
 func NewYamlDiscovery(fs fs.FS) Discovery {
-	r := regexp.MustCompile(`^action\.(yaml|yml)$`)
 	cwd := cli.GetFsAbsPath(fs)
-	return &yamlDiscovery{fs, cwd, r}
+	return &yamlDiscovery{fs, cwd, actionYamlRegex}
 }
 
 func (ad *yamlDiscovery) isValid(path string, d fs.DirEntry) bool {
