@@ -12,9 +12,11 @@ import (
 	"github.com/moby/sys/signal"
 	"github.com/moby/term"
 
+	"github.com/launchrctl/launchr/internal/launchr/config"
 	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/driver"
 	"github.com/launchrctl/launchr/pkg/log"
+	"github.com/launchrctl/launchr/pkg/types"
 )
 
 const (
@@ -25,6 +27,7 @@ const (
 type containerExec struct {
 	driver driver.ContainerRunner
 	dtype  driver.Type
+	cfg    config.GlobalConfig
 }
 
 // NewDockerExecutor creates a new action executor in Docker environment.
@@ -38,17 +41,22 @@ func NewContainerExecutor(t driver.Type) (Executor, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &containerExec{r, t}, nil
+	return &containerExec{driver: r, dtype: t}, nil
 }
 
-func (c *containerExec) Exec(ctx context.Context, appCli cli.Cli, cmd *Command) error {
+// SetGlobalConfig implements cli.GlobalConfigAware interface.
+func (c *containerExec) SetGlobalConfig(cfg config.GlobalConfig) {
+	c.cfg = cfg
+}
+
+func (c *containerExec) Exec(ctx context.Context, appCli cli.Streams, cmd *Command) error {
 	ctx, cancelFun := context.WithCancel(ctx)
 	defer cancelFun()
 	a := cmd.Action()
 	log.Debug("Starting execution of action %s in %s environment, cmd %v", cmd.CommandName, c.dtype, a.Command)
 	// @todo consider reusing the same container and run exec
 	name := genContainerName(cmd, nil)
-	existing := c.driver.ContainerList(ctx, driver.ContainerListOptions{SearchName: name})
+	existing := c.driver.ContainerList(ctx, types.ContainerListOptions{SearchName: name})
 	// Collect a set of existing names to build the name.
 	exMap := make(map[string]struct{}, len(existing))
 	for _, e := range existing {
@@ -62,7 +70,7 @@ func (c *containerExec) Exec(ctx context.Context, appCli cli.Cli, cmd *Command) 
 	}
 
 	// Create container.
-	runConfig := &driver.ContainerCreateOptions{
+	runConfig := &types.ContainerCreateOptions{
 		ContainerName: name,
 		ExtraHosts:    a.ExtraHosts,
 		AutoRemove:    true,
@@ -74,7 +82,7 @@ func (c *containerExec) Exec(ctx context.Context, appCli cli.Cli, cmd *Command) 
 		Tty:           appCli.In().IsTerminal(),
 		Env:           a.Env,
 	}
-	cid, err := c.containerCreate(ctx, appCli, cmd, runConfig)
+	cid, err := c.containerCreate(ctx, cmd, runConfig)
 	if err != nil {
 		return err
 	}
@@ -104,7 +112,7 @@ func (c *containerExec) Exec(ctx context.Context, appCli cli.Cli, cmd *Command) 
 	statusCh := c.containerWait(ctx, cid, runConfig)
 
 	// Start the container
-	if err = c.driver.ContainerStart(ctx, cid, driver.ContainerStartOptions{}); err != nil {
+	if err = c.driver.ContainerStart(ctx, cid, types.ContainerStartOptions{}); err != nil {
 		cancelFun()
 		<-errCh
 		if runConfig.AutoRemove {
@@ -163,17 +171,16 @@ func (c *containerExec) Close() error {
 	return c.driver.Close()
 }
 
-func (c *containerExec) imageEnsure(ctx context.Context, appCli cli.Cli, cmd *Command) error {
+func (c *containerExec) imageEnsure(ctx context.Context, cmd *Command) error {
 	a := cmd.Action()
 	image := a.Image
-	var build *cli.BuildDefinition
-	cfg := appCli.Config()
+	var build *types.BuildDefinition
 	if b := a.BuildDefinition(cmd.Dir()); b != nil {
 		build = b
-	} else if b = cfg.ImageBuildInfo(image); b != nil {
+	} else if b = GlobalConfigImage(c.cfg, image); b != nil {
 		build = b
 	}
-	status, err := c.driver.ImageEnsure(ctx, driver.ImageOptions{
+	status, err := c.driver.ImageEnsure(ctx, types.ImageOptions{
 		Name:  image,
 		Build: build,
 	})
@@ -181,18 +188,18 @@ func (c *containerExec) imageEnsure(ctx context.Context, appCli cli.Cli, cmd *Co
 		return err
 	}
 	switch status.Status {
-	case driver.ImageExists:
-		msg := fmt.Sprintf("Image %s exists locally", image)
+	case types.ImageExists:
+		msg := fmt.Sprintf("Image %q exists locally", image)
 		cli.Println(msg)
 		log.Info(msg)
-	case driver.ImagePull:
+	case types.ImagePull:
 		if status.Progress == nil {
 			break
 		}
 		defer func() {
 			_ = status.Progress.Close()
 		}()
-		msg := fmt.Sprintf("Image %s doesn't exist locally, pulling from the registry", image)
+		msg := fmt.Sprintf("Image %q doesn't exist locally, pulling from the registry", image)
 		cli.Println(msg)
 		log.Info(msg)
 		// Output docker status only in Debug.
@@ -201,14 +208,14 @@ func (c *containerExec) imageEnsure(ctx context.Context, appCli cli.Cli, cmd *Co
 		for scanner.Scan() {
 			log.Debug(scanner.Text())
 		}
-	case driver.ImageBuild:
+	case types.ImageBuild:
 		if status.Progress == nil {
 			break
 		}
 		defer func() {
 			_ = status.Progress.Close()
 		}()
-		msg := fmt.Sprintf("Image %s doesn't exist locally, building...", image)
+		msg := fmt.Sprintf("Image %q doesn't exist locally, building...", image)
 		cli.Println(msg)
 		log.Info(msg)
 		// Output docker status only in Debug.
@@ -222,15 +229,15 @@ func (c *containerExec) imageEnsure(ctx context.Context, appCli cli.Cli, cmd *Co
 	return nil
 }
 
-func (c *containerExec) containerCreate(ctx context.Context, appCli cli.Cli, cmd *Command, config *driver.ContainerCreateOptions) (string, error) {
-	if err := c.imageEnsure(ctx, appCli, cmd); err != nil {
+func (c *containerExec) containerCreate(ctx context.Context, cmd *Command, opts *types.ContainerCreateOptions) (string, error) {
+	if err := c.imageEnsure(ctx, cmd); err != nil {
 		return "", err
 	}
 
 	// Create a container
 	a := cmd.Action()
-	cid, err := c.driver.ContainerCreate(ctx, driver.ContainerCreateOptions{
-		ContainerName: config.ContainerName,
+	cid, err := c.driver.ContainerCreate(ctx, types.ContainerCreateOptions{
+		ContainerName: opts.ContainerName,
 		Image:         a.Image,
 		Cmd:           a.Command,
 		WorkingDir:    containerHostMount,
@@ -238,15 +245,15 @@ func (c *containerExec) containerCreate(ctx context.Context, appCli cli.Cli, cmd
 			"./":      containerHostMount,
 			cmd.Dir(): containerActionMount,
 		},
-		ExtraHosts:   config.ExtraHosts,
-		AutoRemove:   config.AutoRemove,
-		OpenStdin:    config.OpenStdin,
-		StdinOnce:    config.StdinOnce,
-		AttachStdin:  config.AttachStdin,
-		AttachStdout: config.AttachStdout,
-		AttachStderr: config.AttachStderr,
-		Tty:          config.Tty,
-		Env:          config.Env,
+		ExtraHosts:   opts.ExtraHosts,
+		AutoRemove:   opts.AutoRemove,
+		OpenStdin:    opts.OpenStdin,
+		StdinOnce:    opts.StdinOnce,
+		AttachStdin:  opts.AttachStdin,
+		AttachStdout: opts.AttachStdout,
+		AttachStderr: opts.AttachStderr,
+		Tty:          opts.Tty,
+		Env:          opts.Env,
 	})
 	if err != nil {
 		return "", err
@@ -255,13 +262,13 @@ func (c *containerExec) containerCreate(ctx context.Context, appCli cli.Cli, cmd
 	return cid, nil
 }
 
-func (c *containerExec) containerWait(ctx context.Context, cid string, config *driver.ContainerCreateOptions) <-chan int {
+func (c *containerExec) containerWait(ctx context.Context, cid string, opts *types.ContainerCreateOptions) <-chan int {
 	// Wait for the container to stop or catch error.
-	waitCond := driver.WaitConditionNextExit
-	if config.AutoRemove {
-		waitCond = driver.WaitConditionRemoved
+	waitCond := types.WaitConditionNextExit
+	if opts.AutoRemove {
+		waitCond = types.WaitConditionRemoved
 	}
-	resCh, errCh := c.driver.ContainerWait(ctx, cid, driver.ContainerWaitOptions{Condition: waitCond})
+	resCh, errCh := c.driver.ContainerWait(ctx, cid, types.ContainerWaitOptions{Condition: waitCond})
 	statusC := make(chan int)
 	go func() {
 		select {
@@ -284,12 +291,12 @@ func (c *containerExec) containerWait(ctx context.Context, cid string, config *d
 	return statusC
 }
 
-func (c *containerExec) attachContainer(ctx context.Context, appCli cli.Cli, cid string, config *driver.ContainerCreateOptions) (io.Closer, <-chan error, error) {
-	cio, errAttach := c.driver.ContainerAttach(ctx, cid, driver.ContainerAttachOptions{
-		AttachStdin:  config.AttachStdin,
-		AttachStdout: config.AttachStdout,
-		AttachStderr: config.AttachStderr,
-		Tty:          config.Tty,
+func (c *containerExec) attachContainer(ctx context.Context, appCli cli.Streams, cid string, opts *types.ContainerCreateOptions) (io.Closer, <-chan error, error) {
+	cio, errAttach := c.driver.ContainerAttach(ctx, cid, types.ContainerAttachOptions{
+		AttachStdin:  opts.AttachStdin,
+		AttachStdout: opts.AttachStdout,
+		AttachStderr: opts.AttachStderr,
+		Tty:          opts.Tty,
 	})
 	if errAttach != nil {
 		return nil, nil, errAttach
@@ -297,7 +304,34 @@ func (c *containerExec) attachContainer(ctx context.Context, appCli cli.Cli, cid
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- driver.ContainerIOStream(ctx, appCli, cio, config)
+		errCh <- driver.ContainerIOStream(ctx, appCli, cio, opts)
 	}()
 	return cio, errCh, nil
+}
+
+// GlobalConfigImagesKey is a field name in global config file.
+const GlobalConfigImagesKey = "images"
+
+// GlobalConfigImages is a container to parse global config with yaml.
+type GlobalConfigImages map[string]*types.BuildDefinition
+
+// GlobalConfigImage extends GlobalConfig functionality and parses images definition.
+func GlobalConfigImage(cfg config.GlobalConfig, image string) *types.BuildDefinition {
+	var images GlobalConfigImages
+	err := cfg.Get(GlobalConfigImagesKey, &images)
+	if err != nil {
+		log.Warn("global configuration field %q is malformed", GlobalConfigImagesKey)
+		return nil
+	}
+	if b, ok := images[image]; ok {
+		return b.BuildImageInfo(image, cfg.DirPath())
+	}
+	for _, b := range images {
+		for _, t := range b.Tags {
+			if t == image {
+				return b.BuildImageInfo(image, cfg.DirPath())
+			}
+		}
+	}
+	return nil
 }

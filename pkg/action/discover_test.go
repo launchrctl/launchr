@@ -3,7 +3,7 @@ package action
 import (
 	"io/fs"
 	"math/rand"
-	"path"
+	"path/filepath"
 	"testing"
 	"testing/fstest"
 
@@ -63,7 +63,7 @@ func (d dirEntry) DirEntry() fs.DirEntry {
 	ds := string(d)
 	p := ds
 	// If it's a dir path, add test file to return dir.
-	if path.Ext(p) == "" {
+	if filepath.Ext(p) == "" {
 		p += "/action.yaml"
 	}
 	tmpfs[p] = &fstest.MapFile{}

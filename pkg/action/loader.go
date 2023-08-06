@@ -9,11 +9,11 @@ import (
 	"github.com/a8m/envsubst"
 )
 
-// Loader is an interface for loading a config file.
+// Loader is an interface for loading an action file.
 type Loader interface {
 	Content() ([]byte, error)
-	Load() (*Config, error)
-	LoadRaw() (*Config, error)
+	Load() (*Action, error)
+	LoadRaw() (*Action, error)
 }
 
 // LoadProcessor is an interface for processing input on load.
@@ -71,7 +71,7 @@ func (p *inputProcessor) Process(b []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	data := ConvertInputToStruct(p.cmd, conf)
+	data := ConvertInputToMap(p.cmd, conf)
 	tpl := template.New(p.cmd.CommandName)
 	_, err = tpl.Parse(string(b))
 	if err != nil {
@@ -101,8 +101,8 @@ func (p *inputProcessor) Process(b []byte) ([]byte, error) {
 	return res, nil
 }
 
-// ConvertInputToStruct creates an arbitrary struct from input variables.
-func ConvertInputToStruct(cmd *Command, conf *Config) map[string]interface{} {
+// ConvertInputToMap creates a map with input variables suitable for template engine.
+func ConvertInputToMap(cmd *Command, conf *Action) map[string]interface{} {
 	a := conf.Action
 	cnt := len(cmd.InputArgs) + len(cmd.InputOptions)
 	values := make(map[string]interface{}, cnt)

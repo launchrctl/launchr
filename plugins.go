@@ -18,21 +18,39 @@ func RegisterPlugin(p Plugin) {
 	registeredPlugins[info] = p
 }
 
-// PluginInfo provides information about the plugin.
+// GetPluginByType returns specific plugins from the app.
+func GetPluginByType[T Plugin](app *App) []T {
+	plugins := app.pluginMngr.All()
+	res := make([]T, 0, len(plugins))
+	for _, p := range plugins {
+		p, ok := p.(T)
+		if ok {
+			res = append(res, p)
+		}
+	}
+	return res
+}
+
+// PluginInfo provides information about the plugin and is used as a unique data to indentify a plugin.
 type PluginInfo struct {
-	ID     string
-	Weight int
+	ID string
 }
 
 // Plugin is a common interface for launchr plugins.
 type Plugin interface {
+	// PluginInfo requests a type to provide information about the plugin.
+	// The Plugin info is used as a unique data to indentify a plugin.
 	PluginInfo() PluginInfo
+	// InitApp is hook function called on application initialisation.
+	// Plugins may save app global object, retrieve or provide services here.
 	InitApp(app *App) error
 }
 
 // CobraPlugin is an interface to implement a plugin for cobra.
 type CobraPlugin interface {
 	Plugin
+	// CobraAddCommands is a hook called when cobra root command is available.
+	// Plugins may register its command line commands here.
 	CobraAddCommands(*cobra.Command) error
 }
 
@@ -44,6 +62,7 @@ type PluginGeneratedData struct {
 // GeneratePlugin is an interface to generate supporting files before build.
 type GeneratePlugin interface {
 	Plugin
+	// Generate is a function called when application is generating code and assets for the build.
 	Generate(buildPath string, workDir string) (*PluginGeneratedData, error)
 }
 

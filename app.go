@@ -8,8 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/launchrctl/launchr/internal/launchr/config"
+	"github.com/launchrctl/launchr/pkg/action"
 	"github.com/launchrctl/launchr/pkg/cli"
-	"github.com/launchrctl/launchr/pkg/cobraadapter"
 )
 
 // ActionsGroup is a cobra command group definition
@@ -20,14 +21,15 @@ var ActionsGroup = &cobra.Group{
 
 // App holds app related global variables.
 type App struct {
-	rootCmd     *cobra.Command
-	cli         cli.Cli
-	workDir     string
-	cfgDir      string
-	version     *AppVersion
-	actionMngr  ActionManager
-	serviceMngr ServiceManager
-	pluginMngr  PluginManager
+	rootCmd    *cobra.Command
+	streams    cli.Streams
+	workDir    string
+	cfgDir     string
+	version    *AppVersion
+	services   map[ServiceInfo]Service
+	actionMngr action.Manager
+	pluginMngr PluginManager
+	globalCfg  GlobalConfig
 }
 
 // NewApp constructs app implementation.
@@ -40,24 +42,18 @@ func (app *App) GetWD() string {
 	return app.workDir
 }
 
-// GetCfgDir returns config directory path.
-func (app *App) GetCfgDir() string {
-	return app.cfgDir
+// Streams returns application cli.
+func (app *App) Streams() cli.Streams {
+	return app.streams
 }
 
-// GetCli returns application cli.
-func (app *App) GetCli() cli.Cli {
-	return app.cli
-}
-
-// SetCli sets application cli.
-func (app *App) SetCli(c cli.Cli) {
-	app.cli = c
-}
-
-// ServiceManager returns application service manager.
-func (app *App) ServiceManager() ServiceManager {
-	return app.serviceMngr
+// AddService registers a service in the app.
+func (app *App) AddService(s Service) {
+	info := s.ServiceInfo()
+	if _, ok := app.services[info]; ok {
+		panic(fmt.Errorf("service %s already exists, review your code", info.ID))
+	}
+	app.services[info] = s
 }
 
 // init initializes application and plugins.
@@ -70,20 +66,14 @@ func (app *App) init() error {
 	if err != nil {
 		return err
 	}
-	appCli, err := cli.NewAppCli(
-		cli.WithStandardStreams(),
-		cli.WithGlobalConfigFromDir(os.DirFS(app.cfgDir)),
-	)
-	if err != nil {
-		return err
-	}
-	app.SetCli(appCli)
-	app.serviceMngr = newServiceManager()
-	app.actionMngr = newActionManager()
+	app.streams = cli.StandardStreams()
+	app.services = make(map[ServiceInfo]Service)
+	app.actionMngr = action.NewManager()
 	app.pluginMngr = pluginManagerMap(registeredPlugins)
-	app.serviceMngr.Add(ServiceManagerID, app.serviceMngr)
-	app.serviceMngr.Add(ActionManagerID, app.actionMngr)
-	app.serviceMngr.Add(PluginManagerID, app.pluginMngr)
+	app.globalCfg = config.GlobalConfigFromFS(os.DirFS(app.cfgDir))
+	app.AddService(app.actionMngr)
+	app.AddService(app.pluginMngr)
+	app.AddService(app.globalCfg)
 
 	// Initialize the plugins.
 	for _, p := range app.pluginMngr.All() {
@@ -115,7 +105,7 @@ func (app *App) exec() error {
 		rootCmd.AddGroup(ActionsGroup)
 	}
 	for _, cmdDef := range actions {
-		cobraCmd, err := cobraadapter.GetActionImpl(app.GetCli(), cmdDef, ActionsGroup)
+		cobraCmd, err := action.CobraImpl(cmdDef, app.Streams(), app.globalCfg, ActionsGroup)
 		if err != nil {
 			return err
 		}
@@ -131,9 +121,9 @@ func (app *App) exec() error {
 
 	// Set io streams.
 	app.rootCmd = rootCmd
-	rootCmd.SetIn(app.cli.In())
-	rootCmd.SetOut(app.cli.Out())
-	rootCmd.SetErr(app.cli.Err())
+	rootCmd.SetIn(app.streams.In())
+	rootCmd.SetOut(app.streams.Out())
+	rootCmd.SetErr(app.streams.Err())
 	return app.rootCmd.Execute()
 }
 

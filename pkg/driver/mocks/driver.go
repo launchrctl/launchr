@@ -10,6 +10,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	driver "github.com/launchrctl/launchr/pkg/driver"
+	types "github.com/launchrctl/launchr/pkg/types"
 )
 
 // MockContainerRunner is a mock of ContainerRunner interface.
@@ -50,7 +51,7 @@ func (mr *MockContainerRunnerMockRecorder) Close() *gomock.Call {
 }
 
 // ContainerAttach mocks base method.
-func (m *MockContainerRunner) ContainerAttach(arg0 context.Context, arg1 string, arg2 driver.ContainerAttachOptions) (*driver.ContainerInOut, error) {
+func (m *MockContainerRunner) ContainerAttach(arg0 context.Context, arg1 string, arg2 types.ContainerAttachOptions) (*driver.ContainerInOut, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContainerAttach", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*driver.ContainerInOut)
@@ -65,7 +66,7 @@ func (mr *MockContainerRunnerMockRecorder) ContainerAttach(arg0, arg1, arg2 inte
 }
 
 // ContainerCreate mocks base method.
-func (m *MockContainerRunner) ContainerCreate(arg0 context.Context, arg1 driver.ContainerCreateOptions) (string, error) {
+func (m *MockContainerRunner) ContainerCreate(arg0 context.Context, arg1 types.ContainerCreateOptions) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContainerCreate", arg0, arg1)
 	ret0, _ := ret[0].(string)
@@ -80,7 +81,7 @@ func (mr *MockContainerRunnerMockRecorder) ContainerCreate(arg0, arg1 interface{
 }
 
 // ContainerExecResize mocks base method.
-func (m *MockContainerRunner) ContainerExecResize(arg0 context.Context, arg1 string, arg2 driver.ResizeOptions) error {
+func (m *MockContainerRunner) ContainerExecResize(arg0 context.Context, arg1 string, arg2 types.ResizeOptions) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContainerExecResize", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -108,10 +109,10 @@ func (mr *MockContainerRunnerMockRecorder) ContainerKill(arg0, arg1, arg2 interf
 }
 
 // ContainerList mocks base method.
-func (m *MockContainerRunner) ContainerList(arg0 context.Context, arg1 driver.ContainerListOptions) []driver.ContainerListResult {
+func (m *MockContainerRunner) ContainerList(arg0 context.Context, arg1 types.ContainerListOptions) []types.ContainerListResult {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContainerList", arg0, arg1)
-	ret0, _ := ret[0].([]driver.ContainerListResult)
+	ret0, _ := ret[0].([]types.ContainerListResult)
 	return ret0
 }
 
@@ -122,7 +123,7 @@ func (mr *MockContainerRunnerMockRecorder) ContainerList(arg0, arg1 interface{})
 }
 
 // ContainerRemove mocks base method.
-func (m *MockContainerRunner) ContainerRemove(arg0 context.Context, arg1 string, arg2 driver.ContainerRemoveOptions) error {
+func (m *MockContainerRunner) ContainerRemove(arg0 context.Context, arg1 string, arg2 types.ContainerRemoveOptions) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContainerRemove", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -136,7 +137,7 @@ func (mr *MockContainerRunnerMockRecorder) ContainerRemove(arg0, arg1, arg2 inte
 }
 
 // ContainerResize mocks base method.
-func (m *MockContainerRunner) ContainerResize(arg0 context.Context, arg1 string, arg2 driver.ResizeOptions) error {
+func (m *MockContainerRunner) ContainerResize(arg0 context.Context, arg1 string, arg2 types.ResizeOptions) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContainerResize", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -150,7 +151,7 @@ func (mr *MockContainerRunnerMockRecorder) ContainerResize(arg0, arg1, arg2 inte
 }
 
 // ContainerStart mocks base method.
-func (m *MockContainerRunner) ContainerStart(arg0 context.Context, arg1 string, arg2 driver.ContainerStartOptions) error {
+func (m *MockContainerRunner) ContainerStart(arg0 context.Context, arg1 string, arg2 types.ContainerStartOptions) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContainerStart", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -178,10 +179,10 @@ func (mr *MockContainerRunnerMockRecorder) ContainerStop(arg0, arg1 interface{})
 }
 
 // ContainerWait mocks base method.
-func (m *MockContainerRunner) ContainerWait(arg0 context.Context, arg1 string, arg2 driver.ContainerWaitOptions) (<-chan driver.ContainerWaitResponse, <-chan error) {
+func (m *MockContainerRunner) ContainerWait(arg0 context.Context, arg1 string, arg2 types.ContainerWaitOptions) (<-chan types.ContainerWaitResponse, <-chan error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContainerWait", arg0, arg1, arg2)
-	ret0, _ := ret[0].(<-chan driver.ContainerWaitResponse)
+	ret0, _ := ret[0].(<-chan types.ContainerWaitResponse)
 	ret1, _ := ret[1].(<-chan error)
 	return ret0, ret1
 }
@@ -193,10 +194,10 @@ func (mr *MockContainerRunnerMockRecorder) ContainerWait(arg0, arg1, arg2 interf
 }
 
 // ImageEnsure mocks base method.
-func (m *MockContainerRunner) ImageEnsure(arg0 context.Context, arg1 driver.ImageOptions) (*driver.ImageStatusResponse, error) {
+func (m *MockContainerRunner) ImageEnsure(arg0 context.Context, arg1 types.ImageOptions) (*types.ImageStatusResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ImageEnsure", arg0, arg1)
-	ret0, _ := ret[0].(*driver.ImageStatusResponse)
+	ret0, _ := ret[0].(*types.ImageStatusResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

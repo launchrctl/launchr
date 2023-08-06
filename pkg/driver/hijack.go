@@ -14,6 +14,7 @@ import (
 
 	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/log"
+	types2 "github.com/launchrctl/launchr/pkg/types"
 )
 
 // The default escape key sequence: ctrl-p, ctrl-q
@@ -45,7 +46,7 @@ type Streamer interface {
 }
 
 // ContainerIOStream streams in/out/err to given streams.
-func ContainerIOStream(ctx context.Context, appCli cli.Streams, cio *ContainerInOut, config *ContainerCreateOptions) error {
+func ContainerIOStream(ctx context.Context, appCli cli.Streams, cio *ContainerInOut, config *types2.ContainerCreateOptions) error {
 	var (
 		out, cerr io.Writer
 		in        io.ReadCloser

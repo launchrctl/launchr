@@ -4,14 +4,14 @@ package action
 import (
 	"fmt"
 	"io/fs"
-	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/launchrctl/launchr/pkg/cli"
+	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/log"
 )
 
@@ -30,7 +30,7 @@ var actionYamlRegex = regexp.MustCompile(`^action\.(yaml|yml)$`)
 
 // NewYamlDiscovery creates an instance of action discovery.
 func NewYamlDiscovery(fs fs.FS) Discovery {
-	cwd := cli.GetFsAbsPath(fs)
+	cwd := launchr.GetFsAbsPath(fs)
 	return &yamlDiscovery{fs, cwd, actionYamlRegex}
 }
 
@@ -133,7 +133,7 @@ func (ad *yamlDiscovery) parseYamlAction(f string) (*Command, error) {
 // Empty string if the command name can't be generated.
 func getCmdMachineName(f string) string {
 	// @todo does it work on Win?
-	cmd := path.Dir(f)
+	cmd := filepath.Dir(f)
 	i := strings.LastIndex(cmd, "/actions/")
 	if i == -1 {
 		return ""

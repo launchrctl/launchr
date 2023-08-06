@@ -12,6 +12,7 @@ import (
 
 	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/log"
+	"github.com/launchrctl/launchr/pkg/types"
 )
 
 type resizeTtyFn func(ctx context.Context, d ContainerRunner, cli cli.Streams, id string, isExec bool) error
@@ -22,7 +23,7 @@ func resizeTtyTo(ctx context.Context, d ContainerRunner, id string, height, widt
 		return nil
 	}
 
-	options := ResizeOptions{
+	options := types.ResizeOptions{
 		Height: height,
 		Width:  width,
 	}

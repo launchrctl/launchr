@@ -1,33 +1,16 @@
 package action
 
 import (
-	"errors"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-type testActionLoader struct {
-	cfg *Config
-}
-
-func (l *testActionLoader) Content() ([]byte, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (l *testActionLoader) Load() (*Config, error) {
-	return l.cfg, nil
-}
-
-func (l *testActionLoader) LoadRaw() (*Config, error) {
-	return l.Load()
-}
-
 func testLoaderCmd() *Command {
-	cfg := &Config{
+	a := &Action{
 		Version: "1",
-		Action: &Action{
+		Action: &ActionConfig{
 			Arguments: ArgumentsList{
 				&Argument{
 					Name: "arg1",
@@ -42,7 +25,7 @@ func testLoaderCmd() *Command {
 	}
 	return &Command{
 		CommandName: "my_cmd",
-		Loader:      &testActionLoader{cfg: cfg},
+		Loader:      a,
 	}
 }
 

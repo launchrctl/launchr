@@ -3,7 +3,7 @@ package action
 import (
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,7 +24,7 @@ func Test_Command(t *testing.T) {
 	// Test image name.
 	assert.Equal("my/image:v1", a.Image)
 	// Test dir
-	assert.Equal(path.Dir(cmd.Filepath), cmd.Dir())
+	assert.Equal(filepath.Dir(cmd.Filepath), cmd.Dir())
 	cmd.Filepath = "test/file/path/action.yaml"
 	assert.Equal("test/file/path", cmd.Dir())
 	// Test hosts.
@@ -64,12 +64,12 @@ func Test_Command(t *testing.T) {
 		fmt.Sprintf("%v", envVar1),
 		fmt.Sprintf("%v ", envVar1),
 	}
-	cmd.cfg = nil
+	cmd.action = nil
 	err = cmd.Compile()
 	assert.NoError(err)
 	a = cmd.Action()
 	assert.Equal(execExp, []string(a.Command))
-	assert.NotNil(cmd.cfg)
+	assert.NotNil(cmd.action)
 
 	// Test build info
 	b := a.BuildDefinition(cmd.Dir())

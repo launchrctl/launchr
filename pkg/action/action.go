@@ -1,12 +1,15 @@
 package action
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"regexp"
 
-	"github.com/launchrctl/launchr/pkg/cli"
+	"gopkg.in/yaml.v3"
+
 	"github.com/launchrctl/launchr/pkg/jsonschema"
+	"github.com/launchrctl/launchr/pkg/types"
 )
 
 var (
@@ -36,10 +39,27 @@ func (err errUnsupportedActionVersion) Is(cmp error) bool {
 	return ok && errCmp == err
 }
 
-// Config is a representation of an action yaml
-type Config struct {
-	Version string  `yaml:"version"`
-	Action  *Action `yaml:"action"`
+// Action is a representation of an action yaml file
+type Action struct {
+	Version string        `yaml:"version"`
+	Action  *ActionConfig `yaml:"action"`
+}
+
+// Content implements Loader interface.
+func (a *Action) Content() ([]byte, error) {
+	w := &bytes.Buffer{}
+	err := yaml.NewEncoder(w).Encode(a)
+	return w.Bytes(), err
+}
+
+// Load implements Loader interface.
+func (a *Action) Load() (*Action, error) {
+	return a, nil
+}
+
+// LoadRaw implements Loader interface.
+func (a *Action) LoadRaw() (*Action, error) {
+	return a.Load()
 }
 
 // StrSlice is an array of strings for command execution.
@@ -48,22 +68,22 @@ type StrSlice []string
 // EnvSlice is an array of env vars or key-value.
 type EnvSlice []string
 
-// Action is a representation of an action structure of an action yaml
-type Action struct {
-	Title       string               `yaml:"title"`
-	Description string               `yaml:"description"`
-	Arguments   ArgumentsList        `yaml:"arguments"`
-	Options     OptionsList          `yaml:"options"`
-	Command     StrSlice             `yaml:"command"`
-	Image       string               `yaml:"image"`
-	Build       *cli.BuildDefinition `yaml:"build"`
-	ExtraHosts  []string             `yaml:"extra_hosts"`
-	Env         EnvSlice             `yaml:"env"`
+// ActionConfig holds action configuration
+type ActionConfig struct { //nolint:revive
+	Title       string                 `yaml:"title"`
+	Description string                 `yaml:"description"`
+	Arguments   ArgumentsList          `yaml:"arguments"`
+	Options     OptionsList            `yaml:"options"`
+	Command     StrSlice               `yaml:"command"`
+	Image       string                 `yaml:"image"`
+	Build       *types.BuildDefinition `yaml:"build"`
+	ExtraHosts  []string               `yaml:"extra_hosts"`
+	Env         EnvSlice               `yaml:"env"`
 }
 
 // BuildDefinition provides resolved image build info
-func (a *Action) BuildDefinition(wd string) *cli.BuildDefinition {
-	return cli.PrepareImageBuildDefinition(wd, a.Build, a.Image)
+func (a *ActionConfig) BuildDefinition(wd string) *types.BuildDefinition {
+	return a.Build.BuildImageInfo(a.Image, wd)
 }
 
 // ArgumentsList is used for custom yaml parsing of arguments list.
@@ -103,17 +123,18 @@ func (d dupSet) add(k string) {
 	d[k] = struct{}{}
 }
 
-func validateV1(cfg *Config) error {
+func validateV1(a *Action) error {
 	// @todo validate somehow
-	if cfg.Action.Image == "" {
+	// @todo maybe use https://github.com/go-playground/validator
+	if a.Action.Image == "" {
 		return errEmptyActionImg
 	}
-	if len(cfg.Action.Command) == 0 {
+	if len(a.Action.Command) == 0 {
 		return errEmptyActionCmd
 	}
-	dups := make(dupSet, (len(cfg.Action.Arguments)+len(cfg.Action.Options))*2)
+	dups := make(dupSet, (len(a.Action.Arguments)+len(a.Action.Options))*2)
 	// Validate all arguments have name.
-	for _, a := range cfg.Action.Arguments {
+	for _, a := range a.Action.Arguments {
 		if a.Name == "" {
 			return errEmptyActionArgName
 		}
@@ -127,7 +148,7 @@ func validateV1(cfg *Config) error {
 		dups.add(a.Name)
 	}
 	// Validate all options have name.
-	for _, o := range cfg.Action.Options {
+	for _, o := range a.Action.Options {
 		if o.Name == "" {
 			return errEmptyActionOptName
 		}
@@ -144,18 +165,18 @@ func validateV1(cfg *Config) error {
 	return nil
 }
 
-func (c *Config) initDefaults() {
+func (a *Action) initDefaults() {
 	// Set default version to 1
-	if c.Version == "" {
-		c.Version = "1"
+	if a.Version == "" {
+		a.Version = "1"
 	}
-	for _, a := range c.Action.Arguments {
+	for _, a := range a.Action.Arguments {
 		if a.Type == "" {
 			a.Type = jsonschema.String
 		}
 	}
 
-	for _, o := range c.Action.Options {
+	for _, o := range a.Action.Options {
 		if o.Type == "" {
 			o.Type = jsonschema.String
 		}
@@ -166,21 +187,22 @@ func (c *Config) initDefaults() {
 func getDefaultByType(o *Option) interface{} {
 	switch o.Type {
 	case jsonschema.String:
-		return getDefaultForInterface(o.Default, "")
+		return defaultVal(o.Default, "")
 	case jsonschema.Integer:
-		return getDefaultForInterface(o.Default, 0)
+		return defaultVal(o.Default, 0)
 	case jsonschema.Number:
-		return getDefaultForInterface(o.Default, .0)
+		return defaultVal(o.Default, .0)
 	case jsonschema.Boolean:
-		return getDefaultForInterface(o.Default, false)
+		return defaultVal(o.Default, false)
 	case jsonschema.Array:
-		return getDefaultForInterface(o.Default, []string{})
+		return defaultVal(o.Default, []string{})
 	default:
+		// @todo is it ok to panic? The data comes from user input.
 		panic(fmt.Sprintf("json schema type %s is not implemented", o.Type))
 	}
 }
 
-func getDefaultForInterface[T any](val interface{}, d T) T {
+func defaultVal[T any](val interface{}, d T) T {
 	if val != nil {
 		return val.(T)
 	}

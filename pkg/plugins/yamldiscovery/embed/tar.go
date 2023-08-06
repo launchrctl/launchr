@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"testing/fstest"
 	"time"
@@ -17,7 +16,7 @@ import (
 
 func createActionTar(cfs fs.FS, buildPath string) (string, []*action.Command, error) {
 	name := "actions.tar.gz"
-	target := path.Join(buildPath, name)
+	target := filepath.Join(buildPath, name)
 	// Discover actions.
 	ad := action.NewYamlDiscovery(cfs)
 	cmds, err := ad.Discover()
@@ -47,7 +46,7 @@ func TarGzEmbedActions(f io.Writer, cmds []*action.Command) error {
 	now := time.Now()
 
 	for _, cmd := range cmds {
-		c, err := cmd.Loader.Content()
+		c, err := cmd.ActionRaw()
 		if err != nil {
 			return err
 		}
