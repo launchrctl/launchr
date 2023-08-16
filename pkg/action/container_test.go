@@ -15,16 +15,16 @@ import (
 	"github.com/moby/moby/pkg/stdcopy"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/launchrctl/launchr/internal/launchr/config"
+	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/driver"
 	mockdriver "github.com/launchrctl/launchr/pkg/driver/mocks"
 	"github.com/launchrctl/launchr/pkg/types"
 )
 
-var gCfgYaml = `
+var cfgYaml = `
 images:
-  build:global: ./global
+  build:config: ./config
 `
 
 type eqImageOpts struct {
@@ -40,17 +40,17 @@ func (e eqImageOpts) String() string {
 	return fmt.Sprintf("is equal to %v (%T)", e.x, e.x)
 }
 
-var _globalCfg config.GlobalConfig
+var _cfg launchr.Config
 
-func GlobalCfg() config.GlobalConfig {
-	if _globalCfg != nil {
-		return _globalCfg
+func launchrCfg() launchr.Config {
+	if _cfg != nil {
+		return _cfg
 	}
-	gcfgRoot := fstest.MapFS{
-		"config.yaml": &fstest.MapFile{Data: []byte(gCfgYaml)},
+	cfgRoot := fstest.MapFS{
+		"config.yaml": &fstest.MapFile{Data: []byte(cfgYaml)},
 	}
-	_globalCfg = config.GlobalConfigFromFS(gcfgRoot)
-	return _globalCfg
+	_cfg = launchr.ConfigFromFS(cfgRoot)
+	return _cfg
 }
 
 func prepareContainerTestSuite(t *testing.T) (*assert.Assertions, *gomock.Controller, *mockdriver.MockContainerRunner, *containerExec) {
@@ -59,7 +59,7 @@ func prepareContainerTestSuite(t *testing.T) (*assert.Assertions, *gomock.Contro
 	d := mockdriver.NewMockContainerRunner(ctrl)
 	d.EXPECT().Close()
 	r := &containerExec{driver: d, dtype: "mock"}
-	r.SetGlobalConfig(GlobalCfg())
+	r.SetLaunchrConfig(launchrCfg())
 
 	return assert, ctrl, d, r
 }
@@ -148,10 +148,10 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 			imgFn(types.ImageBuild, "building image (local config)", nil),
 		},
 		{
-			"image build global",
-			&ActionConfig{Image: "build:global"},
-			GlobalConfigImage(GlobalCfg(), "build:global"),
-			imgFn(types.ImageBuild, "building image (global config)", nil),
+			"image build config",
+			&ActionConfig{Image: "build:config"},
+			ConfigImage(launchrCfg(), "build:config"),
+			imgFn(types.ImageBuild, "building image (from config)", nil),
 		},
 		{
 			"driver error",
@@ -624,7 +624,7 @@ func (f fsmy) MapFS() fstest.MapFS {
 	return m
 }
 
-func Test_GlobalImageBuildInfo(t *testing.T) {
+func Test_ConfigImageBuildInfo(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
@@ -644,10 +644,10 @@ func Test_GlobalImageBuildInfo(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := config.GlobalConfigFromFS(tt.fs.MapFS())
+			cfg := launchr.ConfigFromFS(tt.fs.MapFS())
 			assert.NotNil(cfg)
-			if img := GlobalConfigImage(cfg, "my/image:version"); (img == nil) == tt.expImg {
-				t.Errorf("expected image to find in global config")
+			if img := ConfigImage(cfg, "my/image:version"); (img == nil) == tt.expImg {
+				t.Errorf("expected image to find in config directory")
 			}
 		})
 	}

@@ -8,7 +8,7 @@ import (
 	"github.com/moby/term"
 )
 
-// AppCli is a global app config.
+// AppCli implements Streams interface.
 type AppCli struct {
 	in  *In
 	out *Out

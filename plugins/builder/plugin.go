@@ -9,30 +9,19 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/launchrctl/launchr"
+	"github.com/launchrctl/launchr/internal/launchr"
 )
-
-// ID is a plugin id.
-const ID = "builder"
 
 func init() {
 	launchr.RegisterPlugin(&Plugin{})
 }
 
 // Plugin is a plugin to build launchr application.
-type Plugin struct {
-}
+type Plugin struct{}
 
 // PluginInfo implements launchr.Plugin interface.
 func (p *Plugin) PluginInfo() launchr.PluginInfo {
-	return launchr.PluginInfo{
-		ID: ID,
-	}
-}
-
-// InitApp implements launchr.Plugin interface.
-func (p *Plugin) InitApp(*launchr.App) error {
-	return nil
+	return launchr.PluginInfo{}
 }
 
 type builderInput struct {
@@ -99,8 +88,8 @@ func Execute(ctx context.Context, flags *builderInput) error {
 	}
 
 	opts := &BuildOptions{
-		LaunchrVersion: launchr.GetVersion(),
-		CorePkg:        UsePluginInfo{Path: launchrPkg},
+		LaunchrVersion: launchr.Version(),
+		CorePkg:        UsePluginInfo{Path: launchr.PkgPath},
 		PkgName:        flags.name,
 		ModReplace:     replace,
 		Plugins:        plugins,

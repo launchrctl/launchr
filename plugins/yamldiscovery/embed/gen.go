@@ -8,8 +8,7 @@ import (
 	"path/filepath"
 	"text/template"
 
-	"github.com/launchrctl/launchr"
-	"github.com/launchrctl/launchr/pkg/plugins/yamldiscovery"
+	"github.com/launchrctl/launchr/internal/launchr"
 )
 
 const pluginTemplate = `
@@ -27,18 +26,16 @@ import (
 var tarFsBytes []byte
 
 type {{.StructName}} struct {
-	app *launchr.App
+	app launchr.App
 }
 
 // PluginInfo implements launchr.Plugin interface.
 func (p *{{.StructName}}) PluginInfo() launchr.PluginInfo {
-	return launchr.PluginInfo{
-		ID: "{{.ID}}",
-	}
+	return launchr.PluginInfo{}
 }
 
-// InitApp implements launchr.Plugin interface.
-func (p *{{.StructName}}) InitApp(app *launchr.App) error {
+// OnAppInit implements launchr.Plugin interface.
+func (p *{{.StructName}}) OnAppInit(app launchr.App) error {
 	fs, err := yamlembed.UntarFsBytes(tarFsBytes)
 	if err == nil {
         // @fixme
@@ -66,7 +63,7 @@ func (p *Plugin) Generate(buildPath string, workDir string) (*launchr.PluginGene
 	for i, cmd := range cmds {
 		fmt.Printf("%d. %s\n", i+1, cmd.CommandName)
 	}
-	var id = yamldiscovery.ID + ".gen"
+	var id = "actions.yamldiscovery.gen"
 	tpl, err := template.New(id).Parse(pluginTemplate)
 	if err != nil {
 		return nil, err

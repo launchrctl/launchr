@@ -9,7 +9,7 @@ import (
 	"text/template"
 )
 
-func (app *App) gen(buildPath string, wordDir string) error {
+func (app *appImpl) gen(buildPath string, wordDir string) error {
 	var err error
 	buildPath, err = filepath.Abs(buildPath)
 	if err != nil {
@@ -44,7 +44,7 @@ func (app *App) gen(buildPath string, wordDir string) error {
 	}
 	// Call generate functions on plugins.
 	initSet := make(map[string]struct{})
-	for _, p := range GetPluginByType[GeneratePlugin](app) {
+	for _, p := range getPluginByType[GeneratePlugin](app) {
 		genData, err := p.Generate(buildPath, wordDir)
 		if err != nil {
 			return err
@@ -78,7 +78,7 @@ func (app *App) gen(buildPath string, wordDir string) error {
 }
 
 // Generate runs generation of included plugins.
-func (app *App) Generate() int {
+func (app *appImpl) Generate() int {
 	buildPath := "./gen"
 	wd := "./"
 	if len(os.Args) > 1 {
@@ -98,7 +98,7 @@ func (app *App) Generate() int {
 
 // Gen generates application specific build files and returns os exit code.
 func Gen() int {
-	return NewApp().Generate()
+	return newApp().Generate()
 }
 
 type initTplVars struct {

@@ -17,7 +17,7 @@ type actionManagerMap map[string]*Command
 func NewManager() Manager { return make(actionManagerMap) }
 
 func (m actionManagerMap) ServiceInfo() launchr.ServiceInfo {
-	return launchr.ServiceInfo{ID: "action_manager"}
+	return launchr.ServiceInfo{}
 }
 
 func (m actionManagerMap) Add(cmd *Command) {

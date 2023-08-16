@@ -1,4 +1,4 @@
-package config
+package launchr
 
 import (
 	"testing"
@@ -17,7 +17,7 @@ func (f fsmy) MapFS() fstest.MapFS {
 	return m
 }
 
-func Test_GlobalConfigFromDir(t *testing.T) {
+func Test_ConfigFromFS(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
@@ -69,7 +69,7 @@ func Test_GlobalConfigFromDir(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := GlobalConfigFromFS(tt.fs.MapFS())
+			cfg := ConfigFromFS(tt.fs.MapFS())
 			assert.NotNil(cfg)
 			var err error
 			var val1, val1c testYamlFieldSub

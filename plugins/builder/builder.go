@@ -7,16 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"text/template"
 
-	"github.com/launchrctl/launchr"
+	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/log"
 )
-
-const launchrPkg = "github.com/launchrctl/launchr"
 
 // Builder is the orchestrator to fetch dependencies and build launchr.
 type Builder struct {
@@ -25,17 +22,10 @@ type Builder struct {
 	env *buildEnvironment
 }
 
-// ReplacePluginInfo has mod replace information.
-type ReplacePluginInfo struct {
-	Path    string
-	Version string
-}
-
 // UsePluginInfo stores plugin info.
 type UsePluginInfo struct {
 	Path    string
 	Version string
-	Replace ReplacePluginInfo
 }
 
 // UsePluginInfoFromString constructs mod plugin info.
@@ -44,27 +34,10 @@ func UsePluginInfoFromString(s string) UsePluginInfo {
 	if len(pv) == 1 {
 		pv = append(pv, "")
 	}
-	return UsePluginInfo{pv[0], pv[1], ReplacePluginInfo{}}
-}
-
-// GetVersion returns package version.
-func (p UsePluginInfo) GetVersion() string {
-	if p.Replace.Path != "" {
-		return p.Replace.Version
-	}
-	return p.Version
+	return UsePluginInfo{pv[0], pv[1]}
 }
 
 func (p UsePluginInfo) String() string {
-	v := fmt.Sprintf("%s %s", p.Path, p.Version)
-	if p.Replace.Path != "" {
-		v = fmt.Sprintf("%s => %s %s", v, p.Replace.Path, p.Replace.Version)
-	}
-	return v
-}
-
-// GoGetString provides a package path for a go get.
-func (p UsePluginInfo) GoGetString() string {
 	dep := p.Path
 	if p.Version != "" {
 		dep += "@" + p.Version
@@ -104,12 +77,10 @@ var embedTmplFs embed.FS
 var tmplView = template.Must(template.ParseFS(embedTmplFs, "tmpl/*.tmpl"))
 
 type buildVars struct {
-	PkgName        string
-	LaunchrVersion *launchr.AppVersion
-	CorePkg        UsePluginInfo
-	BuildVersion   *launchr.AppVersion
-	Plugins        []UsePluginInfo
-	Cwd            string
+	PkgName string
+	CorePkg UsePluginInfo
+	Plugins []UsePluginInfo
+	Cwd     string
 }
 
 // NewBuilder creates build environment.
@@ -150,21 +121,12 @@ func (b *Builder) Build(ctx context.Context) error {
 		return err
 	}
 
-	// Generate app version info.
-	b.CorePkg = b.env.GetPkgVersion(b.CorePkg.Path)
-	for i, p := range b.Plugins {
-		b.Plugins[i] = b.env.GetPkgVersion(p.Path)
-	}
-	buildVer := b.getBuildVersion(b.LaunchrVersion)
-
 	// Generate project files.
 	mainVars := buildVars{
-		LaunchrVersion: b.LaunchrVersion,
-		CorePkg:        b.CorePkg,
-		PkgName:        b.PkgName,
-		BuildVersion:   buildVer,
-		Plugins:        b.Plugins,
-		Cwd:            b.wd,
+		CorePkg: b.CorePkg,
+		PkgName: b.PkgName,
+		Plugins: b.Plugins,
+		Cwd:     b.wd,
 	}
 	files := []genGoFile{
 		{"main.tmpl", &mainVars, "main.go"},
@@ -218,8 +180,13 @@ func (b *Builder) goBuild(ctx context.Context) error {
 	args := []string{"build", "-o", out}
 	// Collect ldflags
 	ldflags := make([]string, 0, 4)
-	// Set application name.
-	ldflags = append(ldflags, "-X", b.CorePkg.Path+".Name="+b.PkgName)
+	// Set application version metadata.
+	ldflags = append(
+		ldflags,
+		"-X", fmt.Sprintf("'%s.name=%s'", launchr.PkgPath, b.PkgName),
+		"-X", fmt.Sprintf("'%s.builtWith=%s'", launchr.PkgPath, b.LaunchrVersion.Short()),
+	)
+
 	// Include or trim debug information.
 	if b.Debug {
 		args = append(args, "-gcflags", "all=-N -l")
@@ -236,25 +203,6 @@ func (b *Builder) goBuild(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func (b *Builder) getBuildVersion(version *launchr.AppVersion) *launchr.AppVersion {
-	bv := *version
-	bv.Name = b.PkgName
-	bv.Version = b.CorePkg.GetVersion()
-	if bv.Version == "" {
-		bv.Version = "dev"
-	}
-	bv.OS = os.Getenv("GOOS")
-	bv.Arch = os.Getenv("GOARCH")
-	if bv.OS == "" {
-		bv.OS = runtime.GOOS
-	}
-	if bv.Arch == "" {
-		bv.Arch = runtime.GOARCH
-	}
-
-	return &bv
 }
 
 func (b *Builder) runGen(ctx context.Context) error {

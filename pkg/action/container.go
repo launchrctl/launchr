@@ -12,7 +12,7 @@ import (
 	"github.com/moby/sys/signal"
 	"github.com/moby/term"
 
-	"github.com/launchrctl/launchr/internal/launchr/config"
+	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/driver"
 	"github.com/launchrctl/launchr/pkg/log"
@@ -27,7 +27,7 @@ const (
 type containerExec struct {
 	driver driver.ContainerRunner
 	dtype  driver.Type
-	cfg    config.GlobalConfig
+	cfg    launchr.Config
 }
 
 // NewDockerExecutor creates a new action executor in Docker environment.
@@ -44,8 +44,8 @@ func NewContainerExecutor(t driver.Type) (Executor, error) {
 	return &containerExec{driver: r, dtype: t}, nil
 }
 
-// SetGlobalConfig implements cli.GlobalConfigAware interface.
-func (c *containerExec) SetGlobalConfig(cfg config.GlobalConfig) {
+// SetLaunchrConfig implements cli.ConfigAware interface.
+func (c *containerExec) SetLaunchrConfig(cfg launchr.Config) {
 	c.cfg = cfg
 }
 
@@ -177,7 +177,7 @@ func (c *containerExec) imageEnsure(ctx context.Context, cmd *Command) error {
 	var build *types.BuildDefinition
 	if b := a.BuildDefinition(cmd.Dir()); b != nil {
 		build = b
-	} else if b = GlobalConfigImage(c.cfg, image); b != nil {
+	} else if b = ConfigImage(c.cfg, image); b != nil {
 		build = b
 	}
 	status, err := c.driver.ImageEnsure(ctx, types.ImageOptions{
@@ -309,18 +309,18 @@ func (c *containerExec) attachContainer(ctx context.Context, appCli cli.Streams,
 	return cio, errCh, nil
 }
 
-// GlobalConfigImagesKey is a field name in global config file.
-const GlobalConfigImagesKey = "images"
+// ConfigImagesKey is a field name in launchr config file.
+const ConfigImagesKey = "images"
 
-// GlobalConfigImages is a container to parse global config with yaml.
-type GlobalConfigImages map[string]*types.BuildDefinition
+// ConfigImages is a container to parse launchr config with yaml.
+type ConfigImages map[string]*types.BuildDefinition
 
-// GlobalConfigImage extends GlobalConfig functionality and parses images definition.
-func GlobalConfigImage(cfg config.GlobalConfig, image string) *types.BuildDefinition {
-	var images GlobalConfigImages
-	err := cfg.Get(GlobalConfigImagesKey, &images)
+// ConfigImage extends launchr.Config functionality and parses images definition.
+func ConfigImage(cfg launchr.Config, image string) *types.BuildDefinition {
+	var images ConfigImages
+	err := cfg.Get(ConfigImagesKey, &images)
 	if err != nil {
-		log.Warn("global configuration field %q is malformed", GlobalConfigImagesKey)
+		log.Warn("launchr configuration field %q is malformed", ConfigImagesKey)
 		return nil
 	}
 	if b, ok := images[image]; ok {

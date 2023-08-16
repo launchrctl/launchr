@@ -6,31 +6,20 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/launchrctl/launchr"
+	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/log"
 )
-
-// ID is a plugin id.
-const ID = "verbosity"
 
 func init() {
 	launchr.RegisterPlugin(&Plugin{})
 }
 
 // Plugin is launchr plugin to set verbosity of the application.
-type Plugin struct {
-}
+type Plugin struct{}
 
 // PluginInfo implements launchr.Plugin interface.
 func (p *Plugin) PluginInfo() launchr.PluginInfo {
-	return launchr.PluginInfo{
-		ID: ID,
-	}
-}
-
-// InitApp implements launchr.Plugin interface.
-func (p *Plugin) InitApp(*launchr.App) error {
-	return nil
+	return launchr.PluginInfo{}
 }
 
 // CobraAddCommands implements launchr.CobraPlugin interface to set app verbosity.

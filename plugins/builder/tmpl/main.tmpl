@@ -6,17 +6,12 @@ import (
 	"os"
 
 	"{{.CorePkg.Path}}"
-	_ "{{.CorePkg.Path}}/pkg/plugins"
 	_ "{{.PkgName}}/gen"
 	{{range .Plugins}}
 	_ "{{.Path}}"
 	{{- end}}
 )
 
-{{/* inline version in a multiline string */}}
-const version = `{{template "version.tmpl" .}}`
-
 func main() {
-	launchr.SetCustomVersion(version)
 	os.Exit(launchr.Run())
 }

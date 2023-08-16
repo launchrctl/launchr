@@ -7,14 +7,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/launchrctl/launchr/internal/launchr/config"
+	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 	"github.com/launchrctl/launchr/pkg/log"
 )
 
 // CobraImpl returns cobra command implementation for an action command.
-func CobraImpl(cmd *Command, appCli cli.Streams, globalCfg config.GlobalConfig, group *cobra.Group) (*cobra.Command, error) {
+func CobraImpl(cmd *Command, appCli cli.Streams, cfg launchr.Config, group *cobra.Group) (*cobra.Command, error) {
 	if err := cmd.Compile(); err != nil {
 		return nil, err
 	}
@@ -33,7 +33,7 @@ func CobraImpl(cmd *Command, appCli cli.Streams, globalCfg config.GlobalConfig, 
 		RunE: func(ccmd *cobra.Command, args []string) error {
 			// Don't show usage help on a runtime error.
 			ccmd.SilenceUsage = true
-			return runCmd(ccmd.Context(), cmd, appCli, globalCfg, args, options)
+			return runCmd(ccmd.Context(), cmd, appCli, cfg, args, options)
 		},
 	}
 	if group != nil {
@@ -47,7 +47,7 @@ func CobraImpl(cmd *Command, appCli cli.Streams, globalCfg config.GlobalConfig, 
 	return cobraCmd, nil
 }
 
-func runCmd(ctx context.Context, cmd *Command, appCli cli.Streams, globalCfg config.GlobalConfig, args []string, opts map[string]interface{}) error {
+func runCmd(ctx context.Context, cmd *Command, appCli cli.Streams, cfg launchr.Config, args []string, opts map[string]interface{}) error {
 	// Save and validate input.
 	cmd.SetArgsInput(args)
 	cmd.SetOptsInput(derefOpts(opts))
@@ -63,8 +63,8 @@ func runCmd(ctx context.Context, cmd *Command, appCli cli.Streams, globalCfg con
 		return err
 	}
 	defer r.Close()
-	if r, ok := r.(config.GlobalConfigAware); ok {
-		r.SetGlobalConfig(globalCfg)
+	if r, ok := r.(launchr.ConfigAware); ok {
+		r.SetLaunchrConfig(cfg)
 	}
 
 	// Run the command.

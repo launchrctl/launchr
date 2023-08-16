@@ -11,8 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/mod/modfile"
-
 	"github.com/launchrctl/launchr/pkg/log"
 )
 
@@ -57,9 +55,8 @@ func (a *envVars) Unset(k string) {
 }
 
 type buildEnvironment struct {
-	wd    string
-	env   envVars
-	gomod *modfile.File
+	wd  string
+	env envVars
 }
 
 func newBuildEnvironment() (*buildEnvironment, error) {
@@ -97,7 +94,7 @@ func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptio
 		}
 	}
 	if !coreRepl {
-		err = env.execGoGet(ctx, opts.CorePkg.GoGetString())
+		err = env.execGoGet(ctx, opts.CorePkg.String())
 		if err != nil {
 			return err
 		}
@@ -112,16 +109,12 @@ nextPlugin:
 				continue nextPlugin
 			}
 		}
-		err = env.execGoGet(ctx, p.GoGetString())
+		err = env.execGoGet(ctx, p.String())
 		if err != nil {
 			return err
 		}
 	}
-
-	err = env.parseGoMod()
-	if err != nil {
-		return err
-	}
+	// @todo update all but with fixed versions if requested
 
 	return err
 }
@@ -215,52 +208,6 @@ func (env *buildEnvironment) Go() string {
 
 func (env *buildEnvironment) Close() error {
 	return os.RemoveAll(env.wd)
-}
-
-func (env *buildEnvironment) parseGoMod() error {
-	var err error
-	modFile, err := os.ReadFile(filepath.Join(env.wd, "go.mod"))
-	if err != nil {
-		return err
-	}
-	env.gomod, err = modfile.Parse("go.mod", modFile, nil)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (env *buildEnvironment) GetPkgVersion(pkg string) UsePluginInfo {
-	var vrep *modfile.Replace
-	for _, rep := range env.gomod.Replace {
-		if strings.HasPrefix(pkg, rep.Old.Path) {
-			vrep = rep
-			break
-		}
-	}
-
-	var vreq *modfile.Require
-	for _, req := range env.gomod.Require {
-		if strings.HasPrefix(pkg, req.Mod.Path) {
-			vreq = req
-			break
-		}
-	}
-	var v UsePluginInfo
-	if vreq == nil {
-		v = UsePluginInfo{Path: pkg}
-	} else {
-		v = UsePluginInfo{
-			Path:    vreq.Mod.Path,
-			Version: vreq.Mod.Version,
-		}
-	}
-
-	if vrep != nil {
-		v.Replace.Path = vrep.New.Path
-		v.Replace.Version = vrep.New.Version
-	}
-	return v
 }
 
 func (env *buildEnvironment) SetEnv(k string, v string) {

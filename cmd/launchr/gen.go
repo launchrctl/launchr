@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/launchrctl/launchr"
-	_ "github.com/launchrctl/launchr/pkg/plugins"
 )
 
 func main() {

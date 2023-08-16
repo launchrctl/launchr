@@ -1,11 +1,8 @@
 package embed
 
 import (
-	"github.com/launchrctl/launchr"
+	"github.com/launchrctl/launchr/internal/launchr"
 )
-
-// ID is a plugin id.
-const ID = "actions.yamldiscovery.embed"
 
 func init() {
 	launchr.RegisterPlugin(&Plugin{})
@@ -13,18 +10,16 @@ func init() {
 
 // Plugin is a plugin to discover actions defined in yaml.
 type Plugin struct {
-	app *launchr.App
+	app launchr.App
 }
 
 // PluginInfo implements launchr.Plugin interface.
 func (p *Plugin) PluginInfo() launchr.PluginInfo {
-	return launchr.PluginInfo{
-		ID: ID,
-	}
+	return launchr.PluginInfo{}
 }
 
-// InitApp implements launchr.Plugin interface to provide discovered actions.
-func (p *Plugin) InitApp(app *launchr.App) error {
+// OnAppInit implements launchr.Plugin interface to provide discovered actions.
+func (p *Plugin) OnAppInit(app launchr.App) error {
 	p.app = app
 	return nil
 }

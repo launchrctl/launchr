@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"{{.CorePkg.Path}}"
-	_ "{{.CorePkg.Path}}/pkg/plugins"
 	{{range .Plugins}}
 	_ "{{.Path}}"
 	{{- end}}

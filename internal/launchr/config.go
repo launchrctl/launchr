@@ -1,5 +1,4 @@
-// Package config provides global app config object.
-package config
+package launchr
 
 import (
 	"errors"
@@ -10,22 +9,20 @@ import (
 	"regexp"
 
 	"gopkg.in/yaml.v3"
-
-	"github.com/launchrctl/launchr/internal/launchr"
 )
 
 var configRegex = regexp.MustCompile(`^config\.(yaml|yml)$`)
 
 var (
-	errNoFile = errors.New("config file is not found")
+	ErrNoConfigFile = errors.New("config file is not found") // ErrNoConfigFile when config file doesn't exist in FS.
 )
 
-// GlobalConfig is a config interface.
-type GlobalConfig interface {
-	launchr.Service
+// Config is a launchr config storage interface.
+type Config interface {
+	Service
 	// DirPath returns an absolute path to config directory.
 	DirPath() string
-	// Path provides an absolute path to global config.
+	// Path provides an absolute path to launchr config directory.
 	Path(parts ...string) string
 	// EnsurePath creates all directories in the path.
 	EnsurePath(parts ...string) error
@@ -34,14 +31,14 @@ type GlobalConfig interface {
 	Get(name string, v interface{}) error
 }
 
-// GlobalConfigAware provides an interface for structs to support global configuration setting.
-type GlobalConfigAware interface {
-	// SetGlobalConfig sets a global config to the struct.
-	SetGlobalConfig(GlobalConfig)
+// ConfigAware provides an interface for structs to support launchr configuration setting.
+type ConfigAware interface {
+	// SetLaunchrConfig sets a launchr config to the struct.
+	SetLaunchrConfig(Config)
 }
 
-type cachedProps map[string]reflect.Value
-type globalConfig struct {
+type cachedProps = map[string]reflect.Value
+type config struct {
 	root     fs.FS
 	fname    fs.DirEntry
 	rootPath string
@@ -49,7 +46,7 @@ type globalConfig struct {
 	yaml     map[string]yaml.Node
 }
 
-func findConfig(root fs.FS) fs.DirEntry {
+func findConfigFile(root fs.FS) fs.DirEntry {
 	dir, err := fs.ReadDir(root, ".")
 	if err != nil {
 		return nil
@@ -62,27 +59,25 @@ func findConfig(root fs.FS) fs.DirEntry {
 	return nil
 }
 
-// GlobalConfigFromFS parses global app config.
-func GlobalConfigFromFS(root fs.FS) GlobalConfig {
-	return &globalConfig{
+// ConfigFromFS parses launchr app config directory and its content.
+func ConfigFromFS(root fs.FS) Config {
+	return &config{
 		root:     root,
-		rootPath: launchr.GetFsAbsPath(root),
+		rootPath: GetFsAbsPath(root),
 		cached:   make(cachedProps),
-		fname:    findConfig(root),
+		fname:    findConfigFile(root),
 	}
 }
 
-func (cfg *globalConfig) ServiceInfo() launchr.ServiceInfo {
-	return launchr.ServiceInfo{
-		ID: "global_config",
-	}
+func (cfg *config) ServiceInfo() ServiceInfo {
+	return ServiceInfo{}
 }
 
-func (cfg *globalConfig) DirPath() string {
+func (cfg *config) DirPath() string {
 	return cfg.rootPath
 }
 
-func (cfg *globalConfig) Get(name string, v interface{}) error {
+func (cfg *config) Get(name string, v interface{}) error {
 	var err error
 	cached, ok := cfg.cached[name]
 	if ok {
@@ -120,9 +115,9 @@ func (cfg *globalConfig) Get(name string, v interface{}) error {
 	return nil
 }
 
-func (cfg *globalConfig) parse() error {
+func (cfg *config) parse() error {
 	if cfg.fname == nil {
-		return errNoFile
+		return ErrNoConfigFile
 	}
 	r, err := cfg.root.Open(cfg.fname.Name())
 	if err != nil {
@@ -138,11 +133,11 @@ func (cfg *globalConfig) parse() error {
 	return nil
 }
 
-func (cfg *globalConfig) Path(parts ...string) string {
+func (cfg *config) Path(parts ...string) string {
 	parts = append([]string{cfg.rootPath}, parts...)
 	return filepath.Clean(filepath.Join(parts...))
 }
 
-func (cfg *globalConfig) EnsurePath(parts ...string) error {
-	return launchr.EnsurePath(cfg.Path(parts...))
+func (cfg *config) EnsurePath(parts ...string) error {
+	return EnsurePath(cfg.Path(parts...))
 }
