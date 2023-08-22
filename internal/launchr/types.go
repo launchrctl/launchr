@@ -38,6 +38,8 @@ type AppVersion struct {
 
 // PluginInfo provides information about the plugin and is used as a unique data to indentify a plugin.
 type PluginInfo struct {
+	// Weight defines the order of plugins calling. @todo rework to a real dependency resolving.
+	Weight   int
 	pkgPath  string
 	typeName string
 }

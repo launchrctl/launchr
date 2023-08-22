@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 
 	"github.com/spf13/cobra"
 
@@ -35,11 +36,24 @@ type appImpl struct {
 func getPluginByType[T Plugin](app *appImpl) []T {
 	plugins := app.pluginMngr.All()
 	res := make([]T, 0, len(plugins))
-	for _, p := range plugins {
+	// Collect plugins according to their weights.
+	m := make(map[int][]T)
+	for pi, p := range plugins {
 		p, ok := p.(T)
 		if ok {
-			res = append(res, p)
+			m[pi.Weight] = append(m[pi.Weight], p)
 		}
+	}
+	// Sort weight keys.
+	weights := make([]int, 0, len(m))
+	for w := range m {
+		weights = append(weights, w)
+	}
+	sort.Ints(weights)
+	// Merge all to a sorted list of plugins.
+	// @todo maybe sort everything on init to optimize.
+	for _, w := range weights {
+		res = append(res, m[w]...)
 	}
 	return res
 }
