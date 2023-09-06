@@ -32,14 +32,14 @@ func (p *Plugin) OnAppInit(app launchr.App) error {
 	p.app = app
 	dp := p.app.GetWD()
 	appFs := os.DirFS(dp)
-	cmds, err := discoverActions(appFs)
+	actions, err := discoverActions(appFs)
 	if err != nil {
 		return err
 	}
 	var actionMngr action.Manager
 	app.GetService(&actionMngr)
-	for _, cmdDef := range cmds {
-		actionMngr.Add(cmdDef)
+	for _, actConf := range actions {
+		actionMngr.Add(actConf)
 	}
 	return nil
 }
@@ -51,14 +51,14 @@ func (p *Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
 		Short: "Discovers available actions in filesystem",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dp := p.app.GetWD()
-			cmds, err := discoverActions(os.DirFS(dp))
+			actions, err := discoverActions(os.DirFS(dp))
 			if err != nil {
 				return err
 			}
 
 			// @todo cache discovery to read fs only once.
-			for _, a := range cmds {
-				cli.Println("%s", a.CommandName)
+			for _, a := range actions {
+				cli.Println("%s", a.ID)
 			}
 
 			return nil
@@ -69,6 +69,6 @@ func (p *Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
 	return nil
 }
 
-func discoverActions(fs fs.FS) ([]*action.Command, error) {
+func discoverActions(fs fs.FS) ([]*action.Action, error) {
 	return action.NewYamlDiscovery(fs).Discover()
 }

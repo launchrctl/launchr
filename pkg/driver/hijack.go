@@ -46,27 +46,28 @@ type Streamer interface {
 }
 
 // ContainerIOStream streams in/out/err to given streams.
-func ContainerIOStream(ctx context.Context, appCli cli.Streams, cio *ContainerInOut, config *types2.ContainerCreateOptions) error {
+// @todo consider license reference.
+func ContainerIOStream(ctx context.Context, streams cli.Streams, cio *ContainerInOut, config *types2.ContainerCreateOptions) error {
 	var (
 		out, cerr io.Writer
 		in        io.ReadCloser
 	)
 	if config.AttachStdin {
-		in = appCli.In()
+		in = streams.In()
 	}
 	if config.AttachStdout {
-		out = appCli.Out()
+		out = streams.Out()
 	}
 	if config.AttachStderr {
 		if config.Tty {
-			cerr = appCli.Out()
+			cerr = streams.Out()
 		} else {
-			cerr = appCli.Err()
+			cerr = streams.Err()
 		}
 	}
 
 	streamer := hijackedIOStreamer{
-		streams:      appCli,
+		streams:      streams,
 		inputStream:  in,
 		outputStream: out,
 		errorStream:  cerr,

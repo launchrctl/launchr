@@ -3,120 +3,206 @@ package action
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
-	"io/fs"
-	"reflect"
 	"regexp"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/launchrctl/launchr/pkg/jsonschema"
+	"github.com/launchrctl/launchr/pkg/types"
 )
+
+const (
+	sErrFieldMustBeArr       = "field must be an array"
+	sErrArrElMustBeObj       = "array element must be an object"
+	sErrArrEl                = "element must be an array of strings"
+	sErrArrOrStrEl           = "element must be an array of strings or a string"
+	sErrArrOrMapEl           = "element must be an array of strings or a key-value object"
+	sErrEmptyActionImg       = "image field cannot be empty"
+	sErrEmptyActionCmd       = "command field cannot be empty"
+	sErrEmptyActionArgName   = "action argument name is required"
+	sErrEmptyActionOptName   = "action option name is required"
+	sErrInvalidActionArgName = "argument name %q is not valid"
+	sErrInvalidActionOptName = "option name %q is not valid"
+	sErrDupActionVarName     = "argument or option name %q is already defined, a variable name must be unique in the action definition"
+)
+
+type errUnsupportedActionVersion struct {
+	version string
+}
+
+// Error implements error interface.
+func (err errUnsupportedActionVersion) Error() string {
+	return fmt.Sprintf("unsupported version %q of an action file", err.version)
+}
+
+// Is implements errors.Is interface.
+func (err errUnsupportedActionVersion) Is(cmp error) bool {
+	var errCmp errUnsupportedActionVersion
+	ok := errors.As(cmp, &errCmp)
+	return ok && errCmp == err
+}
 
 var (
-	errFieldMustBeArr = errors.New("field must be an array")
-	errArrElMustBeObj = errors.New("array element must be an object")
-	errArrOrStrEl     = errors.New("element must be a string array or a string")
-	errArrOrMapEl     = errors.New("element must be a string array or a key-value object")
+	rgxUnescTplRow = regexp.MustCompile(`(?:-|\S+:)(?:\s*)?({{.*}}.*)`)
+	rgxTplRow      = regexp.MustCompile(`({{.*}}.*)`)
+	rgxVarName     = regexp.MustCompile("^[a-zA-Z][a-zA-Z0-9_\\-]*$")
 )
 
-var (
-	rgxUnescapedTplRow = regexp.MustCompile(`(?:-|\S+:)(?:\s*)?({{.*}}.*)`)
-	rgxTplRow          = regexp.MustCompile(`({{.*}}.*)`)
-)
+// CreateFromYaml creates an action file definition from yaml configuration.
+// It returns pointer to Definition or nil on error.
+func CreateFromYaml(r io.Reader) (*Definition, error) {
+	d := Definition{}
+	decoder := yaml.NewDecoder(r)
+	err := decoder.Decode(&d)
+	if err != nil {
+		return nil, err
+	}
 
-// CreateFromYamlTpl creates action definition from yaml configuration
+	// Validate required fields
+	switch d.Version {
+	case "1":
+		if err = validateV1(&d); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, errUnsupportedActionVersion{d.Version}
+	}
+	return &d, nil
+}
+
+// CreateFromYamlTpl creates an action file definition from yaml configuration
 // as CreateFromYaml but considers that it has unescaped template values.
-func CreateFromYamlTpl(b []byte) (*Action, error) {
+func CreateFromYamlTpl(b []byte) (*Definition, error) {
 	// Find unescaped occurrences of template elements.
-	bufRaw := rgxUnescapedTplRow.ReplaceAllFunc(b, func(match []byte) []byte {
-		return rgxTplRow.ReplaceAll(match, []byte("\"$1\""))
+	bufRaw := rgxUnescTplRow.ReplaceAllFunc(b, func(match []byte) []byte {
+		return rgxTplRow.ReplaceAll(match, []byte(`"$1"`))
 	})
 	r := bytes.NewReader(bufRaw)
 	return CreateFromYaml(r)
 }
 
-// CreateFromYaml creates action definition from yaml configuration.
-// It returns pointer to Action or nil on error.
-func CreateFromYaml(r io.Reader) (*Action, error) {
-	cfg := Action{}
-	decoder := yaml.NewDecoder(r)
-	err := decoder.Decode(&cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	cfg.initDefaults()
-
-	// Validate required fields
-	switch cfg.Version {
-	case "1":
-		if err := validateV1(&cfg); err != nil {
-			return nil, err
-		}
-	default:
-		return nil, errUnsupportedActionVersion{cfg.Version}
-	}
-	return &cfg, nil
+// Definition is a representation of an action file
+type Definition struct {
+	Version string     `yaml:"version"`
+	Action  *DefAction `yaml:"action"`
 }
 
-func unmarshalListYaml[T *Argument | *Option](nodeList *yaml.Node) ([]T, error) {
-	if nodeList.Kind != yaml.SequenceNode {
-		return nil, errFieldMustBeArr
+// Content implements Loader interface.
+func (d *Definition) Content() ([]byte, error) {
+	w := &bytes.Buffer{}
+	err := yaml.NewEncoder(w).Encode(d)
+	return w.Bytes(), err
+}
+
+// Load implements Loader interface.
+func (d *Definition) Load() (*Definition, error) {
+	return d, nil
+}
+
+// LoadRaw implements Loader interface.
+func (d *Definition) LoadRaw() (*Definition, error) {
+	return d.Load()
+}
+
+var yamlTree = newGlobalYamlParseMeta()
+
+// UnmarshalYAML implements yaml.Unmarshaler to parse action definition.
+func (d *Definition) UnmarshalYAML(node *yaml.Node) (err error) {
+	type yamlDef Definition
+	var yd yamlDef
+	yamlTree.addDef(d, node)
+	defer yamlTree.removeDef(d)
+	if err = node.Decode(&yd); err != nil {
+		return err
 	}
-	args := make([]T, 0, len(nodeList.Content))
-	for _, node := range nodeList.Content {
-		if node.Kind != yaml.MappingNode {
-			return nil, errArrElMustBeObj
-		}
-		var arg T
-		err := node.Decode(&arg)
-		if err != nil {
-			return nil, err
-		}
-
-		var raw map[string]interface{}
-		err = node.Decode(&raw)
-		if err != nil {
-			return nil, err
-		}
-		// Set Raw data.
-		refArg := reflect.ValueOf(arg).Elem()
-		refArg.FieldByName("RawMap").Set(reflect.ValueOf(raw))
-		args = append(args, arg)
+	*d = Definition(yd)
+	// Set default version to 1
+	if d.Version == "" {
+		d.Version = "1"
 	}
-
-	return args, nil
+	return nil
 }
 
-// UnmarshalYAML implements yaml.Unmarshaler to parse for ArgumentsList.
-func (l *ArgumentsList) UnmarshalYAML(nodeList *yaml.Node) (err error) {
-	*l, err = unmarshalListYaml[*Argument](nodeList)
-	return err
+func validateV1(_ *Definition) error {
+	// The schema is validated on parsing.
+	return nil
 }
 
-// UnmarshalYAML implements yaml.Unmarshaler to parse for OptionsList.
-func (l *OptionsList) UnmarshalYAML(nodeList *yaml.Node) (err error) {
-	*l, err = unmarshalListYaml[*Option](nodeList)
-	return err
+// DefAction holds action configuration
+type DefAction struct {
+	Title       string                 `yaml:"title"`
+	Description string                 `yaml:"description"`
+	Arguments   ArgumentsList          `yaml:"arguments"`
+	Options     OptionsList            `yaml:"options"`
+	Command     StrSliceOrStr          `yaml:"command"`
+	Image       string                 `yaml:"image"`
+	Build       *types.BuildDefinition `yaml:"build"`
+	ExtraHosts  StrSlice               `yaml:"extra_hosts"`
+	Env         EnvSlice               `yaml:"env"`
 }
 
-type yamlStrSlice StrSlice
+// UnmarshalYAML implements yaml.Unmarshaler to parse action definition.
+func (a *DefAction) UnmarshalYAML(n *yaml.Node) (err error) {
+	type yamlT DefAction
+	var y yamlT
+	if err = n.Decode(&y); err != nil {
+		return err
+	}
+	*a = DefAction(y)
+
+	if a.Image == "" {
+		l, c := yamlNodeLineCol(n, "image")
+		return yamlTypeErrorLine(sErrEmptyActionImg, l, c)
+	}
+	if len(a.Command) == 0 {
+		l, c := yamlNodeLineCol(n, "command")
+		return yamlTypeErrorLine(sErrEmptyActionCmd, l, c)
+	}
+	return nil
+}
+
+// StrSlice is an array of strings for command execution.
+type StrSlice []string
 
 // UnmarshalYAML implements yaml.Unmarshaler to parse a string or a list of strings.
 func (l *StrSlice) UnmarshalYAML(n *yaml.Node) (err error) {
 	if n.Kind == yaml.ScalarNode {
-		var s string
-		err = n.Decode(&s)
-		*l = StrSlice{s}
-		return err
+		return yamlTypeErrorLine(sErrArrEl, n.Line, n.Column)
 	}
-	var s yamlStrSlice
+	var s StrSliceOrStr
 	err = n.Decode(&s)
 	if err != nil {
-		return errArrOrStrEl
+		return err
 	}
 	*l = StrSlice(s)
 	return err
 }
+
+// StrSliceOrStr is an array of strings for command execution.
+type StrSliceOrStr []string
+
+// UnmarshalYAML implements yaml.Unmarshaler to parse a string or a list of strings.
+func (l *StrSliceOrStr) UnmarshalYAML(n *yaml.Node) (err error) {
+	type yamlT StrSliceOrStr
+	if n.Kind == yaml.ScalarNode {
+		var s string
+		err = n.Decode(&s)
+		*l = StrSliceOrStr{s}
+		return err
+	}
+	var s yamlT
+	err = n.Decode(&s)
+	if err != nil {
+		return yamlTypeErrorLine(sErrArrOrStrEl, n.Line, n.Column)
+	}
+	*l = StrSliceOrStr(s)
+	return err
+}
+
+// EnvSlice is an array of env vars or key-value.
+type EnvSlice []string
 
 // UnmarshalYAML implements yaml.Unmarshaler to parse env []string or map[string]string.
 func (l *EnvSlice) UnmarshalYAML(n *yaml.Node) (err error) {
@@ -124,7 +210,7 @@ func (l *EnvSlice) UnmarshalYAML(n *yaml.Node) (err error) {
 		var m map[string]string
 		err = n.Decode(&m)
 		if err != nil {
-			return errArrOrMapEl
+			return yamlTypeErrorLine(sErrArrOrMapEl, n.Line, n.Column)
 		}
 		newl := make(EnvSlice, len(m))
 		i := 0
@@ -139,72 +225,142 @@ func (l *EnvSlice) UnmarshalYAML(n *yaml.Node) (err error) {
 		var s []string
 		err = n.Decode(&s)
 		if err != nil {
-			return errArrOrMapEl
+			return yamlTypeErrorLine(sErrArrOrMapEl, n.Line, n.Column)
 		}
 		*l = s
 		return err
 	}
 
-	// @todo Set line and column to the error message.
-	return errArrOrMapEl
+	return yamlTypeErrorLine(sErrArrOrMapEl, n.Line, n.Column)
 }
 
-type yamlFileLoader struct {
-	processor LoadProcessor
-	raw       *Action
-	cached    []byte
-	open      func() (fs.File, error)
+// ArgumentsList is used for custom yaml parsing of arguments list.
+type ArgumentsList []*Argument
+
+// UnmarshalYAML implements yaml.Unmarshaler to parse for ArgumentsList.
+func (l *ArgumentsList) UnmarshalYAML(nodeList *yaml.Node) (err error) {
+	*l, err = unmarshalListYaml[*Argument](nodeList)
+	return err
 }
 
-func (l *yamlFileLoader) Content() ([]byte, error) {
-	// @todo unload unused.
-	var err error
-	if l.cached != nil {
-		return l.cached, nil
-	}
-	f, err := l.open()
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	l.cached, err = io.ReadAll(f)
-	if err != nil {
-		return nil, err
-	}
-	return l.cached, nil
+// Argument stores command arguments declaration.
+type Argument struct {
+	Name        string          `yaml:"name"`
+	Title       string          `yaml:"title"`
+	Description string          `yaml:"description"`
+	Type        jsonschema.Type `yaml:"type"`
+	RawMap      map[string]interface{}
 }
 
-func (l *yamlFileLoader) LoadRaw() (*Action, error) {
-	var err error
-	buf, err := l.Content()
-	if err != nil {
-		return nil, err
+// UnmarshalYAML implements yaml.Unmarshaler to parse Argument.
+func (a *Argument) UnmarshalYAML(node *yaml.Node) (err error) {
+	type yamlT Argument
+	var y yamlT
+	errStr := []string{sErrEmptyActionArgName, sErrInvalidActionArgName, sErrDupActionVarName}
+	if err = unmarshalVarYaml(node, &y, errStr); err != nil {
+		return err
 	}
-	if l.raw == nil {
-		l.raw, err = CreateFromYamlTpl(buf)
-		if err != nil {
-			return nil, err
+	*a = Argument(y)
+	return nil
+}
+
+// OptionsList is used for custom yaml parsing of options list.
+type OptionsList []*Option
+
+// UnmarshalYAML implements yaml.Unmarshaler to parse OptionsList.
+func (l *OptionsList) UnmarshalYAML(nodeList *yaml.Node) (err error) {
+	*l, err = unmarshalListYaml[*Option](nodeList)
+	return err
+}
+
+// Option stores command options declaration.
+type Option struct {
+	Name        string          `yaml:"name"`
+	Title       string          `yaml:"title"`
+	Description string          `yaml:"description"`
+	Type        jsonschema.Type `yaml:"type"`
+	Default     interface{}     `yaml:"default"`
+	Required    bool            `yaml:"required"`
+	RawMap      map[string]interface{}
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler to parse Option.
+func (o *Option) UnmarshalYAML(node *yaml.Node) (err error) {
+	type yamlT Option
+	var y yamlT
+	errStr := []string{sErrEmptyActionOptName, sErrInvalidActionOptName, sErrDupActionVarName}
+	if err = unmarshalVarYaml(node, &y, errStr); err != nil {
+		return err
+	}
+	*o = Option(y)
+	dval := getDefaultByType(o)
+	if errDef, ok := dval.(error); ok {
+		return yamlTypeErrorLine(errDef.Error(), node.Line, node.Column)
+	}
+	o.Default = dval
+	o.RawMap["default"] = o.Default
+	return nil
+}
+
+func unmarshalVarYaml(n *yaml.Node, v any, errStr []string) (err error) {
+	if err = n.Decode(v); err != nil {
+		return err
+	}
+	vname := reflectValRef(v, "Name").(*string)
+	vtype := reflectValRef(v, "Type").(*jsonschema.Type)
+	vtitle := reflectValRef(v, "Title").(*string)
+	vraw := reflectValRef(v, "RawMap").(*map[string]interface{})
+
+	if *vname == "" {
+		return yamlTypeErrorLine(errStr[0], n.Line, n.Column)
+	}
+	if !rgxVarName.MatchString(*vname) {
+		l, c := yamlNodeLineCol(n, "name")
+		return yamlTypeErrorLine(fmt.Sprintf(errStr[1], *vname), l, c)
+	}
+	dups := yamlTree.dupsByNode(n)
+	if !dups.isUnique(*vname) {
+		l, c := yamlNodeLineCol(n, "name")
+		return yamlTypeErrorLine(fmt.Sprintf(errStr[2], *vname), l, c)
+	}
+	if err = n.Decode(vraw); err != nil {
+		return err
+	}
+	if *vtype == "" {
+		*vtype = jsonschema.String
+	}
+	if *vtitle == "" {
+		*vtitle = *vname
+	}
+	(*vraw)["type"] = vtype
+	return nil
+}
+
+func unmarshalListYaml[T any](nl *yaml.Node) ([]T, error) {
+	if nl.Kind != yaml.SequenceNode {
+		return nil, yamlTypeErrorLine(sErrFieldMustBeArr, nl.Line, nl.Column)
+	}
+	l := make([]T, 0, len(nl.Content))
+	var errs *yaml.TypeError
+	for _, node := range nl.Content {
+		if node.Kind != yaml.MappingNode {
+			errs = yamlMergeErrors(errs, yamlTypeErrorLine(sErrArrElMustBeObj, node.Line, node.Column))
+			continue
 		}
+		var v T
+		if err := node.Decode(&v); err != nil {
+			if errType, ok := err.(*yaml.TypeError); ok {
+				errs = yamlMergeErrors(errs, errType)
+				continue
+			} else {
+				return nil, err
+			}
+		}
+		l = append(l, v)
 	}
-	return l.raw, err
-}
+	if errs != nil {
+		return l, errs
+	}
 
-func (l *yamlFileLoader) Load() (res *Action, err error) {
-	// Open file and save content for future.
-	c, err := l.Content()
-	if err != nil {
-		return nil, err
-	}
-	buf := make([]byte, len(c))
-	copy(buf, c)
-	buf, err = l.processor.Process(buf)
-	if err != nil {
-		return nil, err
-	}
-	r := bytes.NewReader(buf)
-	res, err = CreateFromYaml(r)
-	if err != nil {
-		return nil, err
-	}
-	return res, err
+	return l, nil
 }

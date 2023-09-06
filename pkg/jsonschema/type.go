@@ -16,15 +16,28 @@ const (
 	Unsupported Type = "UNSUPPORTED"
 )
 
-// FromString creates a Type with enum validation.
-func FromString(t string) Type {
+// TypeFromString creates a Type with enum validation.
+func TypeFromString(t string) Type {
 	if t == "" {
 		return String
 	}
 	switch Type(t) {
-	case String, Number, Integer, Boolean, Array:
+	case String, Number, Integer, Boolean, Array, Object, Null:
 		return Type(t)
 	default:
 		return Unsupported
 	}
+}
+
+// Schema is a json schema definition.
+// It doesn't implement all and may not comply fully.
+// See https://json-schema.org/specification.html
+type Schema struct {
+	ID       string   `json:"$id"`
+	Schema   string   `json:"$schema"`
+	Title    string   `json:"title"`
+	Type     Type     `json:"type"`
+	Required []string `json:"required"`
+	// @todo make a recursive type of properties.
+	Properties map[string]interface{} `json:"properties"`
 }

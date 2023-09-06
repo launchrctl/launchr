@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
@@ -26,9 +27,9 @@ type Config interface {
 	Path(parts ...string) string
 	// EnsurePath creates all directories in the path.
 	EnsurePath(parts ...string) error
-	// Get returns a value by name to a parameter v. Parameter v must be a pointer to a value.
+	// Get returns a value by key to a parameter v. Parameter v must be a pointer to a value.
 	// Error may be returned on decode.
-	Get(name string, v interface{}) error
+	Get(key string, v interface{}) error
 }
 
 // ConfigAware provides an interface for structs to support launchr configuration setting.
@@ -39,6 +40,7 @@ type ConfigAware interface {
 
 type cachedProps = map[string]reflect.Value
 type config struct {
+	mx       sync.Mutex
 	root     fs.FS
 	fname    fs.DirEntry
 	rootPath string
@@ -77,9 +79,11 @@ func (cfg *config) DirPath() string {
 	return cfg.rootPath
 }
 
-func (cfg *config) Get(name string, v interface{}) error {
+func (cfg *config) Get(key string, v interface{}) error {
+	cfg.mx.Lock()
+	defer cfg.mx.Unlock()
 	var err error
-	cached, ok := cfg.cached[name]
+	cached, ok := cfg.cached[key]
 	if ok {
 		err, ok = cached.Interface().(error)
 		if ok {
@@ -94,7 +98,7 @@ func (cfg *config) Get(name string, v interface{}) error {
 			return err
 		}
 	}
-	y, ok := cfg.yaml[name]
+	y, ok := cfg.yaml[key]
 	if !ok {
 		// Return default value.
 		return nil
@@ -102,7 +106,7 @@ func (cfg *config) Get(name string, v interface{}) error {
 	defer func() {
 		// Save error result to prevent parsing twice.
 		if err != nil {
-			cfg.cached[name] = reflect.ValueOf(err)
+			cfg.cached[key] = reflect.ValueOf(err)
 		}
 	}()
 	vcopy := reflect.New(reflect.TypeOf(v).Elem()).Elem()
@@ -111,7 +115,7 @@ func (cfg *config) Get(name string, v interface{}) error {
 		reflect.ValueOf(v).Elem().Set(vcopy)
 		return err
 	}
-	cfg.cached[name] = reflect.ValueOf(v).Elem()
+	cfg.cached[key] = reflect.ValueOf(v).Elem()
 	return nil
 }
 

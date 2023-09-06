@@ -22,6 +22,7 @@ type dockerDriver struct {
 
 // NewDockerDriver creates a docker driver.
 func NewDockerDriver() (ContainerRunner, error) {
+	// @todo it doesn't work with Colima or with non-default context.
 	c, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 
 	if err != nil {
@@ -94,7 +95,7 @@ func (d *dockerDriver) ContainerCreate(ctx context.Context, opts types.Container
 	if len(opts.Mounts) > 0 {
 		mounts := make([]mount.Mount, 0, len(opts.Mounts))
 		for s, t := range opts.Mounts {
-			abs, err := filepath.Abs(s)
+			abs, err := filepath.Abs(filepath.Clean(s))
 			if err != nil {
 				return "", err
 			}

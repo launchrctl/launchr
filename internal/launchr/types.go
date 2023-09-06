@@ -13,6 +13,8 @@ const PkgPath = "github.com/launchrctl/launchr"
 
 // App stores global application state.
 type App interface {
+	// Name returns app name.
+	Name() string
 	// GetWD provides app's working dir.
 	GetWD() string
 	// Streams returns application cli.

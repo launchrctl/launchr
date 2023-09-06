@@ -14,12 +14,12 @@ import (
 	"github.com/launchrctl/launchr/pkg/action"
 )
 
-func createActionTar(cfs fs.FS, buildPath string) (string, []*action.Command, error) {
+func createActionTar(cfs fs.FS, buildPath string) (string, []*action.Action, error) {
 	name := "actions.tar.gz"
 	target := filepath.Join(buildPath, name)
 	// Discover actions.
 	ad := action.NewYamlDiscovery(cfs)
-	cmds, err := ad.Discover()
+	actions, err := ad.Discover()
 	if err != nil {
 		return name, nil, err
 	}
@@ -32,27 +32,27 @@ func createActionTar(cfs fs.FS, buildPath string) (string, []*action.Command, er
 		_ = f.Close()
 	}()
 	// Pack actions in a file.
-	err = TarGzEmbedActions(f, cmds)
+	err = TarGzEmbedActions(f, actions)
 
-	return name, cmds, err
+	return name, actions, err
 }
 
 // TarGzEmbedActions tars and gzip action files to a file f.
-func TarGzEmbedActions(f io.Writer, cmds []*action.Command) error {
+func TarGzEmbedActions(f io.Writer, actions []*action.Action) error {
 	gzw := gzip.NewWriter(f)
 	defer gzw.Close()
 	tw := tar.NewWriter(gzw)
 	defer tw.Close()
 	now := time.Now()
 
-	for _, cmd := range cmds {
-		c, err := cmd.ActionRaw()
+	for _, a := range actions {
+		c, err := a.DefinitionEncoded()
 		if err != nil {
 			return err
 		}
 
 		h := &tar.Header{
-			Name:    cmd.Filepath,
+			Name:    a.Filepath(),
 			Mode:    0600,
 			ModTime: now,
 			Size:    int64(len(c)),

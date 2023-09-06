@@ -183,8 +183,8 @@ func (b *Builder) goBuild(ctx context.Context) error {
 	// Set application version metadata.
 	ldflags = append(
 		ldflags,
-		"-X", fmt.Sprintf("'%s.name=%s'", launchr.PkgPath, b.PkgName),
-		"-X", fmt.Sprintf("'%s.builtWith=%s'", launchr.PkgPath, b.LaunchrVersion.Short()),
+		"-X", "'"+launchr.PkgPath+".name="+b.PkgName+"'",
+		"-X", "'"+launchr.PkgPath+".builtWith="+b.LaunchrVersion.Short()+"'",
 	)
 
 	// Include or trim debug information.

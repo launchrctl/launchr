@@ -1,13 +1,9 @@
 package jsonschema
 
 import (
-	"errors"
+	"fmt"
 
 	"gopkg.in/yaml.v3"
-)
-
-var (
-	errUnsupportedType = errors.New("json schema type is unsupported")
 )
 
 // UnmarshalYAML implements yaml.Unmarshaler to parse Json Schema type.
@@ -17,9 +13,13 @@ func (t *Type) UnmarshalYAML(n *yaml.Node) (err error) {
 	if err != nil {
 		return err
 	}
-	st := FromString(s)
+	st := TypeFromString(s)
 	if st == Unsupported {
-		return errUnsupportedType
+		return &yaml.TypeError{
+			Errors: []string{
+				fmt.Sprintf("json schema type %q is unsupported, line %d, col %d", s, n.Line, n.Column),
+			},
+		}
 	}
 	*t = st
 	return nil

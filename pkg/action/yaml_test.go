@@ -1,309 +1,131 @@
 package action
 
-var validEmptyVersionYaml = `
-action:
-  title: Title
-  description: Description
-  image: python:3.7-slim
-  command: python3 {{ .Arg0 }}
-`
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"testing"
 
-var validFullYaml = `
-version: "1"
-action:
-  title: Title
-  description: Description
-  arguments:
-    - name: arg1
-      title: Argument 1
-      description: Argument 1 description
-    - name: arg2
-      title: Argument 2
-      description: Argument 2 description
-  options:
-    - name: opt1
-      title: Option 1
-      description: Option 1 description
-    - name: opt2
-      title: Option 2
-      description: Option 2 description
-      type: boolean
-      required: true
-    - name: opt3
-      title: Option 3
-      description: Option 3 description
-      type: integer
-    - name: opt4
-      title: Option 4
-      description: Option 4 description
-      type: number
-    - name: optarr
-      title: Option 5
-      description: Option 5 description
-      type: array
-  image: my/image:v1
-  build:
-    context: ./
-    buildfile: test.Dockerfile
-    args:
-      arg1: val1
-      arg2: val2
-    tags:
-      - my/image:v2
-      - my/image:v3
-  extra_hosts:
-    - "host.docker.internal:host-gateway"
-    - "example.com:127.0.0.1"
-  env:
-    - MY_ENV_1=test1
-    - MY_ENV_2=test2
-  command:
-    - /bin/sh
-    - -c
-    - ls -lah
-    - "{{ .arg2 }} {{ .arg1 }}"
-    - "{{ .opt3 }} {{ .opt2 }} {{ .opt1 }} {{ .opt4 }} {{ .optarr }}"
-    - ${TEST_ENV_1} ${TEST_ENV_UND}
-    - "${TEST_ENV_1} ${TEST_ENV_UND}"
-`
+	"github.com/stretchr/testify/assert"
+)
 
-// @todo invalid variables to replace
+func Test_CreateFromYaml(t *testing.T) {
+	t.Parallel()
 
-var validCmdArrYaml = `
-action:
-  title: Title
-  image: python:3.7-slim
-  command:
-    - /bin/sh
-    - -c
-    - for i in $(seq 3); do echo $$i; sleep 1; done
-`
+	type testCase struct {
+		name   string
+		input  string
+		expErr error
+	}
 
-var invalidCmdObjYaml = `
-action:
-  title: Title
-  image: python:3.7-slim
-  command:
-    line1: /bin/sh
-    line2: -c
-    line3: for i in $(seq 3); do echo $$i; sleep 1; done
-`
+	errAny := errors.New("any")
 
-var invalidCmdArrVarYaml = `
-action:
-  title: Title
-  image: python:3.7-slim
-  command:
-    - /bin/sh
-    - line2: -c
-      line3: for i in $(seq 3); do echo $$i; sleep 1; done
-`
+	ttYaml := []testCase{
+		// Yaml action file is valid v1.
+		{"valid yaml v1", validFullYaml, nil},
+		// Valid, version is set implicitly to v1.
+		{"valid empty version yaml v1", validEmptyVersionYaml, nil},
+		// Version >v1 is unsupported.
+		{"unsupported version >=1", unsupportedVersionYaml, errUnsupportedActionVersion{"2"}},
 
-var unsupportedVersionYaml = `
-version: "2"
-action:
-  title: Title
-  image: python:3.7-slim
-  command: python3
-`
+		// Image field in not provided v1.
+		{"empty image field v1", invalidEmptyImgYaml, yamlTypeErrorLine(sErrEmptyActionImg, 4, 3)},
+		{"empty string image field v1", invalidEmptyStrImgYaml, yamlTypeErrorLine(sErrEmptyActionImg, 6, 10)},
+		// Command field in not provided v1.
+		{"empty command field v1", invalidEmptyCmdYaml, yamlTypeErrorLine(sErrEmptyActionCmd, 4, 3)},
+		{"empty array command field v1", invalidEmptyArrCmdYaml, yamlTypeErrorLine(sErrEmptyActionCmd, 6, 12)},
 
-var invalidEmptyImgYaml = `
-version: "1"
-action:
-  title: Title
-  command: python3
-`
+		// Arguments are incorrectly provided v1 - string, not an array of objects.
+		{"invalid arguments field - string v1", invalidArgsStringYaml, yamlTypeErrorLine(sErrFieldMustBeArr, 5, 14)},
+		// Arguments are incorrectly provided v1 - array of strings, not an array of objects.
+		{"invalid arguments field - strings array", invalidArgsStringArrYaml, yamlTypeErrorLine(sErrArrElMustBeObj, 5, 15)},
+		// Arguments are incorrectly provided v1 - object, not an array of objects.
+		{"invalid arguments field - object", invalidArgsObjYaml, yamlTypeErrorLine(sErrFieldMustBeArr, 6, 5)},
+		{"invalid argument empty name", invalidArgsEmptyNameYaml, yamlTypeErrorLine(sErrEmptyActionArgName, 6, 7)},
+		{"invalid argument name", invalidArgsNameYaml, yamlTypeErrorLine(fmt.Sprintf(sErrInvalidActionArgName, "0arg"), 6, 13)},
 
-var invalidEmptyCmdYaml = `
-version: "1"
-action:
-  title: Title
-  image: python:3.7-slim
-`
+		// Options are incorrectly provided v1 - string, not an array of objects.
+		{"invalid options field - string", invalidOptsStrYaml, yamlTypeErrorLine(sErrFieldMustBeArr, 5, 12)},
+		// Options are incorrectly provided v1 - array of strings, not an array of objects.
+		{"invalid options field - string array", invalidOptsStrArrYaml, yamlTypeErrorLine(sErrArrElMustBeObj, 5, 13)},
+		// Options are incorrectly provided v1 - object, not an array of objects.
+		{"invalid options field - object", invalidOptsObjYaml, yamlTypeErrorLine(sErrFieldMustBeArr, 6, 5)},
+		{"invalid option empty name", invalidOptsEmptyNameYaml, yamlTypeErrorLine(sErrEmptyActionOptName, 6, 7)},
+		{"invalid option name", invalidOptsNameYaml, yamlTypeErrorLine(fmt.Sprintf(sErrInvalidActionOptName, "opt+name"), 6, 13)},
+		{"invalid duplicate argument/option name", invalidDupArgsOptsNameYaml, yamlTypeErrorLine(fmt.Sprintf(sErrDupActionVarName, "dupName"), 8, 13)},
+		{"invalid multiple errors", invalidMultipleErrYaml, yamlMergeErrors(
+			yamlTypeErrorLine(fmt.Sprintf(sErrDupActionVarName, "dupName"), 8, 13),
+			yamlTypeErrorLine(sErrEmptyActionOptName, 9, 7),
+		)},
+		{"invalid json schema type", invalidJsonSchemaTypeYaml, yamlTypeErrorLine(fmt.Sprintf("json schema type %q is unsupported", "unsup"), 7, 13)},
+		{"invalid json schema default", invalidJsonSchemaDefaultYaml, yamlTypeErrorLine(fmt.Sprintf("value for json schema type %q is not implemented", "object"), 6, 7)},
 
-var invalidArgsStringYaml = `
-version: "1"
-action:
-  title: Title
-  arguments: "invalid"
-  image: python:3.7-slim
-  command: ls
-`
+		// Command declaration as array of strings.
+		{"valid command - strings array", validCmdArrYaml, nil},
+		{"invalid command - object", invalidCmdObjYaml, yamlTypeErrorLine(sErrArrOrStrEl, 6, 5)},
+		{"invalid command - various array", invalidCmdArrVarYaml, yamlTypeErrorLine(sErrArrOrStrEl, 6, 5)},
 
-var invalidArgsStringArrYaml = `
-version: "1"
-action:
-  title: Title
-  arguments: ["invalid"]
-  image: python:3.7-slim
-  command: ls
-`
+		// Build image.
+		{"build image - short", validBuildImgShortYaml, nil},
+		{"build image - long", validBuildImgLongYaml, nil},
 
-var invalidArgsObjYaml = `
-version: "1"
-action:
-  title: Title
-  arguments:
-    objKey: "invalid"
-  image: python:3.7-slim
-  command: ls
-`
+		// Extra hosts.
+		{"extra hosts", validExtraHostsYaml, nil},
+		{"extra hosts invalid", invalidExtraHostsYaml, yamlTypeErrorLine(sErrArrEl, 4, 16)},
 
-var invalidArgsEmptyNameYaml = `
-version: "1"
-action:
-  title: Title
-  arguments:
-    - title: arg1
-  image: python:3.7-slim
-  command: ls
-`
+		// Env variables replacement.
+		{"env variables string array", validEnvArr, nil},
+		{"env variables map", validEnvObj, nil},
+		{"invalid env variables", invalidEnv, errAny},
+		{"invalid env declaration - string", invalidEnvStr, yamlTypeErrorLine(sErrArrOrMapEl, 5, 8)},
+		{"invalid env declaration - object", invalidEnvObj, yamlTypeErrorLine(sErrArrOrMapEl, 6, 5)},
 
-var invalidArgsNameYaml = `
-version: "1"
-action:
-  title: Title
-  arguments:
-    - name: 0arg
-  image: python:3.7-slim
-  command: ls
-`
+		// Templating.
+		{"unescaped template val", validUnescTplStr, errAny},
+	}
+	for _, tt := range ttYaml {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := CreateFromYaml(bytes.NewReader([]byte(tt.input)))
+			if tt.expErr == errAny {
+				assert.Error(t, err)
+			} else if assert.IsType(t, tt.expErr, err) {
+				assert.Equal(t, tt.expErr, err)
+			} else {
+				assert.ErrorIs(t, tt.expErr, err)
+			}
+		})
+	}
 
-var invalidOptsStrYaml = `
-version: "1"
-action:
-  title: Title
-  options: "invalid"
-  image: python:3.7-slim
-  command: ls
-`
+	// @todo test that the content is in place
+}
 
-var invalidOptsStrArrYaml = `
-version: "1"
-action:
-  title: Title
-  options: ["invalid"]
-  image: python:3.7-slim
-  command: ls
-`
+func Test_CreateFromYamlTpl(t *testing.T) {
+	t.Parallel()
 
-var invalidOptsObjYaml = `
-version: "1"
-action:
-  title: Verb
-  options:
-    objKey: "invalid"
-  image: python:3.7-slim
-  command: ls
-`
+	type testCase struct {
+		name   string
+		input  string
+		expErr error
+	}
+	errAny := errors.New("any")
 
-var invalidOptsEmptyNameYaml = `
-version: "1"
-action:
-  title: Title
-  options:
-    - title: opt
-  image: python:3.7-slim
-  command: ls
-`
-
-var invalidOptsNameYaml = `
-version: "1"
-action:
-  title: Title
-  options:
-    - name: opt-name
-  image: python:3.7-slim
-  command: ls
-`
-
-var invalidDupArgsOptsNameYaml = `
-version: "1"
-action:
-  title: Title
-  arguments:
-    - name: dupName
-  options:
-    - name: dupName
-  image: python:3.7-slim
-  command: ls
-`
-
-var validBuildImgShortYaml = `
-action:
-  image: python:3.7-slim
-  build: ./
-  command: ls
-`
-
-var validBuildImgLongYaml = `
-action:
-  image: python:3.7-slim
-  build:
-    context: ./
-    buildfile: Dockerfile
-    args:
-      arg1: val1
-      arg2: val2
-    tags:
-      - my/image:v1
-      - my/image:v2
-  command: ls
-`
-
-var validExtraHostsYaml = `
-action:
-  image: python:3.7-slim
-  extra_hosts:
-    - "host.docker.internal:host-gateway"
-    - "example.com:127.0.0.1"
-  command: ls
-`
-
-var validEnvArr = `
-action:
-  image: my/image:v1
-  command: ls
-  env:
-    - MY_ENV_1=test1
-    - MY_ENV_2=test2
-`
-
-var validEnvObj = `
-action:
-  image: my/image:v1
-  command: ls
-  env:
-    MY_ENV_1: test1
-    MY_ENV_2: test2
-`
-
-var invalidEnv = `
-action:
-  image: my/image:v1
-  command: ls
-  env:
-    - MY_ENV_1=test1
-    MY_ENV_2: test2
-`
-
-var validUnescTplStr = `
-action:
-  image: {{ .A1 }}
-  command:    {{ .A1 }}
-  env:
-    - {{ .A2 }} {{ .A3 }}
-    - {{ .A2 }} {{ .A3 }} asafs
-`
-
-var invalidUnescUnsupKeyTplStr = `
-action:
-  image: {{ .A1 }}:latest
-  {{ .A1 }}: ls
-`
-
-var invalidUnescUnsupArrTplStr = `
-action:
-  image: {{ .A1 }}
-  command: [{{ .A1 }}, {{ .A1 }}]
-`
+	ttYaml := []testCase{
+		{"supported unescaped template val", validUnescTplStr, nil},
+		{"unsupported unescaped template key", invalidUnescUnsupKeyTplStr, errAny},
+		{"unsupported unescaped template array", invalidUnescUnsupArrTplStr, errAny},
+	}
+	for _, tt := range ttYaml {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := CreateFromYamlTpl([]byte(tt.input))
+			if tt.expErr == errAny {
+				assert.Error(t, err)
+			} else {
+				assert.ErrorIs(t, tt.expErr, err)
+			}
+		})
+	}
+}

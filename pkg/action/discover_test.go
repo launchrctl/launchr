@@ -3,7 +3,7 @@ package action
 import (
 	"io/fs"
 	"math/rand"
-	"path/filepath"
+	"path"
 	"testing"
 	"testing/fstest"
 
@@ -45,12 +45,12 @@ func Test_Discover(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			ad := NewYamlDiscovery(tt.fs)
-			cmds, err := ad.Discover()
+			actions, err := ad.Discover()
 			if err != nil {
 				t.Errorf("unexpected error %v", err)
 			}
-			if tt.expCnt != len(cmds) {
-				t.Errorf("expected %d discovered actions, got %d", tt.expCnt, len(cmds))
+			if tt.expCnt != len(actions) {
+				t.Errorf("expected %d discovered actions, got %d", tt.expCnt, len(actions))
 			}
 		})
 	}
@@ -63,8 +63,8 @@ func (d dirEntry) DirEntry() fs.DirEntry {
 	ds := string(d)
 	p := ds
 	// If it's a dir path, add test file to return dir.
-	if filepath.Ext(p) == "" {
-		p += "/action.yaml"
+	if path.Ext(p) == "" {
+		p = path.Join(p, "action.yaml")
 	}
 	tmpfs[p] = &fstest.MapFile{}
 	f, _ := tmpfs.Open(ds)
@@ -106,11 +106,11 @@ func Test_Discover_isValid(t *testing.T) {
 	}
 }
 
-func Test_Discover_getCmdName(t *testing.T) {
+func Test_Discover_getActionName(t *testing.T) {
 	t.Parallel()
 	type testCase struct {
-		cmd string
-		exp string
+		path string
+		exp  string
 	}
 	tts := []testCase{
 		// Expected relative path.
@@ -129,23 +129,23 @@ func Test_Discover_getCmdName(t *testing.T) {
 		{"1/2/3/actions/4/5/6/random.yaml", "1.2.3:4.5.6"},
 	}
 	for _, tt := range tts {
-		res := getCmdMachineName(tt.cmd)
+		res := getActionID(tt.path)
 		if tt.exp != res {
-			t.Errorf("expected %s, got %s", tt.exp, res)
+			t.Errorf("expected %q, got %q", tt.exp, res)
 		}
 	}
 }
 
 func _generateActionPath(d int, validPath bool) string {
-	f := ""
+	elems := make([]string, 0, d+3)
 	for i := 0; i < d; i++ {
-		f += namesgenerator.GetRandomName(0) + "/"
+		elems = append(elems, namesgenerator.GetRandomName(0))
 	}
 	if validPath {
-		f += "actions/"
+		elems = append(elems, actionsDirname)
 	}
-	f += namesgenerator.GetRandomName(0) + "/action.yaml"
-	return f
+	elems = append(elems, namesgenerator.GetRandomName(0), "action.yaml")
+	return path.Join(elems...)
 }
 
 func _getFsMapActions(num int, str string, validPath bool) fstest.MapFS {

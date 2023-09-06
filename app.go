@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -62,17 +63,10 @@ func newApp() *appImpl {
 	return &appImpl{}
 }
 
-// GetWD implements launchr.App interface.
-func (app *appImpl) GetWD() string {
-	return app.workDir
-}
+func (app *appImpl) Name() string         { return name }
+func (app *appImpl) GetWD() string        { return app.workDir }
+func (app *appImpl) Streams() cli.Streams { return app.streams }
 
-// Streams implements launchr.App interface.
-func (app *appImpl) Streams() cli.Streams {
-	return app.streams
-}
-
-// AddService implements launchr.App interface.
 func (app *appImpl) AddService(s Service) {
 	info := s.ServiceInfo()
 	launchr.InitServiceInfo(&info, s)
@@ -82,7 +76,6 @@ func (app *appImpl) AddService(s Service) {
 	app.services[info] = s
 }
 
-// GetService implements launchr.App interface.
 func (app *appImpl) GetService(v interface{}) {
 	// Check v is a pointer and implements Service to set a value later.
 	t := reflect.TypeOf(v)
@@ -120,9 +113,13 @@ func (app *appImpl) init() error {
 	// Prepare dependencies.
 	app.streams = cli.StandardStreams()
 	app.services = make(map[ServiceInfo]Service)
-	app.actionMngr = action.NewManager()
 	app.pluginMngr = launchr.NewPluginManagerWithRegistered()
 	app.config = launchr.ConfigFromFS(os.DirFS(app.cfgDir))
+	app.actionMngr = action.NewManager(
+		action.WithDefaultRunEnvironment,
+		action.WithContainerRunEnvironmentConfig(app.config, name+"_"),
+	)
+
 	// Register services for other modules.
 	app.AddService(app.actionMngr)
 	app.AddService(app.pluginMngr)
@@ -150,26 +147,48 @@ func (app *appImpl) exec() error {
 			return cmd.Help()
 		},
 	}
-	// Quick parse arguments to see if a version was requested.
+	// Quick parse arguments to see if a version or help was requested.
 	args := os.Args[1:]
+	var skipActions bool // skipActions to skip loading if not requested.
+	var reqCmd string    // reqCmd to search for the requested cobra command.
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--version" {
 			rootCmd.SetVersionTemplate(Version().Full())
-			break
+			skipActions = true
+		}
+		if reqCmd == "" && !strings.HasPrefix(args[i], "-") {
+			reqCmd = args[i]
 		}
 	}
 
 	// Convert actions to cobra commands.
-	actions := app.actionMngr.All()
-	if len(actions) > 0 {
-		rootCmd.AddGroup(ActionsGroup)
-	}
-	for _, cmdDef := range actions {
-		cobraCmd, err := action.CobraImpl(cmdDef, app.Streams(), app.config, ActionsGroup)
-		if err != nil {
-			return err
+	actions := app.actionMngr.AllRef()
+	// Check the requested command to see what actions we must actually load.
+	if reqCmd != "" {
+		a, ok := actions[reqCmd]
+		if ok {
+			// Use only the requested action.
+			actions = map[string]*action.Action{a.ID: a}
+		} else {
+			// Action was not requested, no need to load them.
+			skipActions = true
 		}
-		rootCmd.AddCommand(cobraCmd)
+	}
+	// @todo consider cobra completion and caching between runs.
+	if !skipActions {
+		if len(actions) > 0 {
+			rootCmd.AddGroup(ActionsGroup)
+		}
+		for _, a := range actions {
+			a = app.actionMngr.Decorate(a)
+			if err := a.EnsureLoaded(); err != nil {
+				fmt.Fprintf(os.Stdout, "[WARNING] Action %q was skipped because it has an incorrect definition:\n%v\n", a.ID, err)
+				continue
+			}
+			cmd := action.CobraImpl(a, app.Streams())
+			cmd.GroupID = ActionsGroup.ID
+			rootCmd.AddCommand(cmd)
+		}
 	}
 
 	// Add cobra commands from plugins.

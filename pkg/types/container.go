@@ -23,8 +23,8 @@ type BuildDefinition struct {
 	Tags      []string           `yaml:"tags"`
 }
 
-// BuildImageInfo preprocesses build info to be ready for a container build.
-func (b *BuildDefinition) BuildImageInfo(name string, cwd string) *BuildDefinition {
+// ImageBuildInfo preprocesses build info to be ready for a container build.
+func (b *BuildDefinition) ImageBuildInfo(name string, cwd string) *BuildDefinition {
 	if b == nil {
 		return nil
 	}

@@ -17,7 +17,7 @@ import (
 
 // Discovery finds action files and parses them.
 type Discovery interface {
-	Discover() ([]*Command, error)
+	Discover() ([]*Action, error)
 }
 
 type yamlDiscovery struct {
@@ -34,12 +34,15 @@ func NewYamlDiscovery(fs fs.FS) Discovery {
 	return &yamlDiscovery{fs, cwd, actionYamlRegex}
 }
 
+const actionsDirname = "actions"
+
+var actionsSubdir = strings.Join([]string{"", actionsDirname, ""}, string(filepath.Separator))
+
 func (ad *yamlDiscovery) isValid(path string, d fs.DirEntry) bool {
-	sub := "/actions/"
-	i := strings.LastIndex(path, sub)
+	i := strings.LastIndex(path, actionsSubdir)
 	return !d.IsDir() &&
 		i != -1 &&
-		strings.Count(path[i+len(sub):], "/") == 1 && // Nested actions are not allowed.
+		strings.Count(path[i+len(actionsSubdir):], string(filepath.Separator)) == 1 && // Nested actions are not allowed.
 		ad.targetRgx.MatchString(d.Name())
 }
 
@@ -75,75 +78,68 @@ func timeTrack(start time.Time, name string) {
 // Discover traverses the file structure for a given discovery path dp.
 // Returns array of ActionCommand.
 // If a command is invalid, it's ignored.
-func (ad *yamlDiscovery) Discover() ([]*Command, error) {
+func (ad *yamlDiscovery) Discover() ([]*Action, error) {
 	defer timeTrack(time.Now(), "launchr.Discover")
 
 	wg := sync.WaitGroup{}
 	mx := sync.Mutex{}
-	cmds := make([]*Command, 0, 32)
+	actions := make([]*Action, 0, 32)
 
 	for f := range ad.findFiles() {
 		wg.Add(1)
 		go func(f string) {
 			defer wg.Done()
 			// @todo skip duplicate like action.yaml+action.yml, prefer yaml.
-			if cmd, err := ad.parseYamlAction(f); err == nil {
-				mx.Lock()
-				cmds = append(cmds, cmd)
-				mx.Unlock()
-			} else {
-				log.Warn("%v", err)
-			}
+			a := ad.parseYamlAction(f)
+			mx.Lock()
+			defer mx.Unlock()
+			actions = append(actions, a)
 		}(f)
 	}
 
 	wg.Wait()
 
 	// Sort alphabetically.
-	sort.Slice(cmds, func(i, j int) bool {
-		return cmds[i].CommandName < cmds[j].CommandName
+	sort.Slice(actions, func(i, j int) bool {
+		return actions[i].ID < actions[j].ID
 	})
-	return cmds, nil
+	return actions, nil
 }
 
-// parseYamlAction parses yaml file f and returns available commands.
-func (ad *yamlDiscovery) parseYamlAction(f string) (*Command, error) {
-	cmdName := getCmdMachineName(f)
-	if cmdName == "" {
-		return nil, fmt.Errorf("command name cannot be empty, file %s", f)
+// parseYamlAction parses yaml file f and returns available actions.
+func (ad *yamlDiscovery) parseYamlAction(f string) *Action {
+	id := getActionID(f)
+	if id == "" {
+		panic(fmt.Errorf("action id cannot be empty, file %q", f))
 	}
-	cmd := &Command{
-		WorkingDir:  ad.cwd,
-		Filepath:    f,
-		CommandName: cmdName,
-	}
-	cmd.Loader = &yamlFileLoader{
+	a := NewAction(id, ad.cwd, f)
+	a.Loader = &yamlFileLoader{
 		open: func() (fs.File, error) {
 			return ad.fs.Open(f)
 		},
 		processor: NewPipeProcessor(
-			&envProcessor{},
-			&inputProcessor{cmd: cmd},
+			escapeYamlTplCommentsProcessor{},
+			envProcessor{},
+			&inputProcessor{a: a},
 		),
 	}
-	return cmd, nil
+	return a
 }
 
-// getCmdMachineName parses filename and returns CLI command name.
+// getActionID parses filename and returns CLI command name.
 // Empty string if the command name can't be generated.
-func getCmdMachineName(f string) string {
-	// @todo does it work on Win?
-	cmd := filepath.Dir(f)
-	i := strings.LastIndex(cmd, "/actions/")
+func getActionID(f string) string {
+	s := filepath.Dir(f)
+	i := strings.LastIndex(s, actionsSubdir)
 	if i == -1 {
 		return ""
 	}
-	cmd = cmd[:i] + strings.Replace(cmd[i:], "/actions/", ":", 1)
-	cmd = strings.ReplaceAll(cmd, "/", ".")
-	if cmd[0] == ':' {
+	s = s[:i] + strings.Replace(s[i:], actionsSubdir, ":", 1)
+	s = strings.ReplaceAll(s, string(filepath.Separator), ".")
+	if s[0] == ':' {
 		// Root paths are not allowed.
 		return ""
 	}
-	cmd = strings.Trim(cmd, ".:")
-	return cmd
+	s = strings.Trim(s, ".:")
+	return s
 }

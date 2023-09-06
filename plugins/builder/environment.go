@@ -4,7 +4,6 @@ package builder
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,11 +34,11 @@ func (a *envVars) Set(k string, v string) {
 	}
 	for i := 0; i < len(*a); i++ {
 		if strings.HasPrefix((*a)[i], k+"=") {
-			(*a)[i] = fmt.Sprintf("%s=%s", k, v)
+			(*a)[i] = k + "=" + v
 			return
 		}
 	}
-	*a = append(*a, fmt.Sprintf("%s=%s", k, v))
+	*a = append(*a, k+"="+v)
 }
 
 func (a *envVars) Unset(k string) {
@@ -78,8 +77,7 @@ func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptio
 
 	// Replace requested modules.
 	for o, n := range opts.ModReplace {
-		repl := fmt.Sprintf("%s=%s", o, n)
-		err = env.execGoMod(ctx, "edit", "-replace", repl)
+		err = env.execGoMod(ctx, "edit", "-replace", o+"="+n)
 		if err != nil {
 			return err
 		}

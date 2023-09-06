@@ -12,7 +12,6 @@ import (
 	"github.com/moby/sys/signal"
 	"github.com/moby/term"
 
-	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/driver"
 	"github.com/launchrctl/launchr/pkg/log"
@@ -24,38 +23,44 @@ const (
 	containerActionMount = "/action"
 )
 
-type containerExec struct {
+type containerEnv struct {
 	driver driver.ContainerRunner
+	imgres ChainImageBuildResolver
 	dtype  driver.Type
-	cfg    launchr.Config
+	prefix string
 }
 
-// NewDockerExecutor creates a new action executor in Docker environment.
-func NewDockerExecutor() (Executor, error) {
-	return NewContainerExecutor(driver.Docker)
+// NewDockerEnvironment creates a new action Docker environment.
+func NewDockerEnvironment() RunEnvironment {
+	return NewContainerEnvironment(driver.Docker)
 }
 
-// NewContainerExecutor creates a new action executor in container environment.
-func NewContainerExecutor(t driver.Type) (Executor, error) {
-	r, err := driver.New(t)
-	if err != nil {
-		return nil, err
+// NewContainerEnvironment creates a new action container run environment.
+func NewContainerEnvironment(t driver.Type) RunEnvironment {
+	return &containerEnv{dtype: t, prefix: "launchr_"}
+}
+
+func (c *containerEnv) AddImageBuildResolver(r ImageBuildResolver) { c.imgres = append(c.imgres, r) }
+func (c *containerEnv) SetContainerNamePrefix(p string)            { c.prefix = p }
+
+func (c *containerEnv) Init() (err error) {
+	if c.driver == nil {
+		c.driver, err = driver.New(c.dtype)
 	}
-	return &containerExec{driver: r, dtype: t}, nil
+	return err
 }
 
-// SetLaunchrConfig implements cli.ConfigAware interface.
-func (c *containerExec) SetLaunchrConfig(cfg launchr.Config) {
-	c.cfg = cfg
-}
-
-func (c *containerExec) Exec(ctx context.Context, appCli cli.Streams, cmd *Command) error {
-	ctx, cancelFun := context.WithCancel(ctx)
-	defer cancelFun()
-	a := cmd.Action()
-	log.Debug("Starting execution of action %s in %s environment, cmd %v", cmd.CommandName, c.dtype, a.Command)
+func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
+	ctx, cancelFn := context.WithCancel(ctx)
+	defer cancelFn()
+	if err = c.Init(); err != nil {
+		return err
+	}
+	streams := a.GetInput().IO
+	actConf := a.ActionDef()
+	log.Debug("Starting execution of the action %q in %q environment, command %v", a.ID, c.dtype, actConf.Command)
 	// @todo consider reusing the same container and run exec
-	name := genContainerName(cmd, nil)
+	name := genContainerName(a, c.prefix, nil)
 	existing := c.driver.ContainerList(ctx, types.ContainerListOptions{SearchName: name})
 	// Collect a set of existing names to build the name.
 	exMap := make(map[string]struct{}, len(existing))
@@ -66,23 +71,23 @@ func (c *containerExec) Exec(ctx context.Context, appCli cli.Streams, cmd *Comma
 	}
 	// Regenerate the name with a suffix.
 	if len(exMap) > 0 {
-		name = genContainerName(cmd, exMap)
+		name = genContainerName(a, c.prefix, exMap)
 	}
 
 	// Create container.
 	runConfig := &types.ContainerCreateOptions{
 		ContainerName: name,
-		ExtraHosts:    a.ExtraHosts,
+		ExtraHosts:    actConf.ExtraHosts,
 		AutoRemove:    true,
 		OpenStdin:     true,
 		StdinOnce:     true,
 		AttachStdin:   true,
 		AttachStdout:  true,
 		AttachStderr:  true,
-		Tty:           appCli.In().IsTerminal(),
-		Env:           a.Env,
+		Tty:           streams.In().IsTerminal(),
+		Env:           actConf.Env,
 	}
-	cid, err := c.containerCreate(ctx, cmd, runConfig)
+	cid, err := c.containerCreate(ctx, a, runConfig)
 	if err != nil {
 		return err
 	}
@@ -91,7 +96,7 @@ func (c *containerExec) Exec(ctx context.Context, appCli cli.Streams, cmd *Comma
 	}
 
 	// Check if TTY was requested, but not supported.
-	if ttyErr := appCli.In().CheckTty(runConfig.AttachStdin, runConfig.Tty); ttyErr != nil {
+	if ttyErr := streams.In().CheckTty(runConfig.AttachStdin, runConfig.Tty); ttyErr != nil {
 		return ttyErr
 	}
 
@@ -102,7 +107,7 @@ func (c *containerExec) Exec(ctx context.Context, appCli cli.Streams, cmd *Comma
 	}
 
 	// Attach streams to the terminal.
-	cio, errCh, err := c.attachContainer(ctx, appCli, cid, runConfig)
+	cio, errCh, err := c.attachContainer(ctx, streams, cid, runConfig)
 	if err != nil {
 		return err
 	}
@@ -113,7 +118,7 @@ func (c *containerExec) Exec(ctx context.Context, appCli cli.Streams, cmd *Comma
 
 	// Start the container
 	if err = c.driver.ContainerStart(ctx, cid, types.ContainerStartOptions{}); err != nil {
-		cancelFun()
+		cancelFn()
 		<-errCh
 		if runConfig.AutoRemove {
 			<-statusCh
@@ -123,13 +128,13 @@ func (c *containerExec) Exec(ctx context.Context, appCli cli.Streams, cmd *Comma
 
 	// Resize TTY on window resize.
 	if runConfig.Tty {
-		if err := driver.MonitorTtySize(ctx, c.driver, appCli, cid, false); err != nil {
+		if err = driver.MonitorTtySize(ctx, c.driver, streams, cid, false); err != nil {
 			log.Err("Error monitoring TTY size:", err)
 		}
 	}
 
 	if errCh != nil {
-		if err := <-errCh; err != nil {
+		if err = <-errCh; err != nil {
 			if _, ok := err.(term.EscapeError); ok {
 				// The user entered the detach escape sequence.
 				return nil
@@ -141,21 +146,15 @@ func (c *containerExec) Exec(ctx context.Context, appCli cli.Streams, cmd *Comma
 	}
 
 	status := <-statusCh
-	if status != 0 {
-		return errors.New("error on run")
-	}
+	// @todo maybe we should note that SIG was sent to the container. Code 130 is sent on Ctlr+C.
+	log.Info("action %q finished with the exit code %d", a.ID, status)
 	return nil
 }
 
-func genContainerName(cmd *Command, existing map[string]struct{}) string {
+func genContainerName(a *Action, prefix string, existing map[string]struct{}) string {
 	// Replace command name "-", ":", and "." to "_".
-	replace := "-:."
-	od := make([]string, len(replace)*2)
-	for i, c := range replace {
-		od[2*i], od[2*i+1] = string(c), "_"
-	}
-	rpl := strings.NewReplacer(od...)
-	base := "launchr_" + rpl.Replace(cmd.CommandName)
+	var rpl = strings.NewReplacer("-", "_", ":", "_", ".", "_")
+	base := prefix + rpl.Replace(a.ID)
 	name := base
 	if len(existing) > 0 {
 		_, ok := existing[name]
@@ -167,22 +166,17 @@ func genContainerName(cmd *Command, existing map[string]struct{}) string {
 	return name
 }
 
-func (c *containerExec) Close() error {
+func (c *containerEnv) Close() error {
 	return c.driver.Close()
 }
 
-func (c *containerExec) imageEnsure(ctx context.Context, cmd *Command) error {
-	a := cmd.Action()
-	image := a.Image
-	var build *types.BuildDefinition
-	if b := a.BuildDefinition(cmd.Dir()); b != nil {
-		build = b
-	} else if b = ConfigImage(c.cfg, image); b != nil {
-		build = b
-	}
+func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
+	image := a.ActionDef().Image
+	// Prepend action to have the top priority in image build resolution.
+	r := ChainImageBuildResolver{append(ChainImageBuildResolver{a}, c.imgres...)}
 	status, err := c.driver.ImageEnsure(ctx, types.ImageOptions{
 		Name:  image,
-		Build: build,
+		Build: r.ImageBuildInfo(image),
 	})
 	if err != nil {
 		return err
@@ -203,7 +197,7 @@ func (c *containerExec) imageEnsure(ctx context.Context, cmd *Command) error {
 		cli.Println(msg)
 		log.Info(msg)
 		// Output docker status only in Debug.
-		log.Debug("Pulling %s progress", image)
+		log.Debug("Pulling %q progress", image)
 		scanner := bufio.NewScanner(status.Progress)
 		for scanner.Scan() {
 			log.Debug(scanner.Text())
@@ -219,7 +213,7 @@ func (c *containerExec) imageEnsure(ctx context.Context, cmd *Command) error {
 		cli.Println(msg)
 		log.Info(msg)
 		// Output docker status only in Debug.
-		log.Debug("Building %s progress", image)
+		log.Debug("Building %q progress", image)
 		scanner := bufio.NewScanner(status.Progress)
 		for scanner.Scan() {
 			log.Debug(scanner.Text())
@@ -229,21 +223,21 @@ func (c *containerExec) imageEnsure(ctx context.Context, cmd *Command) error {
 	return nil
 }
 
-func (c *containerExec) containerCreate(ctx context.Context, cmd *Command, opts *types.ContainerCreateOptions) (string, error) {
-	if err := c.imageEnsure(ctx, cmd); err != nil {
+func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *types.ContainerCreateOptions) (string, error) {
+	if err := c.imageEnsure(ctx, a); err != nil {
 		return "", err
 	}
 
 	// Create a container
-	a := cmd.Action()
+	actConf := a.ActionDef()
 	cid, err := c.driver.ContainerCreate(ctx, types.ContainerCreateOptions{
 		ContainerName: opts.ContainerName,
-		Image:         a.Image,
-		Cmd:           a.Command,
+		Image:         actConf.Image,
+		Cmd:           actConf.Command,
 		WorkingDir:    containerHostMount,
 		Mounts: map[string]string{
-			"./":      containerHostMount,
-			cmd.Dir(): containerActionMount,
+			".":     containerHostMount,
+			a.Dir(): containerActionMount,
 		},
 		ExtraHosts:   opts.ExtraHosts,
 		AutoRemove:   opts.AutoRemove,
@@ -262,7 +256,7 @@ func (c *containerExec) containerCreate(ctx context.Context, cmd *Command, opts 
 	return cid, nil
 }
 
-func (c *containerExec) containerWait(ctx context.Context, cid string, opts *types.ContainerCreateOptions) <-chan int {
+func (c *containerEnv) containerWait(ctx context.Context, cid string, opts *types.ContainerCreateOptions) <-chan int {
 	// Wait for the container to stop or catch error.
 	waitCond := types.WaitConditionNextExit
 	if opts.AutoRemove {
@@ -291,7 +285,7 @@ func (c *containerExec) containerWait(ctx context.Context, cid string, opts *typ
 	return statusC
 }
 
-func (c *containerExec) attachContainer(ctx context.Context, appCli cli.Streams, cid string, opts *types.ContainerCreateOptions) (io.Closer, <-chan error, error) {
+func (c *containerEnv) attachContainer(ctx context.Context, streams cli.Streams, cid string, opts *types.ContainerCreateOptions) (io.Closer, <-chan error, error) {
 	cio, errAttach := c.driver.ContainerAttach(ctx, cid, types.ContainerAttachOptions{
 		AttachStdin:  opts.AttachStdin,
 		AttachStdout: opts.AttachStdout,
@@ -304,34 +298,7 @@ func (c *containerExec) attachContainer(ctx context.Context, appCli cli.Streams,
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- driver.ContainerIOStream(ctx, appCli, cio, opts)
+		errCh <- driver.ContainerIOStream(ctx, streams, cio, opts)
 	}()
 	return cio, errCh, nil
-}
-
-// ConfigImagesKey is a field name in launchr config file.
-const ConfigImagesKey = "images"
-
-// ConfigImages is a container to parse launchr config with yaml.
-type ConfigImages map[string]*types.BuildDefinition
-
-// ConfigImage extends launchr.Config functionality and parses images definition.
-func ConfigImage(cfg launchr.Config, image string) *types.BuildDefinition {
-	var images ConfigImages
-	err := cfg.Get(ConfigImagesKey, &images)
-	if err != nil {
-		log.Warn("launchr configuration field %q is malformed", ConfigImagesKey)
-		return nil
-	}
-	if b, ok := images[image]; ok {
-		return b.BuildImageInfo(image, cfg.DirPath())
-	}
-	for _, b := range images {
-		for _, t := range b.Tags {
-			if t == image {
-				return b.BuildImageInfo(image, cfg.DirPath())
-			}
-		}
-	}
-	return nil
 }

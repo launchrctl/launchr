@@ -1,119 +1,81 @@
 package action
 
 import (
-	"bytes"
-	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func Test_CreateFromYaml(t *testing.T) {
-	t.Parallel()
-
-	type testCase struct {
-		name   string
-		input  string
-		expErr error
+func Test_Action(t *testing.T) {
+	assert := assert.New(t)
+	// Prepare an action.
+	fs := _getFsMapActions(1, validFullYaml, true)
+	ad := NewYamlDiscovery(fs)
+	actions, err := ad.Discover()
+	assert.NoError(err)
+	assert.NotEmpty(actions)
+	act := actions[0]
+	err = act.EnsureLoaded()
+	assert.NoError(err)
+	actConf := act.ActionDef()
+	// Test image name.
+	assert.Equal("my/image:v1", actConf.Image)
+	// Test dir
+	assert.Equal(filepath.Dir(act.fpath), act.Dir())
+	act.fpath = "test/file/path/action.yaml"
+	assert.Equal("test/file/path", act.Dir())
+	// Test hosts.
+	extraHosts := StrSlice{
+		"host.docker.internal:host-gateway",
+		"example.com:127.0.0.1",
 	}
-
-	errAny := errors.New("any")
-
-	ttYaml := []testCase{
-		// Yaml file is valid v1.
-		{"valid yaml v1", validFullYaml, nil},
-		// Valid, version is set implicitly to v1.
-		{"valid empty version yaml v1", validEmptyVersionYaml, nil},
-		// Version >v1 is unsupported.
-		{"unsupported version >=1", unsupportedVersionYaml, errUnsupportedActionVersion{"2"}},
-
-		// Image field in not provided v1.
-		{"empty image field v1", invalidEmptyImgYaml, errEmptyActionImg},
-		// Command field in not provided v1.
-		{"empty command field v1", invalidEmptyCmdYaml, errEmptyActionCmd},
-
-		// @todo provide example for each case with correct arguments/options.
-		// Arguments are incorrectly provided v1 - string, not an array of objects.
-		{"invalid arguments field - string v1", invalidArgsStringYaml, errFieldMustBeArr},
-		// Arguments are incorrectly provided v1 - array of strings, not an array of objects.
-		{"invalid arguments field - strings array", invalidArgsStringArrYaml, errArrElMustBeObj},
-		// Arguments are incorrectly provided v1 - object, not an array of objects.
-		{"invalid arguments field - object", invalidArgsObjYaml, errFieldMustBeArr},
-		{"invalid argument empty name", invalidArgsEmptyNameYaml, errEmptyActionArgName},
-		{"invalid argument name", invalidArgsNameYaml, errInvalidActionArgName},
-
-		// Options are incorrectly provided v1 - string, not an array of objects.
-		{"invalid options field - string", invalidOptsStrYaml, errFieldMustBeArr},
-		// Options are incorrectly provided v1 - array of strings, not an array of objects.
-		{"invalid options field - string array", invalidOptsStrArrYaml, errArrElMustBeObj},
-		// Options are incorrectly provided v1 - object, not an array of objects.
-		{"invalid options field - object", invalidOptsObjYaml, errFieldMustBeArr},
-		{"invalid option empty name", invalidOptsEmptyNameYaml, errEmptyActionOptName},
-		{"invalid option name", invalidOptsNameYaml, errInvalidActionOptName},
-		{"invalid duplicate argument/option name", invalidDupArgsOptsNameYaml, errDuplicateActionName},
-
-		// Command declaration as array of strings.
-		{"valid command - strings array", validCmdArrYaml, nil},
-		{"invalid command - object", invalidCmdObjYaml, errArrOrStrEl},
-		{"invalid command - various array", invalidCmdArrVarYaml, errArrOrStrEl},
-
-		// Build image.
-		{"build image - short", validBuildImgShortYaml, nil},
-		{"build image - long", validBuildImgLongYaml, nil},
-
-		// Extra hosts.
-		{"extra hosts", validExtraHostsYaml, nil},
-
-		// Env variables replacement.
-		{"env variables string array", validEnvArr, nil},
-		{"env variables map", validEnvObj, nil},
-		{"invalid env variables", invalidEnv, errAny},
-
-		// Templating.
-		{"unescaped template val", validUnescTplStr, errAny},
+	assert.Equal(extraHosts, actConf.ExtraHosts)
+	// Test arguments and options.
+	inputArgs := TypeArgs{"arg1": "arg1", "arg2": "arg2"}
+	inputOpts := TypeOpts{
+		"opt1":   "opt1val",
+		"opt2":   true,
+		"opt3":   1,
+		"opt4":   1.45,
+		"optarr": []string{"opt5.1val", "opt5.2val"},
+		"opt6":   "unexpectedOpt",
 	}
-	for _, tt := range ttYaml {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			_, err := CreateFromYaml(bytes.NewReader([]byte(tt.input)))
-			if tt.expErr == errAny {
-				assert.Error(t, err)
-			} else if !errors.Is(err, tt.expErr) {
-				t.Errorf("expected error %v, got %v", tt.expErr, err)
-			}
-		})
-	}
+	err = act.SetInput(Input{inputArgs, inputOpts, nil})
+	assert.NoError(err)
+	assert.Equal(inputArgs, act.input.Args)
+	assert.Equal(inputOpts, act.input.Opts)
 
-	// @todo test that the content is in place
-}
-
-func Test_CreateFromYamlTpl(t *testing.T) {
-	t.Parallel()
-
-	type testCase struct {
-		name   string
-		input  string
-		expErr error
+	// Test templating in executable.
+	envVar1 := "envval1"
+	_ = os.Setenv("TEST_ENV_1", envVar1)
+	execExp := []string{
+		"/bin/sh",
+		"-c",
+		"ls -lah",
+		fmt.Sprintf("%v %v", inputArgs["arg2"], inputArgs["arg1"]),
+		fmt.Sprintf("%v %v %v %v %v", inputOpts["opt3"], inputOpts["opt2"], inputOpts["opt1"], inputOpts["opt4"], inputOpts["optarr"]),
+		fmt.Sprintf("%v", envVar1),
+		fmt.Sprintf("%v ", envVar1),
 	}
-	errAny := errors.New("any")
+	act.Reset()
+	err = act.EnsureLoaded()
+	assert.NoError(err)
+	actConf = act.ActionDef()
+	assert.Equal(execExp, []string(actConf.Command))
+	assert.NotNil(act.def)
 
-	ttYaml := []testCase{
-		// Templating. @todo
-		{"supported unescaped template val", validUnescTplStr, nil},
-		{"unsupported unescaped template key", invalidUnescUnsupKeyTplStr, errAny},
-		{"unsupported unescaped template array", invalidUnescUnsupArrTplStr, errAny},
+	// Test build info
+	b := act.ImageBuildInfo(actConf.Image)
+	assert.NotNil(b)
+	tags := []string{
+		"my/image:v2",
+		"my/image:v3",
+		"my/image:v1",
 	}
-	for _, tt := range ttYaml {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			_, err := CreateFromYamlTpl([]byte(tt.input))
-			if tt.expErr == errAny {
-				assert.Error(t, err)
-			} else if !errors.Is(err, tt.expErr) {
-				t.Errorf("expected error %v, got %v", tt.expErr, err)
-			}
-		})
-	}
+	assert.Equal(tags, b.Tags)
+	actConf.Build = nil
+	assert.Nil(nil)
 }

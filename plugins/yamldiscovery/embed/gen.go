@@ -55,13 +55,13 @@ type pluginVars struct {
 func (p *Plugin) Generate(buildPath string, workDir string) (*launchr.PluginGeneratedData, error) {
 	// Generate actions tar.
 	fmt.Println("[INFO] Discovering actions")
-	tarName, cmds, err := createActionTar(os.DirFS(workDir), buildPath)
+	tarName, actions, err := createActionTar(os.DirFS(workDir), buildPath)
 	if err != nil {
 		return nil, err
 	}
 	fmt.Println("[INFO] Discovered:")
-	for i, cmd := range cmds {
-		fmt.Printf("%d. %s\n", i+1, cmd.CommandName)
+	for i, a := range actions {
+		fmt.Printf("%d. %s\n", i+1, a.ID)
 	}
 	var id = "actions.yamldiscovery.gen"
 	tpl, err := template.New(id).Parse(pluginTemplate)

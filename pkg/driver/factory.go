@@ -17,6 +17,6 @@ func New(t Type) (ContainerRunner, error) {
 	case Docker:
 		return NewDockerDriver()
 	default:
-		panic(fmt.Sprintf("driver \"%s\" is not implemented", t))
+		panic(fmt.Sprintf("driver %q is not implemented", t))
 	}
 }
