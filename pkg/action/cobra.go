@@ -1,6 +1,7 @@
 package action
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -12,7 +13,7 @@ import (
 )
 
 // CobraImpl returns cobra command implementation for an action command.
-func CobraImpl(a *Action, streams cli.Streams) *cobra.Command {
+func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 	actConf := a.ActionDef()
 	argsDef := actConf.Arguments
 	use := a.ID
@@ -41,10 +42,14 @@ func CobraImpl(a *Action, streams cli.Streams) *cobra.Command {
 	}
 
 	for _, opt := range actConf.Options {
-		options[opt.Name] = setFlag(cmd, opt)
+		v, err := setFlag(cmd, opt)
+		if err != nil {
+			return nil, err
+		}
+		options[opt.Name] = v
 	}
 
-	return cmd
+	return cmd, nil
 }
 
 func argsToMap(args []string, argsDef ArgumentsList) TypeArgs {
@@ -68,7 +73,7 @@ func getDesc(title string, desc string) string {
 	return strings.Join(parts, ": ")
 }
 
-func setFlag(cmd *cobra.Command, opt *Option) interface{} {
+func setFlag(cmd *cobra.Command, opt *Option) (interface{}, error) {
 	var val interface{}
 	desc := getDesc(opt.Title, opt.Description)
 	switch opt.Type {
@@ -81,15 +86,15 @@ func setFlag(cmd *cobra.Command, opt *Option) interface{} {
 	case jsonschema.Boolean:
 		val = cmd.Flags().Bool(opt.Name, opt.Default.(bool), desc)
 	case jsonschema.Array:
-		// @todo parse results to requested type somehow
+		// @todo use Var and define a custom value, jsonschema accepts interface{}
 		val = cmd.Flags().StringSlice(opt.Name, opt.Default.([]string), desc)
 	default:
-		log.Panic("json schema type %s is not implemented", opt.Type)
+		return nil, fmt.Errorf("json schema type %q is not implemented", opt.Type)
 	}
 	if opt.Required {
 		_ = cmd.MarkFlagRequired(opt.Name)
 	}
-	return val
+	return val, nil
 }
 
 func derefOpts(opts TypeOpts) TypeOpts {
@@ -111,8 +116,14 @@ func derefOpt(v interface{}) interface{} {
 	case *float64:
 		return *v
 	case *[]string:
-		return *v
+		// Cast to a slice of interface because jsonschema validator supports only such arrays.
+		toAny := make([]interface{}, len(*v))
+		for i := 0; i < len(*v); i++ {
+			toAny[i] = (*v)[i]
+		}
+		return toAny
 	default:
+		// @todo recheck
 		if reflect.ValueOf(v).Kind() == reflect.Ptr {
 			log.Panic("error on a value dereferencing: unsupported %T", v)
 		}

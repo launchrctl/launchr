@@ -107,6 +107,7 @@ type ContainerCreateOptions struct {
 	AttachStderr  bool
 	Tty           bool
 	Env           []string
+	User          string
 }
 
 // ContainerStartOptions stores options for starting a container.

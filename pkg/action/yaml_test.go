@@ -57,8 +57,8 @@ func Test_CreateFromYaml(t *testing.T) {
 			yamlTypeErrorLine(fmt.Sprintf(sErrDupActionVarName, "dupName"), 8, 13),
 			yamlTypeErrorLine(sErrEmptyActionOptName, 9, 7),
 		)},
-		{"invalid json schema type", invalidJsonSchemaTypeYaml, yamlTypeErrorLine(fmt.Sprintf("json schema type %q is unsupported", "unsup"), 7, 13)},
-		{"invalid json schema default", invalidJsonSchemaDefaultYaml, yamlTypeErrorLine(fmt.Sprintf("value for json schema type %q is not implemented", "object"), 6, 7)},
+		{"invalid json schema type", invalidJSONSchemaTypeYaml, yamlTypeErrorLine(fmt.Sprintf("json schema type %q is unsupported", "unsup"), 7, 13)},
+		{"invalid json schema default", invalidJSONSchemaDefaultYaml, yamlTypeErrorLine(fmt.Sprintf("value for json schema type %q is not implemented", "object"), 6, 7)},
 
 		// Command declaration as array of strings.
 		{"valid command - strings array", validCmdArrYaml, nil},

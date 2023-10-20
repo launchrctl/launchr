@@ -185,7 +185,11 @@ func (app *appImpl) exec() error {
 				fmt.Fprintf(os.Stdout, "[WARNING] Action %q was skipped because it has an incorrect definition:\n%v\n", a.ID, err)
 				continue
 			}
-			cmd := action.CobraImpl(a, app.Streams())
+			cmd, err := action.CobraImpl(a, app.Streams())
+			if err != nil {
+				fmt.Fprintf(os.Stdout, "[WARNING] Action %q was skipped:\n%v\n", a.ID, err)
+				continue
+			}
 			cmd.GroupID = ActionsGroup.ID
 			rootCmd.AddCommand(cmd)
 		}

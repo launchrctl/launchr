@@ -33,11 +33,12 @@ func TypeFromString(t string) Type {
 // It doesn't implement all and may not comply fully.
 // See https://json-schema.org/specification.html
 type Schema struct {
-	ID       string   `json:"$id"`
-	Schema   string   `json:"$schema"`
-	Title    string   `json:"title"`
-	Type     Type     `json:"type"`
-	Required []string `json:"required"`
+	ID          string   `json:"$id,omitempty"`
+	Schema      string   `json:"$schema,omitempty"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Type        Type     `json:"type"`
+	Required    []string `json:"required"`
 	// @todo make a recursive type of properties.
 	Properties map[string]interface{} `json:"properties"`
 }

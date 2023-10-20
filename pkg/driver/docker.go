@@ -121,6 +121,7 @@ func (d *dockerDriver) ContainerCreate(ctx context.Context, opts types.Container
 			AttachStderr: opts.AttachStderr,
 			Tty:          opts.Tty,
 			Env:          opts.Env,
+			User:         opts.User,
 		},
 		hostCfg,
 		nil, nil, opts.ContainerName,

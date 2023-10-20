@@ -1,13 +1,22 @@
 package action
 
-import "github.com/launchrctl/launchr/pkg/jsonschema"
+import (
+	"fmt"
+
+	"github.com/launchrctl/launchr/pkg/jsonschema"
+)
 
 // JSONSchema returns json schema of an action.
 func (a *Action) JSONSchema() jsonschema.Schema {
-	s := a.ActionDef().JSONSchema()
-	s.ID = a.ID // @todo provide better id.
-	s.Schema = "https://json-schema.org/draft/2020-12/schema"
-	s.Title = a.ID // @todo provide better title.
+	def := a.ActionDef()
+	s := def.JSONSchema()
+	// Set ID to a filepath. It's not exactly JSON Schema, but some canonical path.
+	// It's better to override the value, if the ID is needed by a validator.
+	// In launchr, the id is overridden on loader, in web plugin with a server url.
+	s.ID = a.Filepath()
+	s.Schema = "https://json-schema.org/draft/2020-12/schema#"
+	s.Title = fmt.Sprintf("%s (%s)", def.Title, a.ID) // @todo provide better title.
+	s.Description = def.Description
 	return s
 }
 
@@ -23,11 +32,13 @@ func (a *DefAction) JSONSchema() jsonschema.Schema {
 		Properties: map[string]interface{}{
 			"arguments": map[string]interface{}{
 				"type":       "object",
+				"title":      "Arguments",
 				"properties": args,
 				"required":   argsReq,
 			},
 			"options": map[string]interface{}{
 				"type":       "object",
+				"title":      "Options",
 				"properties": opts,
 				"required":   optsReq,
 			},
@@ -49,7 +60,9 @@ func (l *ArgumentsList) JSONSchema() (map[string]interface{}, []string) {
 
 // JSONSchema returns argument json schema definition.
 func (a *Argument) JSONSchema() map[string]interface{} {
-	return copyMap(a.RawMap)
+	m := copyMap(a.RawMap)
+	removeRequiredBool(m)
+	return m
 }
 
 // JSONSchema collects all options json schema definition and also returns fields that are required.
@@ -68,5 +81,12 @@ func (l *OptionsList) JSONSchema() (map[string]interface{}, []string) {
 
 // JSONSchema returns json schema definition of an option.
 func (o *Option) JSONSchema() map[string]interface{} {
-	return copyMap(o.RawMap)
+	m := copyMap(o.RawMap)
+	removeRequiredBool(m)
+	return m
+}
+
+func removeRequiredBool(m map[string]interface{}) {
+	// @todo that's not right, but currently the required field in action yaml doesn't comply with json schema.
+	delete(m, "required")
 }

@@ -50,6 +50,11 @@ func NewVersion(name, ver, bwith string, plugins PluginsMap) *AppVersion {
 	}
 }
 
+// String implements Stringer interface.
+func (v *AppVersion) String() string {
+	return v.Full()
+}
+
 // Full outputs version string in a full format.
 func (v *AppVersion) Full() string {
 	b := &bytes.Buffer{}

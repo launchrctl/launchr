@@ -8,25 +8,21 @@ import (
 	"github.com/moby/term"
 )
 
-// AppCli implements Streams interface.
-type AppCli struct {
+type appCli struct {
 	in  *In
 	out *Out
 	err io.Writer
 }
 
-// In returns the reader used for stdin
-func (cli *AppCli) In() *In {
+func (cli *appCli) In() *In {
 	return cli.in
 }
 
-// Out returns the writer used for stdout
-func (cli *AppCli) Out() *Out {
+func (cli *appCli) Out() *Out {
 	return cli.out
 }
 
-// Err returns the writer used for stderr
-func (cli *AppCli) Err() io.Writer {
+func (cli *appCli) Err() io.Writer {
 	return cli.err
 }
 
@@ -34,7 +30,7 @@ func (cli *AppCli) Err() io.Writer {
 func StandardStreams() Streams {
 	// Set terminal emulation based on platform as required.
 	stdin, stdout, stderr := term.StdStreams()
-	return &AppCli{
+	return &appCli{
 		in:  NewIn(stdin),
 		out: NewOut(stdout),
 		err: stderr,
@@ -45,7 +41,7 @@ func StandardStreams() Streams {
 func InMemoryStreams() Streams {
 	outBuffer := &bytes.Buffer{}
 	errBuffer := &bytes.Buffer{}
-	return &AppCli{
+	return &appCli{
 		in:  NewIn(io.NopCloser(strings.NewReader(""))),
 		out: NewOut(outBuffer),
 		err: errBuffer,

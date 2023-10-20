@@ -126,6 +126,7 @@ func reflectValRef(v any, n string) any {
 }
 
 func getDefaultByType(o *Option) interface{} {
+	// @todo rethink default if it's not actually defined, do not set anything.
 	switch o.Type {
 	case jsonschema.String:
 		return defaultVal(o.Default, "")

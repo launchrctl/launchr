@@ -418,6 +418,7 @@ func Test_ContainerExec(t *testing.T) {
 		AttachStderr: true,
 		Tty:          false,
 		Env:          actConf.Env,
+		User:         getCurrentUser(),
 	}
 	attOpts := types.ContainerAttachOptions{
 		AttachStdin:  opts.AttachStdin,

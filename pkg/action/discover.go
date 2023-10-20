@@ -120,7 +120,7 @@ func (ad *yamlDiscovery) parseYamlAction(f string) *Action {
 		processor: NewPipeProcessor(
 			escapeYamlTplCommentsProcessor{},
 			envProcessor{},
-			&inputProcessor{a: a},
+			inputProcessor{},
 		),
 	}
 	return a

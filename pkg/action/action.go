@@ -1,8 +1,12 @@
 package action
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"path/filepath"
+
+	"github.com/santhosh-tekuri/jsonschema/v5"
 
 	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/types"
@@ -30,7 +34,7 @@ type Input struct {
 
 type (
 	// TypeArgs is a type alias for action arguments.
-	TypeArgs = map[string]string
+	TypeArgs = map[string]interface{}
 	// TypeOpts is a type alias for action options.
 	TypeOpts = map[string]interface{}
 )
@@ -81,7 +85,7 @@ func (a *Action) EnsureLoaded() (err error) {
 	if a.def != nil {
 		return err
 	}
-	a.def, err = a.Loader.Load()
+	a.def, err = a.Loader.Load(LoadContext{Action: a})
 	return err
 }
 
@@ -99,10 +103,14 @@ func (a *Action) ImageBuildInfo(image string) *types.BuildDefinition {
 }
 
 // SetInput saves arguments and options for later processing in run, templates, etc.
-func (a *Action) SetInput(input Input) error {
-	if err := a.ValidateInput(input); err != nil {
+func (a *Action) SetInput(input Input) (err error) {
+	if err = a.EnsureLoaded(); err != nil {
 		return err
 	}
+	// @todo disabled for now until fully tested.
+	//if err = a.ValidateInput(input); err != nil {
+	//	return err
+	//}
 	a.input = input
 	// Reset to load the action file again with new replacements.
 	a.Reset()
@@ -111,9 +119,30 @@ func (a *Action) SetInput(input Input) error {
 
 // ValidateInput validates arguments and options according to
 // a specified json schema in action definition.
-func (a *Action) ValidateInput(_ Input) error {
-	// @todo implement json schema validation
-	//js := a.JSONSchema()
+func (a *Action) ValidateInput(inp Input) error {
+	jsch := a.JSONSchema()
+	// @todo cache jsonschema and resources.
+	b, err := json.Marshal(jsch)
+	if err != nil {
+		return err
+	}
+	buf := bytes.NewBuffer(b)
+	c := jsonschema.NewCompiler()
+	err = c.AddResource(a.Filepath(), buf)
+	if err != nil {
+		return err
+	}
+	sch, err := c.Compile(a.Filepath())
+	if err != nil {
+		return err
+	}
+	err = sch.Validate(map[string]interface{}{
+		"arguments": inp.Args,
+		"options":   inp.Opts,
+	})
+	if err != nil {
+		return err
+	}
 	// @todo validate must have info about which fields failed.
 	return nil
 }

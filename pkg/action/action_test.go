@@ -40,7 +40,7 @@ func Test_Action(t *testing.T) {
 		"opt2":   true,
 		"opt3":   1,
 		"opt4":   1.45,
-		"optarr": []string{"opt5.1val", "opt5.2val"},
+		"optarr": []interface{}{"opt5.1val", "opt5.2val"},
 		"opt6":   "unexpectedOpt",
 	}
 	err = act.SetInput(Input{inputArgs, inputOpts, nil})

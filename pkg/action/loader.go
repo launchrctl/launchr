@@ -18,10 +18,15 @@ import (
 type Loader interface {
 	// Content returns the raw file content.
 	Content() ([]byte, error)
-	// Load parses Content to an Definition with substituted values.
-	Load() (*Definition, error)
-	// LoadRaw parses Content to an Definition raw values. Template strings are escaped.
+	// Load parses Content to a Definition with substituted values.
+	Load(LoadContext) (*Definition, error)
+	// LoadRaw parses Content to a Definition raw values. Template strings are escaped.
 	LoadRaw() (*Definition, error)
+}
+
+// LoadContext stores relevant and isolated data needed for processors.
+type LoadContext struct {
+	Action *Action
 }
 
 type yamlFileLoader struct {
@@ -69,7 +74,7 @@ func (l *yamlFileLoader) LoadRaw() (*Definition, error) {
 	return l.raw, err
 }
 
-func (l *yamlFileLoader) Load() (res *Definition, err error) {
+func (l *yamlFileLoader) Load(ctx LoadContext) (res *Definition, err error) {
 	// Open a file and cache content for future reads.
 	c, err := l.Content()
 	if err != nil {
@@ -77,7 +82,7 @@ func (l *yamlFileLoader) Load() (res *Definition, err error) {
 	}
 	buf := make([]byte, len(c))
 	copy(buf, c)
-	buf, err = l.processor.Process(buf)
+	buf, err = l.processor.Process(ctx, buf)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +97,7 @@ func (l *yamlFileLoader) Load() (res *Definition, err error) {
 // LoadProcessor is an interface for processing input on load.
 type LoadProcessor interface {
 	// Process gets an input action file data and returns a processed result.
-	Process([]byte) ([]byte, error)
+	Process(LoadContext, []byte) ([]byte, error)
 }
 
 type pipeProcessor struct {
@@ -104,10 +109,10 @@ func NewPipeProcessor(p ...LoadProcessor) LoadProcessor {
 	return &pipeProcessor{p: p}
 }
 
-func (p *pipeProcessor) Process(b []byte) ([]byte, error) {
+func (p *pipeProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
 	var err error
 	for _, proc := range p.p {
-		b, err = proc.Process(b)
+		b, err = proc.Process(ctx, b)
 		if err != nil {
 			return b, err
 		}
@@ -117,7 +122,7 @@ func (p *pipeProcessor) Process(b []byte) ([]byte, error) {
 
 type escapeYamlTplCommentsProcessor struct{}
 
-func (p escapeYamlTplCommentsProcessor) Process(b []byte) ([]byte, error) {
+func (p escapeYamlTplCommentsProcessor) Process(_ LoadContext, b []byte) ([]byte, error) {
 	// Read by line.
 	scanner := bufio.NewScanner(bytes.NewBuffer(b))
 	res := make([]byte, 0, len(b))
@@ -141,13 +146,11 @@ func (p escapeYamlTplCommentsProcessor) Process(b []byte) ([]byte, error) {
 
 type envProcessor struct{}
 
-func (p envProcessor) Process(b []byte) ([]byte, error) {
+func (p envProcessor) Process(_ LoadContext, b []byte) ([]byte, error) {
 	return envsubst.Bytes(b)
 }
 
-type inputProcessor struct {
-	a *Action
-}
+type inputProcessor struct{}
 
 // @todo consider supporting dashes in names. Currently gotpl vars will fail with dashed names.
 var rgxTplVar = regexp.MustCompile(`{{.*?\.(\S+).*?}}`)
@@ -165,13 +168,17 @@ func (err errMissingVar) Error() string {
 	return fmt.Sprintf("the following variables were used but never defined: %v", f)
 }
 
-func (p *inputProcessor) Process(b []byte) ([]byte, error) {
-	def, err := p.a.Loader.LoadRaw()
+func (p inputProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
+	if ctx.Action == nil {
+		return b, nil
+	}
+	a := ctx.Action
+	def, err := ctx.Action.Loader.LoadRaw()
 	if err != nil {
 		return nil, err
 	}
-	data := ConvertInputToTplVars(p.a.GetInput(), def.Action)
-	tpl := template.New(p.a.ID)
+	data := ConvertInputToTplVars(a.GetInput(), def.Action)
+	tpl := template.New(a.ID)
 	_, err = tpl.Parse(string(b))
 	if err != nil {
 		// Check if variables have dashes to show the error properly.

@@ -47,7 +47,7 @@ func (err errUnsupportedActionVersion) Is(cmp error) bool {
 var (
 	rgxUnescTplRow = regexp.MustCompile(`(?:-|\S+:)(?:\s*)?({{.*}}.*)`)
 	rgxTplRow      = regexp.MustCompile(`({{.*}}.*)`)
-	rgxVarName     = regexp.MustCompile("^[a-zA-Z][a-zA-Z0-9_\\-]*$")
+	rgxVarName     = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_\\-]*$`)
 )
 
 // CreateFromYaml creates an action file definition from yaml configuration.
@@ -97,13 +97,13 @@ func (d *Definition) Content() ([]byte, error) {
 }
 
 // Load implements Loader interface.
-func (d *Definition) Load() (*Definition, error) {
-	return d, nil
+func (d *Definition) Load(_ LoadContext) (*Definition, error) {
+	return d.LoadRaw()
 }
 
 // LoadRaw implements Loader interface.
 func (d *Definition) LoadRaw() (*Definition, error) {
-	return d.Load()
+	return d, nil
 }
 
 var yamlTree = newGlobalYamlParseMeta()
@@ -141,6 +141,7 @@ type DefAction struct {
 	Build       *types.BuildDefinition `yaml:"build"`
 	ExtraHosts  StrSlice               `yaml:"extra_hosts"`
 	Env         EnvSlice               `yaml:"env"`
+	User        string                 `yaml:"user"`
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler to parse action definition.
@@ -280,7 +281,7 @@ type Option struct {
 	Description string          `yaml:"description"`
 	Type        jsonschema.Type `yaml:"type"`
 	Default     interface{}     `yaml:"default"`
-	Required    bool            `yaml:"required"`
+	Required    bool            `yaml:"required"` // @todo that conflicts with json schema object definition
 	RawMap      map[string]interface{}
 }
 
@@ -332,7 +333,13 @@ func unmarshalVarYaml(n *yaml.Node, v any, errStr []string) (err error) {
 	if *vtitle == "" {
 		*vtitle = *vname
 	}
-	(*vraw)["type"] = vtype
+	(*vraw)["type"] = *vtype
+	// @todo review hardcoded array elements types when array is properly implemented.
+	if *vtype == jsonschema.Array {
+		(*vraw)["items"] = map[string]interface{}{
+			"type": jsonschema.String,
+		}
+	}
 	return nil
 }
 
@@ -352,9 +359,8 @@ func unmarshalListYaml[T any](nl *yaml.Node) ([]T, error) {
 			if errType, ok := err.(*yaml.TypeError); ok {
 				errs = yamlMergeErrors(errs, errType)
 				continue
-			} else {
-				return nil, err
 			}
+			return nil, err
 		}
 		l = append(l, v)
 	}

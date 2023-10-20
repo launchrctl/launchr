@@ -258,7 +258,7 @@ action:
   command: ls
 `
 
-const invalidJsonSchemaTypeYaml = `
+const invalidJSONSchemaTypeYaml = `
 version: "1"
 action:
   title: Title
@@ -269,7 +269,7 @@ action:
   command: ls
 `
 
-const invalidJsonSchemaDefaultYaml = `
+const invalidJSONSchemaDefaultYaml = `
 version: "1"
 action:
   title: Title

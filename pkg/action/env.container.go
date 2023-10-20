@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	osuser "os/user"
+	"runtime"
 	"strings"
 
 	"github.com/moby/moby/pkg/namesgenerator"
@@ -86,6 +88,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		AttachStderr:  true,
 		Tty:           streams.In().IsTerminal(),
 		Env:           actConf.Env,
+		User:          getCurrentUser(),
 	}
 	cid, err := c.containerCreate(ctx, a, runConfig)
 	if err != nil {
@@ -149,6 +152,19 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	// @todo maybe we should note that SIG was sent to the container. Code 130 is sent on Ctlr+C.
 	log.Info("action %q finished with the exit code %d", a.ID, status)
 	return nil
+}
+
+func getCurrentUser() string {
+	curuser := ""
+	// If running in a container native environment, run container as a current user.
+	// @todo review, it won't work with a remote context.
+	if runtime.GOOS == "linux" {
+		u, err := osuser.Current()
+		if err == nil {
+			curuser = u.Uid + ":" + u.Gid
+		}
+	}
+	return curuser
 }
 
 func genContainerName(a *Action, prefix string, existing map[string]struct{}) string {
@@ -248,6 +264,7 @@ func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *typ
 		AttachStderr: opts.AttachStderr,
 		Tty:          opts.Tty,
 		Env:          opts.Env,
+		User:         opts.User,
 	})
 	if err != nil {
 		return "", err

@@ -12,8 +12,11 @@ import (
 
 // Streams is an interface which exposes the standard input and output streams
 type Streams interface {
+	// In returns the reader used for stdin
 	In() *In
+	// Out returns the writer used for stdout
 	Out() *Out
+	// Err returns the writer used for stderr
 	Err() io.Writer
 }
 

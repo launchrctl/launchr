@@ -120,6 +120,7 @@ type RunInfo struct {
 	ID     string
 	Action *Action
 	Status string
+	// @todo add more info for status like error message or exit code. Or have it in output.
 }
 
 func (m *actionManagerMap) registerRun(a *Action) RunInfo {
@@ -131,12 +132,23 @@ func (m *actionManagerMap) registerRun(a *Action) RunInfo {
 	ri := RunInfo{
 		ID:     id,
 		Action: a,
+		Status: "created",
 	}
 	m.runStore[id] = ri
 	return ri
 }
 
+func (m *actionManagerMap) updateRunStatus(id string, st string) {
+	m.mxRun.Lock()
+	defer m.mxRun.Unlock()
+	if ri, ok := m.runStore[id]; ok {
+		ri.Status = st
+		m.runStore[id] = ri
+	}
+}
+
 func (m *actionManagerMap) Run(ctx context.Context, a *Action) (RunInfo, error) {
+	// @todo add the same status change info
 	return m.registerRun(a), a.Execute(ctx)
 }
 
@@ -144,8 +156,15 @@ func (m *actionManagerMap) RunBackground(ctx context.Context, a *Action) (RunInf
 	ri := m.registerRun(a)
 	chErr := make(chan error)
 	go func() {
-		chErr <- a.Execute(ctx)
+		m.updateRunStatus(ri.ID, "running")
+		err := a.Execute(ctx)
+		chErr <- err
 		close(chErr)
+		if err != nil {
+			m.updateRunStatus(ri.ID, "error")
+		} else {
+			m.updateRunStatus(ri.ID, "finished")
+		}
 	}()
 	// @todo rethink returned values.
 	return ri, chErr
