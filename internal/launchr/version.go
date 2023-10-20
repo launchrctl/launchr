@@ -72,9 +72,11 @@ func (v *AppVersion) Short() string {
 
 func getCoreInfo(v string, bi *debug.BuildInfo) (ver string, repl string) {
 	ver = v
-	if bi == nil && bi.Main.Path == PkgPath {
+	// Return for self, it's always (devel).
+	if bi == nil || bi.Main.Path == PkgPath {
 		return
 	}
+	// Get version if built by builder.
 	for _, d := range bi.Deps {
 		if d.Path == PkgPath {
 			ver = d.Version

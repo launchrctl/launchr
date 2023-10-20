@@ -18,8 +18,8 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X {{.ModulePath}}.Name={{.Binary}}
-      - -X {{.ModulePath}}.Version={{.Version}}
+      - -X '{{.ModulePath}}.name={{.Binary}}'
+      - -X '{{.ModulePath}}.version={{.Version}}'
 
 archives:
   - format: binary
