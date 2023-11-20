@@ -196,6 +196,8 @@ Action definition is correct, but dashes are not allowed in templates, replace "
 		return nil, err
 	}
 
+	addPredefinedVariables(data)
+
 	buf := bytes.NewBuffer(make([]byte, 0, len(b)))
 	err = tpl.Execute(buf, data)
 	if err != nil {
@@ -249,4 +251,16 @@ func ConvertInputToTplVars(input Input, ac *DefAction) map[string]interface{} {
 	// @todo handle array options
 
 	return values
+}
+
+func addPredefinedVariables(data map[string]interface{}) {
+	cuser := getCurrentUser()
+	// Set zeros for running in environments like Windows
+	data["current_uid"] = 0
+	data["current_gid"] = 0
+	if cuser != "" {
+		s := strings.Split(cuser, ":")
+		data["current_uid"] = s[0]
+		data["current_gid"] = s[1]
+	}
 }
