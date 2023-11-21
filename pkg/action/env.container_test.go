@@ -202,7 +202,7 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 	}
 
 	eqCfg := *runCfg
-	eqCfg.Mounts = map[string]string{
+	eqCfg.Binds = map[string]string{
 		".":     containerHostMount,
 		a.Dir(): containerActionMount,
 	}
@@ -405,7 +405,7 @@ func Test_ContainerExec(t *testing.T) {
 		Cmd:           actConf.Command,
 		Image:         actConf.Image,
 		ExtraHosts:    actConf.ExtraHosts,
-		Mounts: map[string]string{
+		Binds: map[string]string{
 			".":       containerHostMount,
 			act.Dir(): containerActionMount,
 		},

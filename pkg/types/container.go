@@ -97,7 +97,7 @@ type ContainerCreateOptions struct {
 	Image         string
 	Cmd           []string
 	WorkingDir    string
-	Mounts        map[string]string
+	Binds         map[string]string
 	ExtraHosts    []string
 	AutoRemove    bool
 	OpenStdin     bool

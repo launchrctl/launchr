@@ -8,7 +8,6 @@ import (
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/mount"
 	"github.com/moby/moby/client"
 	"github.com/moby/moby/errdefs"
 	"github.com/moby/moby/pkg/archive"
@@ -92,20 +91,16 @@ func (d *dockerDriver) ContainerCreate(ctx context.Context, opts types.Container
 		AutoRemove: opts.AutoRemove,
 		ExtraHosts: opts.ExtraHosts,
 	}
-	if len(opts.Mounts) > 0 {
-		mounts := make([]mount.Mount, 0, len(opts.Mounts))
-		for s, t := range opts.Mounts {
+	if len(opts.Binds) > 0 {
+		binds := make([]string, 0, len(opts.Binds))
+		for s, t := range opts.Binds {
 			abs, err := filepath.Abs(filepath.Clean(s))
 			if err != nil {
 				return "", err
 			}
-			mounts = append(mounts, mount.Mount{
-				Type:   mount.TypeBind,
-				Source: abs,
-				Target: t,
-			})
+			binds = append(binds, abs+":"+t)
 		}
-		hostCfg.Mounts = mounts
+		hostCfg.Binds = binds
 	}
 
 	resp, err := d.cli.ContainerCreate(

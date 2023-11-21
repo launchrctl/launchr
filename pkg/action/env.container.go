@@ -251,7 +251,7 @@ func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *typ
 		Image:         actConf.Image,
 		Cmd:           actConf.Command,
 		WorkingDir:    containerHostMount,
-		Mounts: map[string]string{
+		Binds: map[string]string{
 			".":     containerHostMount,
 			a.Dir(): containerActionMount,
 		},
