@@ -177,7 +177,11 @@ func (p inputProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Collect template variables.
 	data := ConvertInputToTplVars(a.GetInput(), def.Action)
+	addPredefinedVariables(data)
+
+	// Parse action without variables to validate
 	tpl := template.New(a.ID)
 	_, err = tpl.Parse(string(b))
 	if err != nil {
@@ -195,8 +199,6 @@ Action definition is correct, but dashes are not allowed in templates, replace "
 		}
 		return nil, err
 	}
-
-	addPredefinedVariables(data)
 
 	buf := bytes.NewBuffer(make([]byte, 0, len(b)))
 	err = tpl.Execute(buf, data)
