@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"io"
 	"strings"
 
@@ -37,13 +36,11 @@ func StandardStreams() Streams {
 	}
 }
 
-// InMemoryStreams provides in-memory in/out/err streams.
-func InMemoryStreams() Streams {
-	outBuffer := &bytes.Buffer{}
-	errBuffer := &bytes.Buffer{}
+// NoopStreams provides streams like /dev/null.
+func NoopStreams() Streams {
 	return &appCli{
 		in:  NewIn(io.NopCloser(strings.NewReader(""))),
-		out: NewOut(outBuffer),
-		err: errBuffer,
+		out: NewOut(io.Discard),
+		err: io.Discard,
 	}
 }

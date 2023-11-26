@@ -1,7 +1,6 @@
 package action
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -10,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/moby/moby/pkg/jsonmessage"
 	"github.com/moby/moby/pkg/namesgenerator"
 	"github.com/moby/sys/signal"
 	"github.com/moby/term"
@@ -158,7 +158,8 @@ func getCurrentUser() string {
 	curuser := ""
 	// If running in a container native environment, run container as a current user.
 	// @todo review, it won't work with a remote context.
-	if runtime.GOOS == "linux" {
+	switch runtime.GOOS {
+	case "linux", "darwin":
 		u, err := osuser.Current()
 		if err == nil {
 			curuser = u.Uid + ":" + u.Gid
@@ -187,6 +188,7 @@ func (c *containerEnv) Close() error {
 }
 
 func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
+	streams := a.GetInput().IO
 	image := a.ActionDef().Image
 	// Prepend action to have the top priority in image build resolution.
 	r := ChainImageBuildResolver{append(ChainImageBuildResolver{a}, c.imgres...)}
@@ -213,10 +215,9 @@ func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
 		cli.Println(msg)
 		log.Info(msg)
 		// Output docker status only in Debug.
-		log.Debug("Pulling %q progress", image)
-		scanner := bufio.NewScanner(status.Progress)
-		for scanner.Scan() {
-			log.Debug(scanner.Text())
+		err = displayJSONMessages(status.Progress, streams)
+		if err != nil {
+			cli.Println("There was an error while pulling the image")
 		}
 	case types.ImageBuild:
 		if status.Progress == nil {
@@ -229,14 +230,27 @@ func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
 		cli.Println(msg)
 		log.Info(msg)
 		// Output docker status only in Debug.
-		log.Debug("Building %q progress", image)
-		scanner := bufio.NewScanner(status.Progress)
-		for scanner.Scan() {
-			log.Debug(scanner.Text())
+		err = displayJSONMessages(status.Progress, streams)
+		if err != nil {
+			cli.Println("There was an error while building the image")
 		}
 	}
 
-	return nil
+	return err
+}
+
+func displayJSONMessages(in io.Reader, streams cli.Streams) error {
+	err := jsonmessage.DisplayJSONMessagesToStream(in, streams.Out(), nil)
+	if err != nil {
+		if jerr, ok := err.(*jsonmessage.JSONError); ok {
+			// If no error code is set, default to 1
+			if jerr.Code == 0 {
+				jerr.Code = 1
+			}
+			return jerr
+		}
+	}
+	return err
 }
 
 func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *types.ContainerCreateOptions) (string, error) {

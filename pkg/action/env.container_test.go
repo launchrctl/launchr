@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/moby/moby/pkg/jsonmessage"
 	"github.com/moby/moby/pkg/stdcopy"
 	"github.com/stretchr/testify/assert"
 
@@ -130,19 +131,39 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 			"image pulled",
 			&DefAction{Image: "pull"},
 			nil,
-			imgFn(types.ImagePull, "pulling image", nil),
+			imgFn(types.ImagePull, `{"stream":"Successfully pulled image\n"}`, nil),
+		},
+		{
+			"image pulled error",
+			&DefAction{Image: "pull"},
+			nil,
+			imgFn(
+				types.ImagePull,
+				`{"errorDetail":{"code":1,"message":"fake pull error"},"error":"fake pull error"}`,
+				&jsonmessage.JSONError{Code: 1, Message: "fake pull error"},
+			),
 		},
 		{
 			"image build local",
 			aconf,
 			actLoc.ImageBuildInfo(aconf.Image),
-			imgFn(types.ImageBuild, "building image (local config)", nil),
+			imgFn(types.ImageBuild, `{"stream":"Successfully built image \"local\"\n"}`, nil),
+		},
+		{
+			"image build local error",
+			aconf,
+			actLoc.ImageBuildInfo(aconf.Image),
+			imgFn(
+				types.ImageBuild,
+				`{"errorDetail":{"code":1,"message":"fake build error"},"error":"fake build error"}`,
+				&jsonmessage.JSONError{Code: 1, Message: "fake build error"},
+			),
 		},
 		{
 			"image build config",
 			&DefAction{Image: "build:config"},
 			cfgImgRes.ImageBuildInfo("build:config"),
-			imgFn(types.ImageBuild, "building image (from config)", nil),
+			imgFn(types.ImageBuild, `{"stream":"Successfully built image \"config\"\n"}`, nil),
 		},
 		{
 			"driver error",
@@ -162,6 +183,9 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 			defer r.Close()
 			ctx := context.Background()
 			act := testContainerAction(tt.action)
+			act.input = Input{
+				IO: cli.NoopStreams(),
+			}
 			err = act.EnsureLoaded()
 			assert.NoError(err)
 			a := act.ActionDef()
@@ -170,7 +194,7 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 				ImageEnsure(ctx, eqImageOpts{imgOpts}).
 				Return(tt.ret...)
 			err = r.imageEnsure(ctx, act)
-			assert.Equal(err, tt.ret[1])
+			assert.Equal(tt.ret[1], err)
 		})
 	}
 }
@@ -344,7 +368,7 @@ func (f *fakeWriter) Close() error {
 func Test_ContainerExec_containerAttach(t *testing.T) {
 	t.Parallel()
 	assert, ctrl, d, r := prepareContainerTestSuite(t)
-	streams := cli.InMemoryStreams()
+	streams := cli.NoopStreams()
 	defer ctrl.Finish()
 	defer r.Close()
 
@@ -559,7 +583,7 @@ func Test_ContainerExec(t *testing.T) {
 			resCh, errCh := make(chan types.ContainerWaitResponse, 1), make(chan error, 1)
 			assert, ctrl, d, r := prepareContainerTestSuite(t)
 			a := act.Clone()
-			err := a.SetInput(Input{nil, nil, cli.InMemoryStreams()})
+			err := a.SetInput(Input{nil, nil, cli.NoopStreams()})
 			assert.NoError(err)
 			defer ctrl.Finish()
 			defer r.Close()
