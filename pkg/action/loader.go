@@ -152,7 +152,6 @@ func (p envProcessor) Process(_ LoadContext, b []byte) ([]byte, error) {
 
 type inputProcessor struct{}
 
-// @todo consider supporting dashes in names. Currently gotpl vars will fail with dashed names.
 var rgxTplVar = regexp.MustCompile(`{{.*?\.(\S+).*?}}`)
 
 type errMissingVar struct {
@@ -230,6 +229,7 @@ func ConvertInputToTplVars(input Input, ac *DefAction) map[string]interface{} {
 	for _, arg := range ac.Arguments {
 		key := arg.Name
 		values[key] = ""
+		values[replDashes.Replace(key)] = ""
 		if v, ok := input.Args[arg.Name]; ok {
 			// Allow usage of dashed variable names like "my-name" by replacing dashes to underscores.
 			values[key] = v
@@ -242,6 +242,7 @@ func ConvertInputToTplVars(input Input, ac *DefAction) map[string]interface{} {
 		key := o.Name
 		// Set value default or input option.
 		values[key] = o.Default
+		values[replDashes.Replace(key)] = o.Default
 		if v, ok := input.Opts[o.Name]; ok {
 			// Allow usage of dashed variable names like "my-name" by replacing dashes to underscores.
 			values[key] = v

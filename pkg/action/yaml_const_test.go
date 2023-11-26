@@ -17,11 +17,20 @@ action:
     - name: arg1
       title: Argument 1
       description: Argument 1 description
+    - name: arg-1
+      title: Argument 1
+      description: Argument 1 description
+    - name: arg_12
+      title: Argument 1
+      description: Argument 1 description
     - name: arg2
       title: Argument 2
       description: Argument 2 description
   options:
     - name: opt1
+      title: Option 1
+      description: Option 1 description
+    - name: opt-1
       title: Option 1
       description: Option 1 description
     - name: opt2
@@ -61,8 +70,8 @@ action:
     - /bin/sh
     - -c
     - ls -lah
-    - "{{ .arg2 }} {{ .arg1 }}"
-    - "{{ .opt3 }} {{ .opt2 }} {{ .opt1 }} {{ .opt4 }} {{ .optarr }}"
+    - "{{ .arg2 }} {{ .arg1 }} {{ .arg_1 }} {{ .arg_12 }}"
+    - "{{ .opt3 }} {{ .opt2 }} {{ .opt1 }} {{ .opt_1 }} {{ .opt4 }} {{ .optarr }}"
     - ${TEST_ENV_1} ${TEST_ENV_UND}
     - "${TEST_ENV_1} ${TEST_ENV_UND}"
 `

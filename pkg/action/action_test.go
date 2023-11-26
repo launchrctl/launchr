@@ -34,9 +34,10 @@ func Test_Action(t *testing.T) {
 	}
 	assert.Equal(extraHosts, actConf.ExtraHosts)
 	// Test arguments and options.
-	inputArgs := TypeArgs{"arg1": "arg1", "arg2": "arg2"}
+	inputArgs := TypeArgs{"arg1": "arg1", "arg2": "arg2", "arg-1": "arg-1", "arg_12": "arg_12"}
 	inputOpts := TypeOpts{
 		"opt1":   "opt1val",
+		"opt-1":  "opt-1",
 		"opt2":   true,
 		"opt3":   1,
 		"opt4":   1.45,
@@ -55,8 +56,8 @@ func Test_Action(t *testing.T) {
 		"/bin/sh",
 		"-c",
 		"ls -lah",
-		fmt.Sprintf("%v %v", inputArgs["arg2"], inputArgs["arg1"]),
-		fmt.Sprintf("%v %v %v %v %v", inputOpts["opt3"], inputOpts["opt2"], inputOpts["opt1"], inputOpts["opt4"], inputOpts["optarr"]),
+		fmt.Sprintf("%v %v %v %v", inputArgs["arg2"], inputArgs["arg1"], inputArgs["arg-1"], inputArgs["arg_12"]),
+		fmt.Sprintf("%v %v %v %v %v %v", inputOpts["opt3"], inputOpts["opt2"], inputOpts["opt1"], inputOpts["opt-1"], inputOpts["opt4"], inputOpts["optarr"]),
 		fmt.Sprintf("%v", envVar1),
 		fmt.Sprintf("%v ", envVar1),
 	}
