@@ -269,6 +269,7 @@ func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *typ
 			".":     containerHostMount,
 			a.Dir(): containerActionMount,
 		},
+		NetworkMode:  types.NetworkModeHost,
 		ExtraHosts:   opts.ExtraHosts,
 		AutoRemove:   opts.AutoRemove,
 		OpenStdin:    opts.OpenStdin,

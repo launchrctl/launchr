@@ -88,8 +88,9 @@ func (d *dockerDriver) ImageEnsure(ctx context.Context, image types.ImageOptions
 
 func (d *dockerDriver) ContainerCreate(ctx context.Context, opts types.ContainerCreateOptions) (string, error) {
 	hostCfg := &container.HostConfig{
-		AutoRemove: opts.AutoRemove,
-		ExtraHosts: opts.ExtraHosts,
+		AutoRemove:  opts.AutoRemove,
+		ExtraHosts:  opts.ExtraHosts,
+		NetworkMode: opts.NetworkMode,
 	}
 	if len(opts.Binds) > 0 {
 		binds := make([]string, 0, len(opts.Binds))

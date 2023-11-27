@@ -211,6 +211,7 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 
 	runCfg := &types.ContainerCreateOptions{
 		ContainerName: "container",
+		NetworkMode:   types.NetworkModeHost,
 		ExtraHosts:    act.ExtraHosts,
 		AutoRemove:    true,
 		OpenStdin:     true,
@@ -428,6 +429,7 @@ func Test_ContainerExec(t *testing.T) {
 		ContainerName: genContainerName(act, containerNamePrefix, nil),
 		Cmd:           actConf.Command,
 		Image:         actConf.Image,
+		NetworkMode:   types.NetworkModeHost,
 		ExtraHosts:    actConf.ExtraHosts,
 		Binds: map[string]string{
 			".":       containerHostMount,

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	typescontainer "github.com/docker/docker/api/types/container"
 	"gopkg.in/yaml.v3"
 )
 
@@ -91,6 +92,13 @@ type ImageStatusResponse struct {
 	Progress io.ReadCloser
 }
 
+// NetworkMode is a type alias for docker Network mode.
+type NetworkMode = typescontainer.NetworkMode
+
+const (
+	NetworkModeHost NetworkMode = "host" // NetworkModeHost for host network.
+)
+
 // ContainerCreateOptions stores options for creating a new container.
 type ContainerCreateOptions struct {
 	ContainerName string
@@ -98,6 +106,7 @@ type ContainerCreateOptions struct {
 	Cmd           []string
 	WorkingDir    string
 	Binds         map[string]string
+	NetworkMode   NetworkMode
 	ExtraHosts    []string
 	AutoRemove    bool
 	OpenStdin     bool
