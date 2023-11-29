@@ -30,6 +30,7 @@ type containerEnv struct {
 	imgres ChainImageBuildResolver
 	dtype  driver.Type
 	prefix string
+	suffix string
 }
 
 // NewDockerEnvironment creates a new action Docker environment.
@@ -39,11 +40,12 @@ func NewDockerEnvironment() RunEnvironment {
 
 // NewContainerEnvironment creates a new action container run environment.
 func NewContainerEnvironment(t driver.Type) RunEnvironment {
-	return &containerEnv{dtype: t, prefix: "launchr_"}
+	return &containerEnv{dtype: t, prefix: "launchr_", suffix: namesgenerator.GetRandomName(0)}
 }
 
 func (c *containerEnv) AddImageBuildResolver(r ImageBuildResolver) { c.imgres = append(c.imgres, r) }
 func (c *containerEnv) SetContainerNamePrefix(p string)            { c.prefix = p }
+func (c *containerEnv) SetContainerNameSuffix(s string)            { c.suffix = s }
 
 func (c *containerEnv) Init() (err error) {
 	if c.driver == nil {
@@ -62,7 +64,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	actConf := a.ActionDef()
 	log.Debug("Starting execution of the action %q in %q environment, command %v", a.ID, c.dtype, actConf.Command)
 	// @todo consider reusing the same container and run exec
-	name := genContainerName(a, c.prefix, nil)
+	name := genContainerName(a, c.prefix, c.suffix, nil)
 	existing := c.driver.ContainerList(ctx, types.ContainerListOptions{SearchName: name})
 	// Collect a set of existing names to build the name.
 	exMap := make(map[string]struct{}, len(existing))
@@ -71,9 +73,9 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 			exMap[strings.Trim(n, "/")] = struct{}{}
 		}
 	}
-	// Regenerate the name with a suffix.
+	// Regenerate the name with a new suffix.
 	if len(exMap) > 0 {
-		name = genContainerName(a, c.prefix, exMap)
+		name = genContainerName(a, c.prefix, namesgenerator.GetRandomName(0), exMap)
 	}
 
 	// Create container.
@@ -168,19 +170,10 @@ func getCurrentUser() string {
 	return curuser
 }
 
-func genContainerName(a *Action, prefix string, existing map[string]struct{}) string {
+func genContainerName(a *Action, prefix, suffix string, existing map[string]struct{}) string {
 	// Replace command name "-", ":", and "." to "_".
 	var rpl = strings.NewReplacer("-", "_", ":", "_", ".", "_")
-	base := prefix + rpl.Replace(a.ID)
-	name := base
-	if len(existing) > 0 {
-		_, ok := existing[name]
-		// Set suffix if container already exists.
-		for ; ok; _, ok = existing[name] {
-			name = base + "_" + namesgenerator.GetRandomName(0)
-		}
-	}
-	return name
+	return prefix + rpl.Replace(a.ID) + "_" + suffix
 }
 
 func (c *containerEnv) Close() error {

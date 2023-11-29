@@ -24,6 +24,7 @@ import (
 )
 
 const containerNamePrefix = "test_prefix_"
+const containerNameSuffix = "test_suffix"
 
 type eqImageOpts struct {
 	x types.ImageOptions
@@ -52,6 +53,7 @@ func prepareContainerTestSuite(t *testing.T) (*assert.Assertions, *gomock.Contro
 	r := &containerEnv{driver: d, dtype: "mock"}
 	r.AddImageBuildResolver(cfgImgRes)
 	r.SetContainerNamePrefix(containerNamePrefix)
+	r.SetContainerNameSuffix(containerNameSuffix)
 
 	return assert, ctrl, d, r
 }
@@ -426,7 +428,7 @@ func Test_ContainerExec(t *testing.T) {
 	}
 
 	opts := types.ContainerCreateOptions{
-		ContainerName: genContainerName(act, containerNamePrefix, nil),
+		ContainerName: genContainerName(act, containerNamePrefix, containerNameSuffix, nil),
 		Cmd:           actConf.Command,
 		Image:         actConf.Image,
 		NetworkMode:   types.NetworkModeHost,
