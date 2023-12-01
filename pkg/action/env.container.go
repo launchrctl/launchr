@@ -26,10 +26,10 @@ const (
 )
 
 type containerEnv struct {
-	driver driver.ContainerRunner
-	imgres ChainImageBuildResolver
-	dtype  driver.Type
-	nprv   ContainerNameProvider
+	driver  driver.ContainerRunner
+	imgres  ChainImageBuildResolver
+	dtype   driver.Type
+	nameprv ContainerNameProvider
 }
 
 // ContainerNameProvider provides ability to generate random container name
@@ -39,7 +39,7 @@ type ContainerNameProvider struct {
 }
 
 // Get generates new container name
-func (p *ContainerNameProvider) Get(name string) string {
+func (p ContainerNameProvider) Get(name string) string {
 	var rpl = strings.NewReplacer("-", "_", ":", "_", ".", "_")
 	suffix := ""
 	if p.RandomSuffix {
@@ -56,11 +56,11 @@ func NewDockerEnvironment() RunEnvironment {
 
 // NewContainerEnvironment creates a new action container run environment.
 func NewContainerEnvironment(t driver.Type) RunEnvironment {
-	return &containerEnv{dtype: t, nprv: ContainerNameProvider{Prefix: "launchr_", RandomSuffix: true}}
+	return &containerEnv{dtype: t, nameprv: ContainerNameProvider{Prefix: "launchr_", RandomSuffix: true}}
 }
 
 func (c *containerEnv) AddImageBuildResolver(r ImageBuildResolver)       { c.imgres = append(c.imgres, r) }
-func (c *containerEnv) SetContainerNameProvider(p ContainerNameProvider) { c.nprv = p }
+func (c *containerEnv) SetContainerNameProvider(p ContainerNameProvider) { c.nameprv = p }
 
 func (c *containerEnv) Init() (err error) {
 	if c.driver == nil {
@@ -79,10 +79,10 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	actConf := a.ActionDef()
 	log.Debug("Starting execution of the action %q in %q environment, command %v", a.ID, c.dtype, actConf.Command)
 	// @todo consider reusing the same container and run exec
-	name := c.nprv.Get(a.ID)
+	name := c.nameprv.Get(a.ID)
 	existing := c.driver.ContainerList(ctx, types.ContainerListOptions{SearchName: name})
 	if len(existing) > 0 {
-		return errors.New("error on creating a container, name is in use")
+		return fmt.Errorf("the action %q can't start, the container name is in use, please, try again", a.ID)
 	}
 
 	// Create container.
