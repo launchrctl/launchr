@@ -21,8 +21,8 @@ type RunEnvironment interface {
 // ContainerRunEnvironment is an interface for container run environments.
 type ContainerRunEnvironment interface {
 	RunEnvironment
-	// SetContainerNamePrefix sets a name prefix for created containers.
-	SetContainerNamePrefix(string)
+	// SetContainerNameProvider sets container name provider.
+	SetContainerNameProvider(ContainerNameProvider)
 	// AddImageBuildResolver adds an image build resolver to a chain.
 	AddImageBuildResolver(ImageBuildResolver)
 }
