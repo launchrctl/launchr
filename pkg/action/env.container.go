@@ -26,10 +26,27 @@ const (
 )
 
 type containerEnv struct {
-	driver driver.ContainerRunner
-	imgres ChainImageBuildResolver
-	dtype  driver.Type
-	prefix string
+	driver  driver.ContainerRunner
+	imgres  ChainImageBuildResolver
+	dtype   driver.Type
+	nameprv ContainerNameProvider
+}
+
+// ContainerNameProvider provides ability to generate random container name
+type ContainerNameProvider struct {
+	Prefix       string
+	RandomSuffix bool
+}
+
+// Get generates new container name
+func (p ContainerNameProvider) Get(name string) string {
+	var rpl = strings.NewReplacer("-", "_", ":", "_", ".", "_")
+	suffix := ""
+	if p.RandomSuffix {
+		suffix = "_" + namesgenerator.GetRandomName(0)
+	}
+
+	return p.Prefix + rpl.Replace(name) + suffix
 }
 
 // NewDockerEnvironment creates a new action Docker environment.
@@ -39,11 +56,11 @@ func NewDockerEnvironment() RunEnvironment {
 
 // NewContainerEnvironment creates a new action container run environment.
 func NewContainerEnvironment(t driver.Type) RunEnvironment {
-	return &containerEnv{dtype: t, prefix: "launchr_"}
+	return &containerEnv{dtype: t, nameprv: ContainerNameProvider{Prefix: "launchr_", RandomSuffix: true}}
 }
 
-func (c *containerEnv) AddImageBuildResolver(r ImageBuildResolver) { c.imgres = append(c.imgres, r) }
-func (c *containerEnv) SetContainerNamePrefix(p string)            { c.prefix = p }
+func (c *containerEnv) AddImageBuildResolver(r ImageBuildResolver)       { c.imgres = append(c.imgres, r) }
+func (c *containerEnv) SetContainerNameProvider(p ContainerNameProvider) { c.nameprv = p }
 
 func (c *containerEnv) Init() (err error) {
 	if c.driver == nil {
@@ -62,18 +79,10 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	actConf := a.ActionDef()
 	log.Debug("Starting execution of the action %q in %q environment, command %v", a.ID, c.dtype, actConf.Command)
 	// @todo consider reusing the same container and run exec
-	name := genContainerName(a, c.prefix, nil)
+	name := c.nameprv.Get(a.ID)
 	existing := c.driver.ContainerList(ctx, types.ContainerListOptions{SearchName: name})
-	// Collect a set of existing names to build the name.
-	exMap := make(map[string]struct{}, len(existing))
-	for _, e := range existing {
-		for _, n := range e.Names {
-			exMap[strings.Trim(n, "/")] = struct{}{}
-		}
-	}
-	// Regenerate the name with a suffix.
-	if len(exMap) > 0 {
-		name = genContainerName(a, c.prefix, exMap)
+	if len(existing) > 0 {
+		return fmt.Errorf("the action %q can't start, the container name is in use, please, try again", a.ID)
 	}
 
 	// Create container.
@@ -166,21 +175,6 @@ func getCurrentUser() string {
 		}
 	}
 	return curuser
-}
-
-func genContainerName(a *Action, prefix string, existing map[string]struct{}) string {
-	// Replace command name "-", ":", and "." to "_".
-	var rpl = strings.NewReplacer("-", "_", ":", "_", ".", "_")
-	base := prefix + rpl.Replace(a.ID)
-	name := base
-	if len(existing) > 0 {
-		_, ok := existing[name]
-		// Set suffix if container already exists.
-		for ; ok; _, ok = existing[name] {
-			name = base + "_" + namesgenerator.GetRandomName(0)
-		}
-	}
-	return name
 }
 
 func (c *containerEnv) Close() error {

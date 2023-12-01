@@ -200,7 +200,7 @@ func WithContainerRunEnvironmentConfig(cfg launchr.Config, prefix string) Decora
 	return func(m Manager, a *Action) {
 		if env, ok := a.env.(ContainerRunEnvironment); ok {
 			env.AddImageBuildResolver(r)
-			env.SetContainerNamePrefix(prefix)
+			env.SetContainerNameProvider(ContainerNameProvider{Prefix: prefix, RandomSuffix: true})
 		}
 	}
 }
