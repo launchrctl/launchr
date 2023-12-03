@@ -21,6 +21,7 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 		use += " " + p.Name
 	}
 	options := make(TypeOpts)
+	runOpts := make(TypeOpts)
 	cmd := &cobra.Command{
 		Use:  use,
 		Args: cobra.ExactArgs(len(argsDef)),
@@ -28,6 +29,14 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 		Short: getDesc(actConf.Title, actConf.Description),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true // Don't show usage help on a runtime error.
+			// Pass to the run environment its flags.
+			if env, ok := a.env.(RunEnvironmentFlags); ok {
+				err := env.UseFlags(derefOpts(runOpts))
+				if err != nil {
+					return err
+				}
+			}
+			// Set action input.
 			err := a.SetInput(Input{
 				Args: argsToMap(args, argsDef),
 				Opts: derefOpts(options),
@@ -41,15 +50,31 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 		},
 	}
 
-	for _, opt := range actConf.Options {
-		v, err := setFlag(cmd, opt)
+	// Collect action flags.
+	err := setCobraOptions(cmd, actConf.Options, options)
+	if err != nil {
+		return nil, err
+	}
+	// Collect run environment flags.
+	if env, ok := a.env.(RunEnvironmentFlags); ok {
+		err = setCobraOptions(cmd, env.FlagsDefinition(), runOpts)
 		if err != nil {
 			return nil, err
 		}
-		options[opt.Name] = v
 	}
 
 	return cmd, nil
+}
+
+func setCobraOptions(cmd *cobra.Command, defs OptionsList, opts TypeOpts) error {
+	for _, opt := range defs {
+		v, err := setFlag(cmd, opt)
+		if err != nil {
+			return err
+		}
+		opts[opt.Name] = v
+	}
+	return nil
 }
 
 func argsToMap(args []string, argsDef ArgumentsList) TypeArgs {
@@ -78,16 +103,16 @@ func setFlag(cmd *cobra.Command, opt *Option) (interface{}, error) {
 	desc := getDesc(opt.Title, opt.Description)
 	switch opt.Type {
 	case jsonschema.String:
-		val = cmd.Flags().String(opt.Name, opt.Default.(string), desc)
+		val = cmd.Flags().StringP(opt.Name, opt.Shorthand, opt.Default.(string), desc)
 	case jsonschema.Integer:
-		val = cmd.Flags().Int(opt.Name, opt.Default.(int), desc)
+		val = cmd.Flags().IntP(opt.Name, opt.Shorthand, opt.Default.(int), desc)
 	case jsonschema.Number:
-		val = cmd.Flags().Float64(opt.Name, opt.Default.(float64), desc)
+		val = cmd.Flags().Float64P(opt.Name, opt.Shorthand, opt.Default.(float64), desc)
 	case jsonschema.Boolean:
-		val = cmd.Flags().Bool(opt.Name, opt.Default.(bool), desc)
+		val = cmd.Flags().BoolP(opt.Name, opt.Shorthand, opt.Default.(bool), desc)
 	case jsonschema.Array:
 		// @todo use Var and define a custom value, jsonschema accepts interface{}
-		val = cmd.Flags().StringSlice(opt.Name, opt.Default.([]string), desc)
+		val = cmd.Flags().StringSliceP(opt.Name, opt.Shorthand, opt.Default.([]string), desc)
 	default:
 		return nil, fmt.Errorf("json schema type %q is not implemented", opt.Type)
 	}

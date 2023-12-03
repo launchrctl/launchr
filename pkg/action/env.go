@@ -18,6 +18,15 @@ type RunEnvironment interface {
 	Close() error
 }
 
+// RunEnvironmentFlags is an interface to define environment specific runtime configuration.
+type RunEnvironmentFlags interface {
+	RunEnvironment
+	// FlagsDefinition provides definitions for action environment specific flags.
+	FlagsDefinition() OptionsList
+	// UseFlags sets environment configuration.
+	UseFlags(flags TypeOpts) error
+}
+
 // ContainerRunEnvironment is an interface for container run environments.
 type ContainerRunEnvironment interface {
 	RunEnvironment

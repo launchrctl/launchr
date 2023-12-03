@@ -6,7 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
-	typescontainer "github.com/docker/docker/api/types/container"
+	"github.com/moby/moby/api/types"
+	typescontainer "github.com/moby/moby/api/types/container"
 	"gopkg.in/yaml.v3"
 )
 
@@ -92,7 +93,13 @@ type ImageStatusResponse struct {
 	Progress io.ReadCloser
 }
 
-// NetworkMode is a type alias for docker Network mode.
+// ContainerPathStat is a type alias for container path stat result.
+type ContainerPathStat = types.ContainerPathStat
+
+// CopyToContainerOptions is a type alias for container copy to container options.
+type CopyToContainerOptions = types.CopyToContainerOptions
+
+// NetworkMode is a type alias for container Network mode.
 type NetworkMode = typescontainer.NetworkMode
 
 const (
@@ -101,11 +108,13 @@ const (
 
 // ContainerCreateOptions stores options for creating a new container.
 type ContainerCreateOptions struct {
+	Hostname      string
 	ContainerName string
 	Image         string
 	Cmd           []string
 	WorkingDir    string
-	Binds         map[string]string
+	Binds         []string
+	Volumes       map[string]struct{}
 	NetworkMode   NetworkMode
 	ExtraHosts    []string
 	AutoRemove    bool

@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	osuser "os/user"
+	"path/filepath"
 	"runtime"
 	"strings"
 
+	"github.com/moby/moby/pkg/archive"
 	"github.com/moby/moby/pkg/jsonmessage"
 	"github.com/moby/moby/pkg/namesgenerator"
 	"github.com/moby/sys/signal"
@@ -16,6 +19,7 @@ import (
 
 	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/driver"
+	"github.com/launchrctl/launchr/pkg/jsonschema"
 	"github.com/launchrctl/launchr/pkg/log"
 	"github.com/launchrctl/launchr/pkg/types"
 )
@@ -23,6 +27,9 @@ import (
 const (
 	containerHostMount   = "/host"
 	containerActionMount = "/action"
+
+	// Environment specific flags.
+	containerFlagUseVolumeWD = "use-volume-wd"
 )
 
 type containerEnv struct {
@@ -30,15 +37,18 @@ type containerEnv struct {
 	imgres  ChainImageBuildResolver
 	dtype   driver.Type
 	nameprv ContainerNameProvider
+
+	// Runtime flags
+	useVolWD bool
 }
 
-// ContainerNameProvider provides ability to generate random container name
+// ContainerNameProvider provides an ability to generate a random container name
 type ContainerNameProvider struct {
 	Prefix       string
 	RandomSuffix bool
 }
 
-// Get generates new container name
+// Get generates a new container name
 func (p ContainerNameProvider) Get(name string) string {
 	var rpl = strings.NewReplacer("-", "_", ":", "_", ".", "_")
 	suffix := ""
@@ -57,6 +67,25 @@ func NewDockerEnvironment() RunEnvironment {
 // NewContainerEnvironment creates a new action container run environment.
 func NewContainerEnvironment(t driver.Type) RunEnvironment {
 	return &containerEnv{dtype: t, nameprv: ContainerNameProvider{Prefix: "launchr_", RandomSuffix: true}}
+}
+
+func (c *containerEnv) FlagsDefinition() OptionsList {
+	return OptionsList{
+		&Option{
+			Name:        containerFlagUseVolumeWD,
+			Title:       "Use volume as a WD",
+			Description: "Copy the working directory to a container volume and not bind local paths. Usually used with remote environments.",
+			Type:        jsonschema.Boolean,
+			Default:     false,
+		},
+	}
+}
+
+func (c *containerEnv) UseFlags(flags TypeOpts) error {
+	if v, ok := flags[containerFlagUseVolumeWD]; ok {
+		c.useVolWD = v.(bool)
+	}
+	return nil
 }
 
 func (c *containerEnv) AddImageBuildResolver(r ImageBuildResolver)       { c.imgres = append(c.imgres, r) }
@@ -105,6 +134,19 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	}
 	if cid == "" {
 		return errors.New("error on creating a container")
+	}
+	// Copy working dirs to the container.
+	if c.useVolWD {
+		// @todo test somehow.
+		cli.Println(`Flag "--%s" is set. Copying the working directory inside the container.`, containerFlagUseVolumeWD)
+		err = c.copyDirToContainer(ctx, cid, ".", containerHostMount)
+		if err != nil {
+			return err
+		}
+		err = c.copyDirToContainer(ctx, cid, a.Dir(), containerActionMount)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Check if TTY was requested, but not supported.
@@ -254,32 +296,105 @@ func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *typ
 
 	// Create a container
 	actConf := a.ActionDef()
-	cid, err := c.driver.ContainerCreate(ctx, types.ContainerCreateOptions{
+	createOpts := types.ContainerCreateOptions{
 		ContainerName: opts.ContainerName,
 		Image:         actConf.Image,
 		Cmd:           actConf.Command,
 		WorkingDir:    containerHostMount,
-		Binds: map[string]string{
-			".":     containerHostMount,
-			a.Dir(): containerActionMount,
-		},
-		NetworkMode:  types.NetworkModeHost,
-		ExtraHosts:   opts.ExtraHosts,
-		AutoRemove:   opts.AutoRemove,
-		OpenStdin:    opts.OpenStdin,
-		StdinOnce:    opts.StdinOnce,
-		AttachStdin:  opts.AttachStdin,
-		AttachStdout: opts.AttachStdout,
-		AttachStderr: opts.AttachStderr,
-		Tty:          opts.Tty,
-		Env:          opts.Env,
-		User:         opts.User,
-	})
+		NetworkMode:   types.NetworkModeHost,
+		ExtraHosts:    opts.ExtraHosts,
+		AutoRemove:    opts.AutoRemove,
+		OpenStdin:     opts.OpenStdin,
+		StdinOnce:     opts.StdinOnce,
+		AttachStdin:   opts.AttachStdin,
+		AttachStdout:  opts.AttachStdout,
+		AttachStderr:  opts.AttachStderr,
+		Tty:           opts.Tty,
+		Env:           opts.Env,
+		User:          opts.User,
+	}
+
+	if c.useVolWD {
+		// Use anonymous volumes to be removed after finish.
+		createOpts.Volumes = map[string]struct{}{
+			containerHostMount:   {},
+			containerActionMount: {},
+		}
+	} else {
+		createOpts.Binds = []string{
+			absPath(".") + ":" + containerHostMount,
+			absPath(a.Dir()) + ":" + containerActionMount,
+		}
+	}
+	cid, err := c.driver.ContainerCreate(ctx, createOpts)
 	if err != nil {
 		return "", err
 	}
 
 	return cid, nil
+}
+
+func absPath(src string) string {
+	abs, err := filepath.Abs(filepath.Clean(src))
+	if err != nil {
+		panic(err)
+	}
+	return abs
+}
+
+// copyDirToContainer copies dir content to a container.
+func (c *containerEnv) copyDirToContainer(ctx context.Context, cid, srcPath, dstPath string) error {
+	return filepath.WalkDir(srcPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == srcPath {
+			return nil
+		}
+		err = c.copyToContainer(ctx, cid, path, dstPath)
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return fs.SkipDir
+		}
+		return nil
+	})
+}
+
+// copyToContainer copies dir/file to a container. Directory will be copied as a subdirectory.
+func (c *containerEnv) copyToContainer(ctx context.Context, cid, srcPath, dstPath string) error {
+	// Prepare destination copy info by stat-ing the container path.
+	dstInfo := archive.CopyInfo{Path: dstPath}
+	dstStat, err := c.driver.ContainerStatPath(ctx, cid, dstPath)
+	if err != nil {
+		return err
+	}
+	dstInfo.Exists, dstInfo.IsDir = true, dstStat.Mode.IsDir()
+
+	// Prepare source copy info.
+	srcInfo, err := archive.CopyInfoSourcePath(absPath(srcPath), false)
+	if err != nil {
+		return err
+	}
+
+	srcArchive, err := archive.TarResource(srcInfo)
+	if err != nil {
+		return err
+	}
+	defer srcArchive.Close()
+
+	dstDir, preparedArchive, err := archive.PrepareArchiveCopy(srcArchive, srcInfo, dstInfo)
+	if err != nil {
+		return err
+	}
+	defer preparedArchive.Close()
+
+	options := types.CopyToContainerOptions{
+		AllowOverwriteDirWithFile: false,
+		CopyUIDGID:                false,
+	}
+	return c.driver.CopyToContainer(ctx, cid, dstDir, preparedArchive, options)
 }
 
 func (c *containerEnv) containerWait(ctx context.Context, cid string, opts *types.ContainerCreateOptions) <-chan int {

@@ -227,9 +227,9 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 	}
 
 	eqCfg := *runCfg
-	eqCfg.Binds = map[string]string{
-		".":     containerHostMount,
-		a.Dir(): containerActionMount,
+	eqCfg.Binds = []string{
+		absPath(".") + ":" + containerHostMount,
+		absPath(a.Dir()) + ":" + containerActionMount,
 	}
 	eqCfg.WorkingDir = containerHostMount
 	eqCfg.Cmd = act.Command
@@ -246,11 +246,29 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 		ContainerCreate(ctx, gomock.Eq(eqCfg)).
 		Return(expCid, nil)
 
-	// Image ensure fail.
 	cid, err := r.containerCreate(ctx, a, runCfg)
 	assert.NoError(err)
 	assert.Equal(expCid, cid)
 
+	// Create with anonymous volumes.
+	r.useVolWD = true
+	eqCfg.Binds = nil
+	eqCfg.Volumes = map[string]struct{}{
+		containerHostMount:   {},
+		containerActionMount: {},
+	}
+	d.EXPECT().
+		ImageEnsure(ctx, types.ImageOptions{Name: act.Image}).
+		Return(&types.ImageStatusResponse{Status: types.ImageExists}, nil)
+	d.EXPECT().
+		ContainerCreate(ctx, gomock.Eq(eqCfg)).
+		Return(expCid, nil)
+
+	cid, err = r.containerCreate(ctx, a, runCfg)
+	assert.NoError(err)
+	assert.Equal(expCid, cid)
+
+	// Image ensure fail.
 	errImg := fmt.Errorf("error on image ensure")
 	d.EXPECT().
 		ImageEnsure(ctx, types.ImageOptions{Name: act.Image}).
@@ -407,6 +425,14 @@ func Test_ContainerExec_containerAttach(t *testing.T) {
 	assert.Nil(errCh)
 }
 
+type mockCallInfo struct {
+	fn       string
+	minTimes int
+	maxTimes int
+	args     []interface{}
+	ret      []interface{}
+}
+
 func Test_ContainerExec(t *testing.T) {
 	t.Parallel()
 
@@ -419,11 +445,10 @@ func Test_ContainerExec(t *testing.T) {
 	nprv := ContainerNameProvider{Prefix: containerNamePrefix}
 
 	type testCase struct {
-		name     string
-		prepFn   func(resCh chan types.ContainerWaitResponse, errCh chan error)
-		stepArgs [][]interface{}
-		stepRet  [][]interface{}
-		expErr   error
+		name   string
+		prepFn func(resCh chan types.ContainerWaitResponse, errCh chan error)
+		steps  []mockCallInfo
+		expErr error
 	}
 
 	opts := types.ContainerCreateOptions{
@@ -432,9 +457,9 @@ func Test_ContainerExec(t *testing.T) {
 		Image:         actConf.Image,
 		NetworkMode:   types.NetworkModeHost,
 		ExtraHosts:    actConf.ExtraHosts,
-		Binds: map[string]string{
-			".":       containerHostMount,
-			act.Dir(): containerActionMount,
+		Binds: []string{
+			absPath(".") + ":" + containerHostMount,
+			absPath(act.Dir()) + ":" + containerActionMount,
 		},
 		WorkingDir:   containerHostMount,
 		AutoRemove:   true,
@@ -459,63 +484,86 @@ func Test_ContainerExec(t *testing.T) {
 	errAny := errors.New("any")
 	errAttach := errors.New("attach error")
 	errStart := errors.New("start error")
+
+	successSteps := []mockCallInfo{
+		{
+			"ImageEnsure",
+			1, 1,
+			[]interface{}{eqImageOpts{types.ImageOptions{Name: actConf.Image}}},
+			[]interface{}{imgBuild, nil},
+		},
+		{
+			"ContainerCreate",
+			1, 1,
+			[]interface{}{opts},
+			[]interface{}{cid, nil},
+		},
+		{
+			"ContainerAttach",
+			1, 1,
+			[]interface{}{cid, attOpts},
+			[]interface{}{cio, nil},
+		},
+		{
+			"ContainerWait",
+			1, 1,
+			[]interface{}{cid, types.ContainerWaitOptions{Condition: types.WaitConditionRemoved}},
+			[]interface{}{},
+		},
+		{
+			"ContainerStart",
+			1, 1,
+			[]interface{}{cid, types.ContainerStartOptions{}},
+			[]interface{}{nil},
+		},
+	}
+
 	tts := []testCase{
 		{
 			"successful run",
 			func(resCh chan types.ContainerWaitResponse, errCh chan error) {
 				resCh <- types.ContainerWaitResponse{StatusCode: 0}
 			},
-			[][]interface{}{
-				{eqImageOpts{types.ImageOptions{Name: actConf.Image}}}, // ImageEnsure
-				{opts},         // ContainerCreate
-				{cid, attOpts}, // ContainerAttach
-				{cid, types.ContainerWaitOptions{Condition: types.WaitConditionRemoved}}, // ContainerWait
-				{cid, types.ContainerStartOptions{}},                                     // ContainerStart
-			},
-			[][]interface{}{
-				{imgBuild, nil}, // ImageEnsure
-				{cid, nil},      // ContainerCreate
-				{cio, nil},      // ContainerAttach
-				{},              // ContainerWait
-				{nil},           // ContainerStart
-			},
+			successSteps,
 			nil,
 		},
 		{
 			"image ensure error",
 			nil,
-			[][]interface{}{
-				{gomock.Any()}, // ImageEnsure
-			},
-			[][]interface{}{
-				{imgBuild, errImgEns}, // ImageEnsure
+			[]mockCallInfo{
+				{
+					"ImageEnsure",
+					1, 1,
+					[]interface{}{gomock.Any()},
+					[]interface{}{imgBuild, errImgEns},
+				},
 			},
 			errImgEns,
 		},
 		{
 			"container create error",
 			nil,
-			[][]interface{}{
-				{gomock.Any()}, // ImageEnsure
-				{gomock.Any()}, // ContainerCreate
-			},
-			[][]interface{}{
-				{imgBuild, nil}, // ImageEnsure
-				{"", errCreate}, // ContainerCreate
-			},
+			append(
+				copySlice(successSteps[0:1]),
+				mockCallInfo{
+					"ContainerCreate",
+					1, 1,
+					[]interface{}{gomock.Any()},
+					[]interface{}{"", errCreate},
+				}),
 			errCreate,
 		},
 		{
 			"container create error - empty container id",
 			nil,
-			[][]interface{}{
-				{gomock.Any()}, // ImageEnsure
-				{gomock.Any()}, // ContainerCreate
-			},
-			[][]interface{}{
-				{imgBuild, nil}, // ImageEnsure
-				{"", nil},       // ContainerCreate
-			},
+			append(
+				copySlice(successSteps[0:1]),
+				mockCallInfo{
+					"ContainerCreate",
+					1, 1,
+					[]interface{}{gomock.Any()},
+					[]interface{}{"", nil},
+				}),
 			errAny,
 		},
 		{
@@ -523,16 +571,15 @@ func Test_ContainerExec(t *testing.T) {
 			func(resCh chan types.ContainerWaitResponse, errCh chan error) {
 				resCh <- types.ContainerWaitResponse{StatusCode: 0}
 			},
-			[][]interface{}{
-				{eqImageOpts{types.ImageOptions{Name: actConf.Image}}}, // ImageEnsure
-				{gomock.Any()},      // ContainerCreate
-				{cid, gomock.Any()}, // ContainerAttach
-			},
-			[][]interface{}{
-				{imgBuild, nil},  // ImageEnsure
-				{cid, nil},       // ContainerCreate
-				{cio, errAttach}, // ContainerAttach
-			},
+			append(
+				copySlice(successSteps[0:2]),
+				mockCallInfo{
+					"ContainerAttach",
+					1, 1,
+					[]interface{}{cid, gomock.Any()},
+					[]interface{}{cio, errAttach},
+				},
+			),
 			errAttach,
 		},
 		{
@@ -540,20 +587,15 @@ func Test_ContainerExec(t *testing.T) {
 			func(resCh chan types.ContainerWaitResponse, errCh chan error) {
 				resCh <- types.ContainerWaitResponse{StatusCode: 0}
 			},
-			[][]interface{}{
-				{eqImageOpts{types.ImageOptions{Name: actConf.Image}}}, // ImageEnsure
-				{gomock.Any()},      // ContainerCreate
-				{cid, gomock.Any()}, // ContainerAttach
-				{cid, gomock.Any()}, // ContainerWait
-				{cid, gomock.Any()}, // ContainerStart
-			},
-			[][]interface{}{
-				{imgBuild, nil}, // ImageEnsure
-				{cid, nil},      // ContainerCreate
-				{cio, nil},      // ContainerAttach
-				{},              // ContainerWait
-				{errStart},      // ContainerStart
-			},
+			append(
+				copySlice(successSteps[0:4]),
+				mockCallInfo{
+					"ContainerStart",
+					1, 1,
+					[]interface{}{cid, gomock.Any()},
+					[]interface{}{errStart},
+				},
+			),
 			errStart,
 		},
 		{
@@ -561,20 +603,15 @@ func Test_ContainerExec(t *testing.T) {
 			func(resCh chan types.ContainerWaitResponse, errCh chan error) {
 				resCh <- types.ContainerWaitResponse{StatusCode: 2}
 			},
-			[][]interface{}{
-				{eqImageOpts{types.ImageOptions{Name: actConf.Image}}}, // ImageEnsure
-				{gomock.Any()},      // ContainerCreate
-				{cid, gomock.Any()}, // ContainerAttach
-				{cid, gomock.Any()}, // ContainerWait
-				{cid, gomock.Any()}, // ContainerStart
-			},
-			[][]interface{}{
-				{imgBuild, nil}, // ImageEnsure
-				{cid, nil},      // ContainerCreate
-				{cio, nil},      // ContainerAttach
-				{},              // ContainerWait
-				{nil},           // ContainerStart
-			},
+			append(
+				copySlice(successSteps[0:4]),
+				mockCallInfo{
+					"ContainerStart",
+					1, 1,
+					[]interface{}{cid, gomock.Any()},
+					[]interface{}{nil},
+				},
+			),
 			nil,
 		},
 	}
@@ -592,34 +629,11 @@ func Test_ContainerExec(t *testing.T) {
 			defer r.Close()
 			var prev *gomock.Call
 			d.EXPECT().ContainerList(gomock.Any(), gomock.Any()).Return(nil) // @todo test different container names
-			for i, args := range tt.stepArgs {
-				ret := tt.stepRet[i]
-				switch i {
-				case 0:
-					prev = d.EXPECT().
-						ImageEnsure(gomock.Any(), args[0]).
-						Return(ret...)
-				case 1:
-					prev = d.EXPECT().
-						ContainerCreate(gomock.Any(), args[0]).
-						Return(ret...).
-						After(prev)
-				case 2:
-					prev = d.EXPECT().
-						ContainerAttach(gomock.Any(), args[0], args[1]).
-						Return(ret...).
-						After(prev)
-				case 3:
-					prev = d.EXPECT().
-						ContainerWait(gomock.Any(), args[0], args[1]).
-						Return(resCh, errCh).
-						After(prev)
-				case 4:
-					prev = d.EXPECT().
-						ContainerStart(gomock.Any(), args[0], args[1]).
-						Return(ret...).
-						After(prev)
+			for _, step := range tt.steps {
+				if step.fn == "ContainerWait" { //nolint:goconst
+					step.ret = []interface{}{resCh, errCh}
 				}
+				prev = callContainerDriverMockFn(d, step, prev)
 			}
 			if tt.prepFn != nil {
 				tt.prepFn(resCh, errCh)
@@ -633,6 +647,58 @@ func Test_ContainerExec(t *testing.T) {
 			}
 		})
 	}
+}
+
+func copySlice[T any](arr []T) []T {
+	c := make([]T, len(arr))
+	copy(c, arr)
+	return c
+}
+
+func callContainerDriverMockFn(d *mockdriver.MockContainerRunner, step mockCallInfo, prev *gomock.Call) *gomock.Call {
+	var call *gomock.Call
+	switch step.fn {
+	case "ImageEnsure":
+		call = d.EXPECT().
+			ImageEnsure(gomock.Any(), step.args[0]).
+			Return(step.ret...)
+	case "ContainerCreate":
+		call = d.EXPECT().
+			ContainerCreate(gomock.Any(), step.args[0]).
+			Return(step.ret...)
+	case "ContainerAttach":
+		call = d.EXPECT().
+			ContainerAttach(gomock.Any(), step.args[0], step.args[1]).
+			Return(step.ret...)
+	case "ContainerWait":
+		call = d.EXPECT().
+			ContainerWait(gomock.Any(), step.args[0], step.args[1]).
+			Return(step.ret...)
+	case "ContainerStart":
+		call = d.EXPECT().
+			ContainerStart(gomock.Any(), step.args[0], step.args[1]).
+			Return(step.ret...)
+	}
+	if step.minTimes > 1 {
+		call.MinTimes(step.minTimes)
+	}
+	if step.maxTimes > 1 {
+		call.MaxTimes(step.maxTimes)
+	}
+	if step.maxTimes < 0 {
+		call.AnyTimes()
+	}
+
+	switch step.minTimes {
+	case -1:
+		call.AnyTimes()
+	default:
+
+	}
+	if call != nil && prev != nil {
+		call.After(prev)
+	}
+	return call
 }
 
 type fsmy map[string]string

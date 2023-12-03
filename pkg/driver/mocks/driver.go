@@ -6,11 +6,13 @@ package mocks
 
 import (
 	context "context"
+	io "io"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
 	driver "github.com/launchrctl/launchr/pkg/driver"
 	types "github.com/launchrctl/launchr/pkg/types"
+	types0 "github.com/moby/moby/api/types"
 )
 
 // MockContainerRunner is a mock of ContainerRunner interface.
@@ -164,6 +166,21 @@ func (mr *MockContainerRunnerMockRecorder) ContainerStart(arg0, arg1, arg2 inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerStart", reflect.TypeOf((*MockContainerRunner)(nil).ContainerStart), arg0, arg1, arg2)
 }
 
+// ContainerStatPath mocks base method.
+func (m *MockContainerRunner) ContainerStatPath(arg0 context.Context, arg1, arg2 string) (types0.ContainerPathStat, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ContainerStatPath", arg0, arg1, arg2)
+	ret0, _ := ret[0].(types0.ContainerPathStat)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ContainerStatPath indicates an expected call of ContainerStatPath.
+func (mr *MockContainerRunnerMockRecorder) ContainerStatPath(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerStatPath", reflect.TypeOf((*MockContainerRunner)(nil).ContainerStatPath), arg0, arg1, arg2)
+}
+
 // ContainerStop mocks base method.
 func (m *MockContainerRunner) ContainerStop(arg0 context.Context, arg1 string) error {
 	m.ctrl.T.Helper()
@@ -191,6 +208,20 @@ func (m *MockContainerRunner) ContainerWait(arg0 context.Context, arg1 string, a
 func (mr *MockContainerRunnerMockRecorder) ContainerWait(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerWait", reflect.TypeOf((*MockContainerRunner)(nil).ContainerWait), arg0, arg1, arg2)
+}
+
+// CopyToContainer mocks base method.
+func (m *MockContainerRunner) CopyToContainer(arg0 context.Context, arg1, arg2 string, arg3 io.Reader, arg4 types0.CopyToContainerOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CopyToContainer", arg0, arg1, arg2, arg3, arg4)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CopyToContainer indicates an expected call of CopyToContainer.
+func (mr *MockContainerRunnerMockRecorder) CopyToContainer(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyToContainer", reflect.TypeOf((*MockContainerRunner)(nil).CopyToContainer), arg0, arg1, arg2, arg3, arg4)
 }
 
 // ImageEnsure mocks base method.

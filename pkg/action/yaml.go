@@ -277,6 +277,7 @@ func (l *OptionsList) UnmarshalYAML(nodeList *yaml.Node) (err error) {
 // Option stores command options declaration.
 type Option struct {
 	Name        string          `yaml:"name"`
+	Shorthand   string          `yaml:"shorthand"` // @todo test definition, validate, catch panic if overlay, add to readme.
 	Title       string          `yaml:"title"`
 	Description string          `yaml:"description"`
 	Type        jsonschema.Type `yaml:"type"`

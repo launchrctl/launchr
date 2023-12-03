@@ -5,6 +5,7 @@ package driver
 
 import (
 	"context"
+	"io"
 
 	"github.com/launchrctl/launchr/pkg/types"
 )
@@ -12,6 +13,8 @@ import (
 // ContainerRunner defines common interface for container environments.
 type ContainerRunner interface {
 	ImageEnsure(ctx context.Context, opts types.ImageOptions) (*types.ImageStatusResponse, error)
+	CopyToContainer(ctx context.Context, cid string, path string, content io.Reader, opts types.CopyToContainerOptions) error
+	ContainerStatPath(ctx context.Context, cid string, path string) (types.ContainerPathStat, error)
 	ContainerList(ctx context.Context, opts types.ContainerListOptions) []types.ContainerListResult
 	ContainerCreate(ctx context.Context, opts types.ContainerCreateOptions) (string, error)
 	ContainerStart(ctx context.Context, cid string, opts types.ContainerStartOptions) error

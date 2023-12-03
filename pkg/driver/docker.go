@@ -3,7 +3,7 @@ package driver
 import (
 	"context"
 	"errors"
-	"path/filepath"
+	"io"
 
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -86,27 +86,27 @@ func (d *dockerDriver) ImageEnsure(ctx context.Context, image types.ImageOptions
 	return &types.ImageStatusResponse{Status: types.ImagePull, Progress: reader}, nil
 }
 
+func (d *dockerDriver) CopyToContainer(ctx context.Context, cid string, path string, content io.Reader, opts types.CopyToContainerOptions) error {
+	return d.cli.CopyToContainer(ctx, cid, path, content, dockertypes.CopyToContainerOptions(opts))
+}
+
+func (d *dockerDriver) ContainerStatPath(ctx context.Context, cid string, path string) (types.ContainerPathStat, error) {
+	res, err := d.cli.ContainerStatPath(ctx, cid, path)
+	return types.ContainerPathStat(res), err
+}
+
 func (d *dockerDriver) ContainerCreate(ctx context.Context, opts types.ContainerCreateOptions) (string, error) {
 	hostCfg := &container.HostConfig{
 		AutoRemove:  opts.AutoRemove,
 		ExtraHosts:  opts.ExtraHosts,
-		NetworkMode: opts.NetworkMode,
-	}
-	if len(opts.Binds) > 0 {
-		binds := make([]string, 0, len(opts.Binds))
-		for s, t := range opts.Binds {
-			abs, err := filepath.Abs(filepath.Clean(s))
-			if err != nil {
-				return "", err
-			}
-			binds = append(binds, abs+":"+t)
-		}
-		hostCfg.Binds = binds
+		NetworkMode: container.NetworkMode(opts.NetworkMode),
+		Binds:       opts.Binds,
 	}
 
 	resp, err := d.cli.ContainerCreate(
 		ctx,
 		&container.Config{
+			Hostname:     opts.Hostname,
 			Image:        opts.Image,
 			Cmd:          opts.Cmd,
 			WorkingDir:   opts.WorkingDir,
@@ -118,6 +118,7 @@ func (d *dockerDriver) ContainerCreate(ctx context.Context, opts types.Container
 			Tty:          opts.Tty,
 			Env:          opts.Env,
 			User:         opts.User,
+			Volumes:      opts.Volumes,
 		},
 		hostCfg,
 		nil, nil, opts.ContainerName,
