@@ -62,6 +62,12 @@ type ImageOptions struct {
 	Build *BuildDefinition
 }
 
+// ImageRemoveOptions stores options for removing an image.
+type ImageRemoveOptions struct {
+	Force         bool
+	PruneChildren bool
+}
+
 // ImageStatus defines image status on local machine.
 type ImageStatus int64
 
@@ -70,6 +76,7 @@ const (
 	ImageUnexpectedError                    // ImageUnexpectedError - image can't be pulled or retrieved.
 	ImagePull                               // ImagePull - image is being pulled from the registry.
 	ImageBuild                              // ImageBuild - image is being built.
+	ImageRemoved                            // ImageRemoved - image was removed
 )
 
 // ContainerListOptions stores options to request container list.
@@ -88,6 +95,20 @@ type ContainerListResult struct {
 type ImageStatusResponse struct {
 	Status   ImageStatus
 	Progress io.ReadCloser
+}
+
+// ImageRemoveResponse stores response when removing the image.
+type ImageRemoveResponse struct {
+	Status ImageStatus
+	Items  []ImageRemoveResponseItem
+}
+
+// ImageRemoveResponseItem stores responses' name of deleted image.
+type ImageRemoveResponseItem struct {
+	// The image ID of an image that was deleted
+	Deleted string
+	// The image ID of an image that was untagged
+	Untagged string
 }
 
 // ContainerPathStat is a type alias for container path stat result.

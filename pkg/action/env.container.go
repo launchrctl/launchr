@@ -29,6 +29,7 @@ const (
 
 	// Environment specific flags.
 	containerFlagUseVolumeWD = "use-volume-wd"
+	containerFlagRemoveImage = "remove-image"
 )
 
 type containerEnv struct {
@@ -38,7 +39,8 @@ type containerEnv struct {
 	nameprv ContainerNameProvider
 
 	// Runtime flags
-	useVolWD bool
+	useVolWD  bool
+	removeImg bool
 }
 
 // ContainerNameProvider provides an ability to generate a random container name
@@ -77,6 +79,13 @@ func (c *containerEnv) FlagsDefinition() OptionsList {
 			Type:        jsonschema.Boolean,
 			Default:     false,
 		},
+		&Option{
+			Name:        containerFlagRemoveImage,
+			Title:       "Remove Image",
+			Description: "Remove image after execution of action",
+			Type:        jsonschema.Boolean,
+			Default:     false,
+		},
 	}
 }
 
@@ -84,6 +93,11 @@ func (c *containerEnv) UseFlags(flags TypeOpts) error {
 	if v, ok := flags[containerFlagUseVolumeWD]; ok {
 		c.useVolWD = v.(bool)
 	}
+
+	if v, ok := flags[containerFlagRemoveImage]; ok {
+		c.removeImg = v.(bool)
+	}
+
 	return nil
 }
 
@@ -241,8 +255,26 @@ func getCurrentUser() string {
 	return curuser
 }
 
-func (c *containerEnv) Close() error {
+func (c *containerEnv) Close(ctx context.Context, a *Action) error {
+	if c.removeImg {
+		c.ImageRemove(ctx, a)
+	}
+
 	return c.driver.Close()
+}
+
+func (c *containerEnv) ImageRemove(ctx context.Context, a *Action) {
+	resp, err := c.driver.ImageRemove(ctx, a.ActionDef().Image, types.ImageRemoveOptions{
+		Force:         false,
+		PruneChildren: false,
+	})
+
+	if err != nil {
+		cli.Println(err.Error())
+	} else if resp != nil && resp.Status == types.ImageRemoved {
+		msg := fmt.Sprintf("Image %q was successfuly removed", a.ActionDef().Image)
+		cli.Println(msg)
+	}
 }
 
 func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {

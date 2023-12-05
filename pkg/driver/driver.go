@@ -13,6 +13,7 @@ import (
 // ContainerRunner defines common interface for container environments.
 type ContainerRunner interface {
 	ImageEnsure(ctx context.Context, opts types.ImageOptions) (*types.ImageStatusResponse, error)
+	ImageRemove(ctx context.Context, image string, opts types.ImageRemoveOptions) (*types.ImageRemoveResponse, error)
 	CopyToContainer(ctx context.Context, cid string, path string, content io.Reader, opts types.CopyToContainerOptions) error
 	CopyFromContainer(ctx context.Context, cid, srcPath string) (io.ReadCloser, types.ContainerPathStat, error)
 	ContainerStatPath(ctx context.Context, cid string, path string) (types.ContainerPathStat, error)
