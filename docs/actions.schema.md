@@ -136,55 +136,9 @@ Command can be written in 2 forms - as a string and as an array:
 ```
 
 It is recommended to use array form for multiple arguments.
-
-## Build image
-
-Images may be built in place. `build` directive describes the working directory on build.  
-Image name is used to tag the built image.
-
-Short declaration:
-```yaml
-...
-  image: my/image:version
-  build: ./ # Build working directory
-...
-```
-
-Long declaration:
-```yaml
-...
-  image: my/image:version
-  build:
-    context: ./
-    buildfile: test.Dockerfile
-    args:
-      arg1: val1
-      arg2: val2
-    tags:
-      - alt/tag:version
-      - alt/tag:version2
-...
-```
-
-1. `context` - build working directory
-2. `buildfile` - build file relative to context directory, can't be outside of the `context` directory.
-3. `args` - arguments passed to the `buildfile`
-4. `tags` - tags for a build image
-
-## Extra hosts
-
-Extra hosts may be passed to be resolved inside the action environment:
-```yaml
-...
-  extra_hosts:
-    - "host.docker.internal:host-gateway"
-    - "example.com:127.0.0.1"
-...
-```
-
 ## Environment variables
 
-To pass environment variables to the execution environment:
+To pass environment variables to the execution environment, add `env` section (outside of `build section`):
 ```yaml
   env:
     - ENV1=val1
@@ -197,4 +151,126 @@ Or in map style:
     ENV1: val1
     ENV2: $ENV2
     ENV3: ${ENV3}
+```
+For instance:
+```yaml
+action:
+  title: Test
+  description: Test
+  image: test:latest
+  env:
+    ACTION_ENV: some_value
+  build:
+    context: ./
+    args:
+      USER_ID: {{ .current_uid }}
+      GROUP_ID: {{ .current_gid }}
+    tags:
+      - test:latest
+  command:
+    - sh
+    - /action/main.sh
+```
+Renders as:
+```
++ echo 'ACTION_ENV=some_value'
+ACTION_ENV=some_value
+```
+Or
+```yaml
+action:
+  title: Test
+  description: Test
+  image: test:latest
+  env:
+    ACTION_ENV: ${HOST_ENV}
+  build:
+    context: ./
+    args:
+      USER_ID: {{ .current_uid }}
+      GROUP_ID: {{ .current_gid }}
+    tags:
+      - test:latest
+  command:
+    - sh
+    - /action/main.sh
+```
+Renders as:
+```
++ echo 'ACTION_ENV=var_value_from_host'
+ACTION_ENV=var_value_from_host
+```
+
+## Extra hosts
+
+Extra hosts may be passed to be resolved inside the action environment:
+```yaml
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+    - "example.com:127.0.0.1"
+```
+Renders `/etc/hosts` as:
+```
++ cat /etc/hosts
+...
+172.17.0.1	host.docker.internal
+127.0.0.1	example.com
+```
+
+## Build image
+
+Images may be built in place. `build` directive describes the working directory on build.  
+Image name is used to tag the built image.
+
+Short declaration:
+```yaml
+  image: my/image:version
+  build: ./ # Build working directory
+...
+```
+
+Long declaration:
+```yaml
+  image: my/image:version
+  build:
+    context: ./
+    buildfile: test.Dockerfile
+    tags:
+      - alt/tag:version
+      - alt/tag:version2
+    args:
+      arg1: val1
+      arg2: val2
+...
+```
+
+1. `context` - build working directory
+2. `buildfile` - build file relative to context directory, can't be outside of the `context` directory.
+3. `tags` - tags for a build image
+4. `args` - arguments passed to the `buildfile` can be used in Dockerfile, such as:
+```yaml
+  build:
+    context: ./
+    tags:
+      - test:latest
+    args:
+      USER_ID: {{ .current_uid }}
+      GROUP_ID: {{ .current_gid }}
+      USER_NAME: plasma
+```
+Can be used as:
+```
+FROM alpine:latest
+ARG USER_ID
+ARG USER_NAME
+ARG GROUP_ID
+RUN adduser -D -u ${USER_ID} -g ${GROUP_ID} ${USER_NAME} || true
+USER $USER_NAME
+```
+And renders as:
+```
++ whoami
+plasma
++ id
+uid=1000(plasma) gid=1000(plasma) groups=1000(plasma)
 ```
