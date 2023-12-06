@@ -1,0 +1,15 @@
+action:
+  title: buildargs
+  description: Test passing args to Dockerfile
+  image: test:latest
+  build:
+    context: ./
+    tags:
+      - test:latest
+    args:
+      USER_ID: {{ .current_uid }}
+      GROUP_ID: {{ .current_gid }}
+      USER_NAME: plasma
+  command:
+    - sh
+    - /action/main.sh

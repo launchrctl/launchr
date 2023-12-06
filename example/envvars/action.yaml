@@ -1,0 +1,14 @@
+action:
+  title: envvars
+  description: Test passing static or dynamic environment variables to container
+  image: test:latest
+  env:
+    ACTION_ENV: some_value # Static value
+    #ACTION_ENV: ${HOST_ENV} # Dynamic value comming from host env vars
+  build:
+    context: ./
+    tags:
+      - test:latest
+  command:
+    - sh
+    - /action/main.sh
