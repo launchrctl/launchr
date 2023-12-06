@@ -153,6 +153,6 @@ func (a *Action) Execute(ctx context.Context) error {
 	if a.env == nil {
 		panic("run environment is not set, call SetRunEnvironment first")
 	}
-	defer a.env.Close(ctx, a)
+	defer a.env.Close()
 	return a.env.Execute(ctx, a)
 }

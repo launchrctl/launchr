@@ -191,11 +191,9 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			assert, ctrl, d, r := prepareContainerTestSuite(t)
-			ctx := context.Background()
-
 			defer ctrl.Finish()
-			defer r.Close(ctx, nil)
-
+			defer r.Close()
+			ctx := context.Background()
 			act := testContainerAction(tt.action)
 			act.input = Input{
 				IO: cli.NoopStreams(),
@@ -288,10 +286,8 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 func Test_ContainerExec_containerCreate(t *testing.T) {
 	t.Parallel()
 	assert, ctrl, d, r := prepareContainerTestSuite(t)
-	ctx := context.Background()
-
 	defer ctrl.Finish()
-	defer r.Close(ctx, nil)
+	defer r.Close()
 
 	a := testContainerAction(nil)
 	assert.NoError(a.EnsureLoaded())
@@ -322,6 +318,8 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 	eqCfg.WorkingDir = containerHostMount
 	eqCfg.Cmd = act.Command
 	eqCfg.Image = act.Image
+
+	ctx := context.Background()
 
 	// Normal create.
 	expCid := "container_id"
@@ -380,10 +378,8 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 func Test_ContainerExec_containerWait(t *testing.T) {
 	t.Parallel()
 	assert, ctrl, d, r := prepareContainerTestSuite(t)
-	ctx := context.Background()
-
 	defer ctrl.Finish()
-	defer r.Close(ctx, nil)
+	defer r.Close()
 
 	type testCase struct {
 		name      string
@@ -476,11 +472,10 @@ func Test_ContainerExec_containerAttach(t *testing.T) {
 	t.Parallel()
 	assert, ctrl, d, r := prepareContainerTestSuite(t)
 	streams := cli.NoopStreams()
-	ctx := context.Background()
-
 	defer ctrl.Finish()
-	defer r.Close(ctx, nil)
+	defer r.Close()
 
+	ctx := context.Background()
 	cid := ""
 	cio := testContainerIO()
 	opts := &types.ContainerCreateOptions{
@@ -530,6 +525,7 @@ func Test_ContainerExec(t *testing.T) {
 	assert.NoError(t, act.EnsureLoaded())
 	actConf := act.ActionDef()
 	imgBuild := &types.ImageStatusResponse{Status: types.ImageExists}
+	imgRemoved := &types.ImageRemoveResponse{Status: types.ImageRemoved}
 	cio := testContainerIO()
 	nprv := ContainerNameProvider{Prefix: containerNamePrefix}
 
@@ -604,6 +600,12 @@ func Test_ContainerExec(t *testing.T) {
 			1, 1,
 			[]interface{}{cid, types.ContainerStartOptions{}},
 			[]interface{}{nil},
+		},
+		{
+			"ImageRemove",
+			1, 1,
+			[]interface{}{actConf.Image, eqImageRemOpts{types.ImageRemoveOptions{Force: false, PruneChildren: false}}},
+			[]interface{}{imgRemoved, nil},
 		},
 	}
 
@@ -700,6 +702,7 @@ func Test_ContainerExec(t *testing.T) {
 					[]interface{}{cid, gomock.Any()},
 					[]interface{}{nil},
 				},
+				successSteps[5],
 			),
 			nil,
 		},
@@ -714,9 +717,8 @@ func Test_ContainerExec(t *testing.T) {
 			a := act.Clone()
 			err := a.SetInput(Input{nil, nil, cli.NoopStreams()})
 			assert.NoError(err)
-			ctx := context.Background()
 			defer ctrl.Finish()
-			defer r.Close(ctx, a)
+			defer r.Close()
 			var prev *gomock.Call
 			d.EXPECT().ContainerList(gomock.Any(), gomock.Any()).Return(nil) // @todo test different container names
 			for _, step := range tt.steps {
@@ -728,6 +730,7 @@ func Test_ContainerExec(t *testing.T) {
 			if tt.prepFn != nil {
 				tt.prepFn(resCh, errCh)
 			}
+			ctx := context.Background()
 			err = r.Execute(ctx, a)
 			if tt.expErr != errAny {
 				assert.Equal(tt.expErr, err)
@@ -766,6 +769,10 @@ func callContainerDriverMockFn(d *mockdriver.MockContainerRunner, step mockCallI
 	case "ContainerStart":
 		call = d.EXPECT().
 			ContainerStart(gomock.Any(), step.args[0], step.args[1]).
+			Return(step.ret...)
+	case "ImageRemove":
+		call = d.EXPECT().
+			ImageRemove(gomock.Any(), step.args[0], step.args[1]).
 			Return(step.ret...)
 	}
 	if step.minTimes > 1 {

@@ -28,8 +28,8 @@ const (
 	containerActionMount = "/action"
 
 	// Environment specific flags.
-	containerFlagUseVolumeWD = "use-volume-wd"
-	containerFlagRemoveImage = "remove-image"
+	containerFlagUseVolumeWD   = "use-volume-wd"
+	containerFlagPreserveImage = "preserve-image"
 )
 
 type containerEnv struct {
@@ -39,8 +39,8 @@ type containerEnv struct {
 	nameprv ContainerNameProvider
 
 	// Runtime flags
-	useVolWD  bool
-	removeImg bool
+	useVolWD    bool
+	preserveImg bool
 }
 
 // ContainerNameProvider provides an ability to generate a random container name
@@ -80,9 +80,9 @@ func (c *containerEnv) FlagsDefinition() OptionsList {
 			Default:     false,
 		},
 		&Option{
-			Name:        containerFlagRemoveImage,
-			Title:       "Remove Image",
-			Description: "Remove image after execution of action",
+			Name:        containerFlagPreserveImage,
+			Title:       "Preserve Image",
+			Description: "Keep image after execution of action",
 			Type:        jsonschema.Boolean,
 			Default:     false,
 		},
@@ -94,8 +94,8 @@ func (c *containerEnv) UseFlags(flags TypeOpts) error {
 		c.useVolWD = v.(bool)
 	}
 
-	if v, ok := flags[containerFlagRemoveImage]; ok {
-		c.removeImg = v.(bool)
+	if v, ok := flags[containerFlagPreserveImage]; ok {
+		c.preserveImg = v.(bool)
 	}
 
 	return nil
@@ -238,6 +238,11 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 			return err
 		}
 	}
+
+	if !c.preserveImg {
+		c.ImageRemove(ctx, a)
+	}
+
 	return nil
 }
 
@@ -255,11 +260,7 @@ func getCurrentUser() string {
 	return curuser
 }
 
-func (c *containerEnv) Close(ctx context.Context, a *Action) error {
-	if c.removeImg {
-		c.ImageRemove(ctx, a)
-	}
-
+func (c *containerEnv) Close() error {
 	return c.driver.Close()
 }
 

@@ -15,7 +15,7 @@ type RunEnvironment interface {
 	// Execute runs action a in the environment and operates with IO through streams.
 	Execute(ctx context.Context, a *Action) error
 	// Close does wrap up operations.
-	Close(ctx context.Context, a *Action) error
+	Close() error
 }
 
 // RunEnvironmentFlags is an interface to define environment specific runtime configuration.
