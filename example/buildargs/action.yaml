@@ -1,11 +1,11 @@
 action:
   title: buildargs
   description: Test passing args to Dockerfile
-  image: test:latest
+  image: buildargs:latest
   build:
     context: ./
     tags:
-      - test:latest
+      - buildargs:latest
     args:
       USER_ID: {{ .current_uid }}
       GROUP_ID: {{ .current_gid }}
