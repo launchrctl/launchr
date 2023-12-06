@@ -9,7 +9,7 @@ action:
     args:
       USER_ID: {{ .current_uid }}
       GROUP_ID: {{ .current_gid }}
-      USER_NAME: plasma
+      USER_NAME: username
   command:
     - sh
     - /action/main.sh
