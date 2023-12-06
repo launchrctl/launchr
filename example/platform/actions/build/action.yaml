@@ -30,7 +30,7 @@ action:
       description: Some additional info for option
       type: array
 #  image: python:3.7-slim
-  image: my/image:v1
+  image: ubuntu
 #  command: python3 {{ .opt4 }}
-  command: ["sh", "-c", "for i in $(seq 60); do echo $$i; sleep 1; done"]
-#  command: /bin/bash
+#  command: ["sh", "-c", "for i in $(seq 60); do echo $$i; sleep 1; done"]
+  command: /bin/bash

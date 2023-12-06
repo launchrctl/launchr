@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	osuser "os/user"
 	"path/filepath"
 	"runtime"
@@ -344,26 +343,11 @@ func absPath(src string) string {
 
 // copyDirToContainer copies dir content to a container.
 func (c *containerEnv) copyDirToContainer(ctx context.Context, cid, srcPath, dstPath string) error {
-	return filepath.WalkDir(srcPath, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if path == srcPath {
-			return nil
-		}
-		err = c.copyToContainer(ctx, cid, path, dstPath)
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return fs.SkipDir
-		}
-		return nil
-	})
+	return c.copyToContainer(ctx, cid, srcPath, filepath.Dir(dstPath), filepath.Base(dstPath))
 }
 
 // copyToContainer copies dir/file to a container. Directory will be copied as a subdirectory.
-func (c *containerEnv) copyToContainer(ctx context.Context, cid, srcPath, dstPath string) error {
+func (c *containerEnv) copyToContainer(ctx context.Context, cid, srcPath, dstPath, rebaseName string) error {
 	// Prepare destination copy info by stat-ing the container path.
 	dstInfo := archive.CopyInfo{Path: dstPath}
 	dstStat, err := c.driver.ContainerStatPath(ctx, cid, dstPath)
@@ -377,6 +361,7 @@ func (c *containerEnv) copyToContainer(ctx context.Context, cid, srcPath, dstPat
 	if err != nil {
 		return err
 	}
+	srcInfo.RebaseName = rebaseName
 
 	srcArchive, err := archive.TarResource(srcInfo)
 	if err != nil {

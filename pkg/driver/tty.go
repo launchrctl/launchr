@@ -80,7 +80,11 @@ func MonitorTtySize(ctx context.Context, d ContainerRunner, cli cli.Streams, id 
 				h, w := cli.Out().GetTtySize()
 
 				if prevW != w || prevH != h {
-					_ = resizeTty(ctx, d, cli, id, isExec)
+					err := resizeTty(ctx, d, cli, id, isExec)
+					if err != nil {
+						// Stop monitoring
+						return
+					}
 				}
 				prevH = h
 				prevW = w
@@ -91,7 +95,11 @@ func MonitorTtySize(ctx context.Context, d ContainerRunner, cli cli.Streams, id 
 		gosignal.Notify(sigchan, signal.SIGWINCH)
 		go func() {
 			for range sigchan {
-				_ = resizeTty(ctx, d, cli, id, isExec)
+				err := resizeTty(ctx, d, cli, id, isExec)
+				if err != nil {
+					// Stop monitoring
+					return
+				}
 			}
 		}()
 	}

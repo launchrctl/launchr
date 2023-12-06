@@ -77,3 +77,14 @@ Useful make commands:
 1. Fetch dependencies - `make deps`
 2. Test the code - `make test`
 3. Lint the code - `make lint`
+
+## Publishing a new release
+
+1. Install [goreleaser](https://goreleaser.com/install/)
+2. Create an [Access token on GitHub](https://github.com/settings/tokens)
+3. Create a tag, build a release and push
+   ```shell
+   git tag -a v0.0.0 -m "Release notes"
+   export GITHUB_TOKEN="[TOKEN]"
+   goreleaser release --clean
+   ```
