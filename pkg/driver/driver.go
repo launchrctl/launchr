@@ -14,6 +14,7 @@ import (
 type ContainerRunner interface {
 	ImageEnsure(ctx context.Context, opts types.ImageOptions) (*types.ImageStatusResponse, error)
 	CopyToContainer(ctx context.Context, cid string, path string, content io.Reader, opts types.CopyToContainerOptions) error
+	CopyFromContainer(ctx context.Context, cid, srcPath string) (io.ReadCloser, types.ContainerPathStat, error)
 	ContainerStatPath(ctx context.Context, cid string, path string) (types.ContainerPathStat, error)
 	ContainerList(ctx context.Context, opts types.ContainerListOptions) []types.ContainerListResult
 	ContainerCreate(ctx context.Context, opts types.ContainerCreateOptions) (string, error)

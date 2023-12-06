@@ -12,10 +12,7 @@ import (
 )
 
 // ResizeOptions is a struct for terminal resizing.
-type ResizeOptions struct {
-	Height uint
-	Width  uint
-}
+type ResizeOptions = types.ResizeOptions
 
 // BuildDefinition stores image build definition.
 type BuildDefinition struct {
@@ -138,12 +135,12 @@ type ContainerWaitOptions struct {
 }
 
 // WaitCondition is a type for available wait conditions.
-type WaitCondition string
+type WaitCondition = typescontainer.WaitCondition
 
 const (
-	WaitConditionNotRunning WaitCondition = "not-running" // WaitConditionNotRunning when container exits when running.
-	WaitConditionNextExit   WaitCondition = "next-exit"   // WaitConditionNextExit when container exits after next start.
-	WaitConditionRemoved    WaitCondition = "removed"     // WaitConditionRemoved when container is removed.
+	WaitConditionNotRunning WaitCondition = typescontainer.WaitConditionNotRunning // WaitConditionNotRunning when container exits when running.
+	WaitConditionNextExit   WaitCondition = typescontainer.WaitConditionNextExit   // WaitConditionNextExit when container exits after next start.
+	WaitConditionRemoved    WaitCondition = typescontainer.WaitConditionRemoved    // WaitConditionRemoved when container is removed.
 )
 
 // ContainerWaitResponse stores response given by wait result.
@@ -153,12 +150,7 @@ type ContainerWaitResponse struct {
 }
 
 // ContainerAttachOptions stores options for attaching to a running container.
-type ContainerAttachOptions struct {
-	AttachStdin  bool
-	AttachStdout bool
-	AttachStderr bool
-	Tty          bool
-}
+type ContainerAttachOptions = types.ContainerAttachOptions
 
 // ContainerStopOptions stores options to stop a container.
 type ContainerStopOptions struct {
@@ -166,5 +158,4 @@ type ContainerStopOptions struct {
 }
 
 // ContainerRemoveOptions stores options to remove a container.
-type ContainerRemoveOptions struct {
-}
+type ContainerRemoveOptions = types.ContainerRemoveOptions

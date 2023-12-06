@@ -113,11 +113,17 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		return fmt.Errorf("the action %q can't start, the container name is in use, please, try again", a.ID)
 	}
 
+	var autoRemove = true
+	if c.useVolWD {
+		// Do not remove the volume until we copy the data back.
+		autoRemove = false
+	}
+
 	// Create container.
 	runConfig := &types.ContainerCreateOptions{
 		ContainerName: name,
 		ExtraHosts:    actConf.ExtraHosts,
-		AutoRemove:    true,
+		AutoRemove:    autoRemove,
 		OpenStdin:     true,
 		StdinOnce:     true,
 		AttachStdin:   true,
@@ -201,6 +207,23 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	status := <-statusCh
 	// @todo maybe we should note that SIG was sent to the container. Code 130 is sent on Ctlr+C.
 	log.Info("action %q finished with the exit code %d", a.ID, status)
+
+	// Copy back the result from the volume.
+	// @todo it's a bad implementation considering consequential runs, need to find a better way to sync with remote.
+	if c.useVolWD {
+		path := absPath(".")
+		cli.Println(`Flag "--%s" is set. Copying back the result of the action run.`, containerFlagUseVolumeWD)
+		err = c.copyFromContainer(ctx, cid, containerHostMount, filepath.Dir(path), filepath.Base(path))
+		defer func() {
+			err = c.driver.ContainerRemove(ctx, cid, types.ContainerRemoveOptions{})
+			if err != nil {
+				log.Err("Error on cleaning the running environment: %v", err)
+			}
+		}()
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -382,6 +405,42 @@ func (c *containerEnv) copyToContainer(ctx context.Context, cid, srcPath, dstPat
 	return c.driver.CopyToContainer(ctx, cid, dstDir, preparedArchive, options)
 }
 
+func resolveLocalPath(localPath string) (absPath string, err error) {
+	if absPath, err = filepath.Abs(localPath); err != nil {
+		return
+	}
+	return archive.PreserveTrailingDotOrSeparator(absPath, localPath), nil
+}
+
+func (c *containerEnv) copyFromContainer(ctx context.Context, cid, srcPath, dstPath, rebaseName string) (err error) {
+	// Get an absolute destination path.
+	dstPath, err = resolveLocalPath(dstPath)
+	if err != nil {
+		return err
+	}
+
+	content, stat, err := c.driver.CopyFromContainer(ctx, cid, srcPath)
+	if err != nil {
+		return err
+	}
+	defer content.Close()
+
+	srcInfo := archive.CopyInfo{
+		Path:       srcPath,
+		Exists:     true,
+		IsDir:      stat.Mode.IsDir(),
+		RebaseName: rebaseName,
+	}
+
+	preArchive := content
+	if len(srcInfo.RebaseName) != 0 {
+		_, srcBase := archive.SplitPathDirEntry(srcInfo.Path)
+		preArchive = archive.RebaseArchiveEntries(content, srcBase, srcInfo.RebaseName)
+	}
+
+	return archive.CopyTo(preArchive, srcInfo, dstPath)
+}
+
 func (c *containerEnv) containerWait(ctx context.Context, cid string, opts *types.ContainerCreateOptions) <-chan int {
 	// Wait for the container to stop or catch error.
 	waitCond := types.WaitConditionNextExit
@@ -413,10 +472,10 @@ func (c *containerEnv) containerWait(ctx context.Context, cid string, opts *type
 
 func (c *containerEnv) attachContainer(ctx context.Context, streams cli.Streams, cid string, opts *types.ContainerCreateOptions) (io.Closer, <-chan error, error) {
 	cio, errAttach := c.driver.ContainerAttach(ctx, cid, types.ContainerAttachOptions{
-		AttachStdin:  opts.AttachStdin,
-		AttachStdout: opts.AttachStdout,
-		AttachStderr: opts.AttachStderr,
-		Tty:          opts.Tty,
+		Stream: true,
+		Stdin:  opts.AttachStdin,
+		Stdout: opts.AttachStdout,
+		Stderr: opts.AttachStderr,
 	})
 	if errAttach != nil {
 		return nil, nil, errAttach

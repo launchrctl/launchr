@@ -90,6 +90,11 @@ func (d *dockerDriver) CopyToContainer(ctx context.Context, cid string, path str
 	return d.cli.CopyToContainer(ctx, cid, path, content, dockertypes.CopyToContainerOptions(opts))
 }
 
+func (d *dockerDriver) CopyFromContainer(ctx context.Context, cid, srcPath string) (io.ReadCloser, types.ContainerPathStat, error) {
+	r, stat, err := d.cli.CopyFromContainer(ctx, cid, srcPath)
+	return r, types.ContainerPathStat(stat), err
+}
+
 func (d *dockerDriver) ContainerStatPath(ctx context.Context, cid string, path string) (types.ContainerPathStat, error) {
 	res, err := d.cli.ContainerStatPath(ctx, cid, path)
 	return types.ContainerPathStat(res), err
@@ -153,15 +158,8 @@ func (d *dockerDriver) ContainerWait(ctx context.Context, cid string, opts types
 	return wrappedStCh, errCh
 }
 
-func (d *dockerDriver) ContainerAttach(ctx context.Context, containerID string, config types.ContainerAttachOptions) (*ContainerInOut, error) {
-	options := dockertypes.ContainerAttachOptions{
-		Stream: true,
-		Stdin:  config.AttachStdin,
-		Stdout: config.AttachStdout,
-		Stderr: config.AttachStderr,
-	}
-
-	resp, err := d.cli.ContainerAttach(ctx, containerID, options)
+func (d *dockerDriver) ContainerAttach(ctx context.Context, containerID string, options types.ContainerAttachOptions) (*ContainerInOut, error) {
+	resp, err := d.cli.ContainerAttach(ctx, containerID, dockertypes.ContainerAttachOptions(options))
 	if err != nil {
 		return nil, err
 	}

@@ -401,10 +401,10 @@ func Test_ContainerExec_containerAttach(t *testing.T) {
 		Tty:          true,
 	}
 	attOpts := types.ContainerAttachOptions{
-		AttachStdin:  opts.AttachStdin,
-		AttachStdout: opts.AttachStdout,
-		AttachStderr: opts.AttachStderr,
-		Tty:          opts.Tty,
+		Stream: true,
+		Stdin:  opts.AttachStdin,
+		Stdout: opts.AttachStdout,
+		Stderr: opts.AttachStderr,
 	}
 	d.EXPECT().
 		ContainerAttach(ctx, cid, attOpts).
@@ -473,10 +473,10 @@ func Test_ContainerExec(t *testing.T) {
 		User:         getCurrentUser(),
 	}
 	attOpts := types.ContainerAttachOptions{
-		AttachStdin:  opts.AttachStdin,
-		AttachStdout: opts.AttachStdout,
-		AttachStderr: opts.AttachStderr,
-		Tty:          opts.Tty,
+		Stream: true,
+		Stdin:  opts.AttachStdin,
+		Stdout: opts.AttachStdout,
+		Stderr: opts.AttachStderr,
 	}
 
 	errImgEns := errors.New("image ensure error")

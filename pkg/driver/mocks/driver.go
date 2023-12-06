@@ -210,6 +210,22 @@ func (mr *MockContainerRunnerMockRecorder) ContainerWait(arg0, arg1, arg2 interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerWait", reflect.TypeOf((*MockContainerRunner)(nil).ContainerWait), arg0, arg1, arg2)
 }
 
+// CopyFromContainer mocks base method.
+func (m *MockContainerRunner) CopyFromContainer(arg0 context.Context, arg1, arg2 string) (io.ReadCloser, types0.ContainerPathStat, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CopyFromContainer", arg0, arg1, arg2)
+	ret0, _ := ret[0].(io.ReadCloser)
+	ret1, _ := ret[1].(types0.ContainerPathStat)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// CopyFromContainer indicates an expected call of CopyFromContainer.
+func (mr *MockContainerRunnerMockRecorder) CopyFromContainer(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyFromContainer", reflect.TypeOf((*MockContainerRunner)(nil).CopyFromContainer), arg0, arg1, arg2)
+}
+
 // CopyToContainer mocks base method.
 func (m *MockContainerRunner) CopyToContainer(arg0 context.Context, arg1, arg2 string, arg3 io.Reader, arg4 types0.CopyToContainerOptions) error {
 	m.ctrl.T.Helper()
