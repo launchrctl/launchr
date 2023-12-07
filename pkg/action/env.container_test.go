@@ -525,7 +525,6 @@ func Test_ContainerExec(t *testing.T) {
 	assert.NoError(t, act.EnsureLoaded())
 	actConf := act.ActionDef()
 	imgBuild := &types.ImageStatusResponse{Status: types.ImageExists}
-	imgRemoved := &types.ImageRemoveResponse{Status: types.ImageRemoved}
 	cio := testContainerIO()
 	nprv := ContainerNameProvider{Prefix: containerNamePrefix}
 
@@ -600,12 +599,6 @@ func Test_ContainerExec(t *testing.T) {
 			1, 1,
 			[]interface{}{cid, types.ContainerStartOptions{}},
 			[]interface{}{nil},
-		},
-		{
-			"ImageRemove",
-			1, 1,
-			[]interface{}{actConf.Image, eqImageRemOpts{types.ImageRemoveOptions{Force: false, PruneChildren: false}}},
-			[]interface{}{imgRemoved, nil},
 		},
 	}
 
@@ -702,7 +695,6 @@ func Test_ContainerExec(t *testing.T) {
 					[]interface{}{cid, gomock.Any()},
 					[]interface{}{nil},
 				},
-				successSteps[5],
 			),
 			nil,
 		},

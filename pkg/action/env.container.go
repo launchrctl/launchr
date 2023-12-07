@@ -28,8 +28,8 @@ const (
 	containerActionMount = "/action"
 
 	// Environment specific flags.
-	containerFlagUseVolumeWD   = "use-volume-wd"
-	containerFlagPreserveImage = "preserve-image"
+	containerFlagUseVolumeWD = "use-volume-wd"
+	containerFlagRemoveImage = "remove-image"
 )
 
 type containerEnv struct {
@@ -39,8 +39,8 @@ type containerEnv struct {
 	nameprv ContainerNameProvider
 
 	// Runtime flags
-	useVolWD    bool
-	preserveImg bool
+	useVolWD  bool
+	removeImg bool
 }
 
 // ContainerNameProvider provides an ability to generate a random container name
@@ -80,9 +80,9 @@ func (c *containerEnv) FlagsDefinition() OptionsList {
 			Default:     false,
 		},
 		&Option{
-			Name:        containerFlagPreserveImage,
-			Title:       "Preserve Image",
-			Description: "Keep image after execution of action",
+			Name:        containerFlagRemoveImage,
+			Title:       "Remove Image",
+			Description: "Remove an image after execution of action",
 			Type:        jsonschema.Boolean,
 			Default:     false,
 		},
@@ -94,8 +94,8 @@ func (c *containerEnv) UseFlags(flags TypeOpts) error {
 		c.useVolWD = v.(bool)
 	}
 
-	if v, ok := flags[containerFlagPreserveImage]; ok {
-		c.preserveImg = v.(bool)
+	if v, ok := flags[containerFlagRemoveImage]; ok {
+		c.removeImg = v.(bool)
 	}
 
 	return nil
@@ -239,7 +239,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		}
 	}
 
-	if !c.preserveImg {
+	if c.removeImg {
 		c.ImageRemove(ctx, a)
 	}
 
