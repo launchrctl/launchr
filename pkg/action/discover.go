@@ -40,9 +40,12 @@ var actionsSubdir = strings.Join([]string{"", actionsDirname, ""}, string(filepa
 
 func (ad *yamlDiscovery) isValid(path string, d fs.DirEntry) bool {
 	i := strings.LastIndex(path, actionsSubdir)
-	return !d.IsDir() &&
-		i != -1 &&
-		strings.Count(path[i+len(actionsSubdir):], string(filepath.Separator)) == 1 && // Nested actions are not allowed.
+
+	if d.IsDir() || i == -1 || isHiddenFile(path) {
+		return false
+	}
+
+	return strings.Count(path[i+len(actionsSubdir):], string(filepath.Separator)) == 1 && // Nested actions are not allowed.
 		ad.targetRgx.MatchString(d.Name())
 }
 
