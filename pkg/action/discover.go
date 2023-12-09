@@ -41,7 +41,7 @@ var actionsSubdir = strings.Join([]string{"", actionsDirname, ""}, string(filepa
 func (ad *yamlDiscovery) isValid(path string, d fs.DirEntry) bool {
 	i := strings.LastIndex(path, actionsSubdir)
 
-	if d.IsDir() || i == -1 || isHiddenFile(path) {
+	if d.IsDir() || i == -1 || isHidden(path) {
 		return false
 	}
 
@@ -55,11 +55,19 @@ func (ad *yamlDiscovery) findFiles() chan string {
 	ch := make(chan string, 10)
 	go func() {
 		err := fs.WalkDir(ad.fs, ".", func(path string, d fs.DirEntry, err error) error {
-			if err == nil && ad.isValid(path, d) {
+			if err != nil {
+				return err
+			}
+
+			if d.IsDir() && isHidden(path) {
+				return fs.SkipDir
+			}
+
+			if ad.isValid(path, d) {
 				ch <- path
 			}
 
-			return err
+			return nil
 		})
 
 		if err != nil {

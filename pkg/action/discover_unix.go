@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 )
 
-func isHiddenFile(path string) bool {
+func isHidden(path string) bool {
 	pathList := filepath.SplitList(path)
 	for _, v := range pathList {
 		if len(v) > 1 && v[0:1] == "." {

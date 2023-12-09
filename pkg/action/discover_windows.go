@@ -6,7 +6,7 @@ import (
 	"syscall"
 )
 
-func isHiddenFile(path string) bool {
+func isHidden(path string) bool {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return false
