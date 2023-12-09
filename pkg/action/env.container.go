@@ -273,8 +273,7 @@ func (c *containerEnv) ImageRemove(ctx context.Context, a *Action) {
 	if err != nil {
 		cli.Println(err.Error())
 	} else if resp != nil && resp.Status == types.ImageRemoved {
-		msg := fmt.Sprintf("Image %q was successfuly removed", a.ActionDef().Image)
-		cli.Println(msg)
+		cli.Println("Image %q was successfuly removed", a.ActionDef().Image)
 	}
 }
 

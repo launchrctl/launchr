@@ -63,10 +63,7 @@ type ImageOptions struct {
 }
 
 // ImageRemoveOptions stores options for removing an image.
-type ImageRemoveOptions struct {
-	Force         bool
-	PruneChildren bool
-}
+type ImageRemoveOptions = types.ImageRemoveOptions
 
 // ImageStatus defines image status on local machine.
 type ImageStatus int64
@@ -100,7 +97,6 @@ type ImageStatusResponse struct {
 // ImageRemoveResponse stores response when removing the image.
 type ImageRemoveResponse struct {
 	Status ImageStatus
-	Items  []ImageRemoveResponseItem
 }
 
 // ImageRemoveResponseItem stores responses' name of deleted image.

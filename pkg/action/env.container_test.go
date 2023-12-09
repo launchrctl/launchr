@@ -229,10 +229,10 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 		ret      []interface{}
 	}
 
-	imgFn := func(s types.ImageStatus, i []types.ImageRemoveResponseItem, err error) []interface{} {
+	imgFn := func(s types.ImageStatus, err error) []interface{} {
 		var r *types.ImageRemoveResponse
 		if s != -1 {
-			r = &types.ImageRemoveResponse{Status: s, Items: i}
+			r = &types.ImageRemoveResponse{Status: s}
 		}
 		return []interface{}{r, err}
 	}
@@ -242,13 +242,13 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 			"image removed",
 			actLoc.ActionDef(),
 			nil,
-			imgFn(types.ImageRemoved, []types.ImageRemoveResponseItem{{Deleted: "image removed"}}, nil),
+			imgFn(types.ImageRemoved, nil),
 		},
 		{
-			"inccorect image",
+			"incorrect image",
 			actLoc.ActionDef(),
 			nil,
-			imgFn(-1, nil, fmt.Errorf("incorrect image")),
+			imgFn(-1, fmt.Errorf("incorrect image")),
 		},
 	}
 

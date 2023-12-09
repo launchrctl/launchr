@@ -256,7 +256,7 @@ func (mr *MockContainerRunnerMockRecorder) ImageEnsure(arg0, arg1 interface{}) *
 }
 
 // ImageRemove mocks base method.
-func (m *MockContainerRunner) ImageRemove(arg0 context.Context, arg1 string, arg2 types.ImageRemoveOptions) (*types.ImageRemoveResponse, error) {
+func (m *MockContainerRunner) ImageRemove(arg0 context.Context, arg1 string, arg2 types0.ImageRemoveOptions) (*types.ImageRemoveResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ImageRemove", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*types.ImageRemoveResponse)

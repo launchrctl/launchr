@@ -87,36 +87,13 @@ func (d *dockerDriver) ImageEnsure(ctx context.Context, image types.ImageOptions
 }
 
 func (d *dockerDriver) ImageRemove(ctx context.Context, image string, options types.ImageRemoveOptions) (*types.ImageRemoveResponse, error) {
-	insp, _, err := d.cli.ImageInspectWithRaw(ctx, image)
-	if err != nil {
-		if !errdefs.IsNotFound(err) {
-			return nil, err
-		}
-	}
-
-	if insp.ID == "" {
-		return &types.ImageRemoveResponse{Status: types.ImageRemoved}, nil
-	}
-
-	resp, err := d.cli.ImageRemove(ctx, image, dockertypes.ImageRemoveOptions{
-		Force:         options.Force,
-		PruneChildren: options.PruneChildren,
-	})
+	_, err := d.cli.ImageRemove(ctx, image, dockertypes.ImageRemoveOptions(options))
 
 	if err != nil {
 		return nil, err
 	}
 
-	deletedItems := make([]types.ImageRemoveResponseItem, 0, len(resp))
-
-	for _, v := range resp {
-		deletedItems = append(deletedItems, types.ImageRemoveResponseItem{
-			Deleted:  v.Deleted,
-			Untagged: v.Untagged,
-		})
-	}
-
-	return &types.ImageRemoveResponse{Status: types.ImageRemoved, Items: deletedItems}, nil
+	return &types.ImageRemoveResponse{Status: types.ImageRemoved}, nil
 }
 
 func (d *dockerDriver) CopyToContainer(ctx context.Context, cid string, path string, content io.Reader, opts types.CopyToContainerOptions) error {
