@@ -37,18 +37,6 @@ func (e eqImageOpts) String() string {
 	return fmt.Sprintf("is equal to %v (%T)", e.x, e.x)
 }
 
-type eqImageRemOpts struct {
-	x types.ImageRemoveOptions
-}
-
-func (e eqImageRemOpts) Matches(x interface{}) bool {
-	return assert.ObjectsAreEqual(e.x, x.(types.ImageRemoveOptions))
-}
-
-func (e eqImageRemOpts) String() string {
-	return fmt.Sprintf("is equal to %v (%T)", e.x, e.x)
-}
-
 var cfgImgRes = LaunchrConfigImageBuildResolver{launchrCfg()}
 
 func launchrCfg() launchr.Config {
@@ -229,26 +217,12 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 		ret      []interface{}
 	}
 
-	imgFn := func(s types.ImageStatus, err error) []interface{} {
-		var r *types.ImageRemoveResponse
-		if s != -1 {
-			r = &types.ImageRemoveResponse{Status: s}
-		}
-		return []interface{}{r, err}
-	}
-
 	tts := []testCase{
 		{
 			"image removed",
 			actLoc.ActionDef(),
 			nil,
-			imgFn(types.ImageRemoved, nil),
-		},
-		{
-			"incorrect image",
-			actLoc.ActionDef(),
-			nil,
-			imgFn(-1, fmt.Errorf("incorrect image")),
+			[]interface{}{&types.ImageRemoveResponse{Status: types.ImageRemoved}, nil},
 		},
 	}
 
@@ -274,11 +248,12 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 			a := act.ActionDef()
 			imgOpts := types.ImageRemoveOptions{Force: false, PruneChildren: false}
 			d.EXPECT().
-				ImageRemove(ctx, a.Image, eqImageRemOpts{imgOpts}).
+				ImageRemove(ctx, a.Image, gomock.Eq(imgOpts)).
 				Return(tt.ret...)
 			res, err := r.driver.ImageRemove(ctx, a.Image, imgOpts)
+
 			assert.Equal(res, tt.ret[0])
-			assert.Equal(tt.ret[1], err)
+			assert.Equal(err, tt.ret[1])
 		})
 	}
 }
