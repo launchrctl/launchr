@@ -87,6 +87,7 @@ func Test_Discover_isValid(t *testing.T) {
 		{"incorrect filename prefix", "1/2/actions/3/myaction.yaml", false},   // Incorrect prefix.
 		{"incorrect filename suffix", "1/2/actions/3/action.yaml.bkp", false}, // Incorrect suffix.
 		{"incorrect path", "1/2/3/action.yaml", false},                        // File not inside an "actions" directory.
+		{"incorrect hidden path", ".1/2/actions/3/action.yml", false},         // Invalid hidden directory
 		{"nested action", "1/2/actions/3/4/5/action.yaml", false},             // There is a deeper nesting in actions directory.
 		{"root action", "actions/verb/action.yaml", false},                    // Actions are located in root.
 		{"dir", "1/2/actions/3", false},                                       // A directory is given.

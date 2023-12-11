@@ -53,7 +53,7 @@ func (mr *MockContainerRunnerMockRecorder) Close() *gomock.Call {
 }
 
 // ContainerAttach mocks base method.
-func (m *MockContainerRunner) ContainerAttach(arg0 context.Context, arg1 string, arg2 types.ContainerAttachOptions) (*driver.ContainerInOut, error) {
+func (m *MockContainerRunner) ContainerAttach(arg0 context.Context, arg1 string, arg2 types0.ContainerAttachOptions) (*driver.ContainerInOut, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContainerAttach", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*driver.ContainerInOut)
@@ -83,7 +83,7 @@ func (mr *MockContainerRunnerMockRecorder) ContainerCreate(arg0, arg1 interface{
 }
 
 // ContainerExecResize mocks base method.
-func (m *MockContainerRunner) ContainerExecResize(arg0 context.Context, arg1 string, arg2 types.ResizeOptions) error {
+func (m *MockContainerRunner) ContainerExecResize(arg0 context.Context, arg1 string, arg2 types0.ResizeOptions) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContainerExecResize", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -125,7 +125,7 @@ func (mr *MockContainerRunnerMockRecorder) ContainerList(arg0, arg1 interface{})
 }
 
 // ContainerRemove mocks base method.
-func (m *MockContainerRunner) ContainerRemove(arg0 context.Context, arg1 string, arg2 types.ContainerRemoveOptions) error {
+func (m *MockContainerRunner) ContainerRemove(arg0 context.Context, arg1 string, arg2 types0.ContainerRemoveOptions) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContainerRemove", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -139,7 +139,7 @@ func (mr *MockContainerRunnerMockRecorder) ContainerRemove(arg0, arg1, arg2 inte
 }
 
 // ContainerResize mocks base method.
-func (m *MockContainerRunner) ContainerResize(arg0 context.Context, arg1 string, arg2 types.ResizeOptions) error {
+func (m *MockContainerRunner) ContainerResize(arg0 context.Context, arg1 string, arg2 types0.ResizeOptions) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContainerResize", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
