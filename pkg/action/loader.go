@@ -193,7 +193,7 @@ func (p inputProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
 			}
 		}
 		if hasDash && strings.Contains(err.Error(), "bad character U+002D '-'") {
-			return nil, fmt.Errorf(`Unexpected '-' symbol in a template variable. 
+			return nil, fmt.Errorf(`unexpected '-' symbol in a template variable. 
 Action definition is correct, but dashes are not allowed in templates, replace "-" with "_" in {{ }} blocks`)
 		}
 		return nil, err

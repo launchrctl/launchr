@@ -199,6 +199,70 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 	}
 }
 
+func Test_ContainerExec_imageRemove(t *testing.T) {
+	t.Parallel()
+
+	actLoc := testContainerAction(&DefAction{
+		Image: "build:local",
+		Build: &types.BuildDefinition{
+			Context: ".",
+		},
+	})
+	err := actLoc.EnsureLoaded()
+	assert.NoError(t, err)
+	type testCase struct {
+		name     string
+		action   *DefAction
+		expBuild *types.BuildDefinition
+		ret      []interface{}
+	}
+
+	tts := []testCase{
+		{
+			"image removed",
+			actLoc.ActionDef(),
+			nil,
+			[]interface{}{&types.ImageRemoveResponse{Status: types.ImageRemoved}, nil},
+		},
+		{
+			"failed to remove",
+			&DefAction{Image: "failed"},
+			nil,
+			[]interface{}{nil, fmt.Errorf("failed to remove")},
+		},
+	}
+
+	for _, tt := range tts {
+		tt := tt
+
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert, ctrl, d, r := prepareContainerTestSuite(t)
+			ctx := context.Background()
+
+			defer ctrl.Finish()
+			defer r.driver.Close()
+
+			act := testContainerAction(tt.action)
+			act.input = Input{
+				IO: cli.NoopStreams(),
+			}
+
+			err := act.EnsureLoaded()
+			assert.NoError(err)
+
+			a := act.ActionDef()
+			imgOpts := types.ImageRemoveOptions{Force: false, PruneChildren: false}
+			d.EXPECT().
+				ImageRemove(ctx, a.Image, gomock.Eq(imgOpts)).
+				Return(tt.ret...)
+			err = r.imageRemove(ctx, act)
+
+			assert.Equal(err, tt.ret[1])
+		})
+	}
+}
+
 func Test_ContainerExec_containerCreate(t *testing.T) {
 	t.Parallel()
 	assert, ctrl, d, r := prepareContainerTestSuite(t)
@@ -677,6 +741,10 @@ func callContainerDriverMockFn(d *mockdriver.MockContainerRunner, step mockCallI
 	case "ContainerStart":
 		call = d.EXPECT().
 			ContainerStart(gomock.Any(), step.args[0], step.args[1]).
+			Return(step.ret...)
+	case "ImageRemove":
+		call = d.EXPECT().
+			ImageRemove(gomock.Any(), step.args[0], step.args[1]).
 			Return(step.ret...)
 	}
 	if step.minTimes > 1 {

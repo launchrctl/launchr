@@ -86,6 +86,16 @@ func (d *dockerDriver) ImageEnsure(ctx context.Context, image types.ImageOptions
 	return &types.ImageStatusResponse{Status: types.ImagePull, Progress: reader}, nil
 }
 
+func (d *dockerDriver) ImageRemove(ctx context.Context, image string, options types.ImageRemoveOptions) (*types.ImageRemoveResponse, error) {
+	_, err := d.cli.ImageRemove(ctx, image, dockertypes.ImageRemoveOptions(options))
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.ImageRemoveResponse{Status: types.ImageRemoved}, nil
+}
+
 func (d *dockerDriver) CopyToContainer(ctx context.Context, cid string, path string, content io.Reader, opts types.CopyToContainerOptions) error {
 	return d.cli.CopyToContainer(ctx, cid, path, content, dockertypes.CopyToContainerOptions(opts))
 }
