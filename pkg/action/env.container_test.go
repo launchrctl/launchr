@@ -224,6 +224,12 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 			nil,
 			[]interface{}{&types.ImageRemoveResponse{Status: types.ImageRemoved}, nil},
 		},
+		{
+			"failed to remove",
+			&DefAction{Image: "failed"},
+			nil,
+			[]interface{}{nil, fmt.Errorf("failed to remove")},
+		},
 	}
 
 	for _, tt := range tts {
@@ -250,9 +256,8 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 			d.EXPECT().
 				ImageRemove(ctx, a.Image, gomock.Eq(imgOpts)).
 				Return(tt.ret...)
-			res, err := r.driver.ImageRemove(ctx, a.Image, imgOpts)
+			err := r.imageRemove(ctx, act)
 
-			assert.Equal(res, tt.ret[0])
 			assert.Equal(err, tt.ret[1])
 		})
 	}

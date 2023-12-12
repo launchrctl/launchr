@@ -240,7 +240,10 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	}
 
 	if c.removeImg {
-		c.ImageRemove(ctx, a)
+		err := c.imageRemove(ctx, a)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -264,17 +267,17 @@ func (c *containerEnv) Close() error {
 	return c.driver.Close()
 }
 
-func (c *containerEnv) ImageRemove(ctx context.Context, a *Action) {
-	resp, err := c.driver.ImageRemove(ctx, a.ActionDef().Image, types.ImageRemoveOptions{
+func (c *containerEnv) imageRemove(ctx context.Context, a *Action) error {
+	_, err := c.driver.ImageRemove(ctx, a.ActionDef().Image, types.ImageRemoveOptions{
 		Force:         false,
 		PruneChildren: false,
 	})
 
-	if err != nil {
-		cli.Println(err.Error())
-	} else if resp != nil && resp.Status == types.ImageRemoved {
-		cli.Println("Image %q was successfuly removed", a.ActionDef().Image)
+	if err == nil {
+		cli.Println("Image %q was successfully removed", a.ActionDef().Image)
 	}
+
+	return err
 }
 
 func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {

@@ -99,14 +99,6 @@ type ImageRemoveResponse struct {
 	Status ImageStatus
 }
 
-// ImageRemoveResponseItem stores responses' name of deleted image.
-type ImageRemoveResponseItem struct {
-	// The image ID of an image that was deleted
-	Deleted string
-	// The image ID of an image that was untagged
-	Untagged string
-}
-
 // ContainerPathStat is a type alias for container path stat result.
 type ContainerPathStat = types.ContainerPathStat
 
