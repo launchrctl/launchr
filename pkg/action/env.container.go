@@ -240,9 +240,11 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	}
 
 	if c.removeImg {
-		err := c.imageRemove(ctx, a)
+		err = c.imageRemove(ctx, a)
 		if err != nil {
-			return err
+			log.Err("Image remove returned an error: %v", err)
+		} else {
+			cli.Println("Image %q was successfully removed", a.ActionDef().Image)
 		}
 	}
 
@@ -272,10 +274,6 @@ func (c *containerEnv) imageRemove(ctx context.Context, a *Action) error {
 		Force:         false,
 		PruneChildren: false,
 	})
-
-	if err == nil {
-		cli.Println("Image %q was successfully removed", a.ActionDef().Image)
-	}
 
 	return err
 }

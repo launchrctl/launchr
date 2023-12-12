@@ -248,7 +248,7 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 				IO: cli.NoopStreams(),
 			}
 
-			err = act.EnsureLoaded()
+			err := act.EnsureLoaded()
 			assert.NoError(err)
 
 			a := act.ActionDef()
@@ -256,7 +256,7 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 			d.EXPECT().
 				ImageRemove(ctx, a.Image, gomock.Eq(imgOpts)).
 				Return(tt.ret...)
-			err := r.imageRemove(ctx, act)
+			err = r.imageRemove(ctx, act)
 
 			assert.Equal(err, tt.ret[1])
 		})

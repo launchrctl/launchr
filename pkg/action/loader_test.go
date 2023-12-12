@@ -56,7 +56,7 @@ func Test_InputProcessor(t *testing.T) {
 
 	s = "{{ .opt-str }}"
 	res, err = proc.Process(ctx, []byte(s))
-	assert.ErrorContains(t, err, "Unexpected '-' symbol in a template variable.")
+	assert.ErrorContains(t, err, "unexpected '-' symbol in a template variable.")
 	assert.Equal(t, "", string(res))
 
 	s = "{{ .arg2 }},{{ .optUnd }}"
