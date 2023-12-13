@@ -222,13 +222,12 @@ func (app *appImpl) Execute() int {
 		var status int
 		var stError action.ActionStatusError
 
-		fmt.Fprintln(os.Stderr, "Error:", err)
-
 		switch {
 		case errors.As(err, &stError):
 			status = stError.GetCode()
 		default:
 			status = 1
+			fmt.Fprintln(os.Stderr, "Error:", err)
 		}
 
 		return status
