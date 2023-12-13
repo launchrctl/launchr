@@ -274,7 +274,7 @@ func (c *containerEnv) Close() error {
 
 func (c *containerEnv) imageRemove(ctx context.Context, a *Action) error {
 	_, err := c.driver.ImageRemove(ctx, a.ActionDef().Image, types.ImageRemoveOptions{
-		Force:         false,
+		Force:         true,
 		PruneChildren: false,
 	})
 
