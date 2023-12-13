@@ -252,7 +252,7 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 			assert.NoError(err)
 
 			a := act.ActionDef()
-			imgOpts := types.ImageRemoveOptions{Force: false, PruneChildren: false}
+			imgOpts := types.ImageRemoveOptions{Force: true, PruneChildren: false}
 			d.EXPECT().
 				ImageRemove(ctx, a.Image, gomock.Eq(imgOpts)).
 				Return(tt.ret...)
