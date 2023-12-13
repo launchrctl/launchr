@@ -220,7 +220,11 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 
 	status := <-statusCh
 	// @todo maybe we should note that SIG was sent to the container. Code 130 is sent on Ctlr+C.
-	log.Info("action %q finished with the exit code %d", a.ID, status)
+	msg := fmt.Sprintf("action %q finished with the exit code %d", a.ID, status)
+	log.Info(msg)
+	if status != 0 {
+		err = RunStatusError{code: status, msg: msg}
+	}
 
 	// Copy back the result from the volume.
 	// @todo it's a bad implementation considering consequential runs, need to find a better way to sync with remote.
@@ -248,7 +252,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		}
 	}
 
-	return nil
+	return err
 }
 
 func getCurrentUser() string {

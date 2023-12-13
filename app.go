@@ -1,6 +1,7 @@
 package launchr
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -218,9 +219,20 @@ func (app *appImpl) Execute() int {
 		return 125
 	}
 	if err = app.exec(); err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
-		return 1
+		var status int
+		var stErr action.RunStatusError
+
+		switch {
+		case errors.As(err, &stErr):
+			status = stErr.GetCode()
+		default:
+			status = 1
+			fmt.Fprintln(os.Stderr, "Error:", err)
+		}
+
+		return status
 	}
+
 	return 0
 }
 
