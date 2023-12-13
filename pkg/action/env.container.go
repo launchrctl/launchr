@@ -223,7 +223,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	msg := fmt.Sprintf("action %q finished with the exit code %d", a.ID, status)
 	log.Info(msg)
 	if status != 0 {
-		err = ActionStatusError{code: status, msg: msg}
+		err = RunStatusError{code: status, msg: msg}
 	}
 
 	// Copy back the result from the volume.

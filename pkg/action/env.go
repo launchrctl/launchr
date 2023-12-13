@@ -8,18 +8,18 @@ import (
 	"github.com/launchrctl/launchr/pkg/types"
 )
 
-// ActionStatusError is an execution error also containing command exit code.
-type ActionStatusError struct {
+// RunStatusError is an execution error also containing command exit code.
+type RunStatusError struct {
 	code int
 	msg  string
 }
 
-func (e ActionStatusError) Error() string {
+func (e RunStatusError) Error() string {
 	return e.msg
 }
 
 // GetCode returns executions exit code.
-func (e ActionStatusError) GetCode() int {
+func (e RunStatusError) GetCode() int {
 	return e.code
 }
 
