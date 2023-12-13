@@ -8,6 +8,21 @@ import (
 	"github.com/launchrctl/launchr/pkg/types"
 )
 
+// ActionStatusError is an execution error also containing command exit code.
+type ActionStatusError struct {
+	code int
+	msg  string
+}
+
+func (e ActionStatusError) Error() string {
+	return e.msg
+}
+
+// GetCode returns executions exit code.
+func (e ActionStatusError) GetCode() int {
+	return e.code
+}
+
 // RunEnvironment is a common interface for all action run environments.
 type RunEnvironment interface {
 	// Init prepares the run environment.

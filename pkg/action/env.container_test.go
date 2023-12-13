@@ -548,7 +548,7 @@ func Test_ContainerExec(t *testing.T) {
 	errAny := errors.New("any")
 	errAttach := errors.New("attach error")
 	errStart := errors.New("start error")
-	errExecError := ContainerExecError{code: 2, msg: "action \"test\" finished with the exit code 2"}
+	errExecError := ActionStatusError{code: 2, msg: "action \"test\" finished with the exit code 2"}
 
 	successSteps := []mockCallInfo{
 		{

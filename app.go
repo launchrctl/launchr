@@ -220,13 +220,13 @@ func (app *appImpl) Execute() int {
 	}
 	if err = app.exec(); err != nil {
 		var status int
-		var execError action.ContainerExecError
+		var stError action.ActionStatusError
 
 		fmt.Fprintln(os.Stderr, "Error:", err)
 
 		switch {
-		case errors.As(err, &execError):
-			status = execError.GetCode()
+		case errors.As(err, &stError):
+			status = stError.GetCode()
 		default:
 			status = 1
 		}
