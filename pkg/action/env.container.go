@@ -32,6 +32,21 @@ const (
 	containerFlagRemoveImage = "remove-image"
 )
 
+// ContainerExecError is an execution error also containing command exit code.
+type ContainerExecError struct {
+	code int
+	msg  string
+}
+
+func (e ContainerExecError) Error() string {
+	return e.msg
+}
+
+// GetCode returns executions exit code.
+func (e ContainerExecError) GetCode() int {
+	return e.code
+}
+
 type containerEnv struct {
 	driver  driver.ContainerRunner
 	imgres  ChainImageBuildResolver
@@ -220,7 +235,12 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 
 	status := <-statusCh
 	// @todo maybe we should note that SIG was sent to the container. Code 130 is sent on Ctlr+C.
-	log.Info("action %q finished with the exit code %d", a.ID, status)
+	msg := fmt.Sprintf("action %q finished with the exit code %d", a.ID, status)
+	if status != 0 {
+		err = ContainerExecError{code: status, msg: msg}
+	} else {
+		log.Info(msg)
+	}
 
 	// Copy back the result from the volume.
 	// @todo it's a bad implementation considering consequential runs, need to find a better way to sync with remote.
@@ -248,7 +268,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		}
 	}
 
-	return nil
+	return err
 }
 
 func getCurrentUser() string {
