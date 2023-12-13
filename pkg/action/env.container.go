@@ -239,14 +239,17 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		}
 	}
 
-	if c.removeImg {
+	defer func() {
+		if !c.removeImg {
+			return
+		}
 		err = c.imageRemove(ctx, a)
 		if err != nil {
 			log.Err("Image remove returned an error: %v", err)
 		} else {
 			cli.Println("Image %q was successfully removed", a.ActionDef().Image)
 		}
-	}
+	}()
 
 	return nil
 }
