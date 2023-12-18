@@ -15,6 +15,7 @@ import (
 	"github.com/moby/moby/pkg/namesgenerator"
 	"github.com/moby/sys/signal"
 	"github.com/moby/term"
+	"golang.org/x/mod/sumdb/dirhash"
 
 	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/driver"
@@ -30,17 +31,20 @@ const (
 	// Environment specific flags.
 	containerFlagUseVolumeWD = "use-volume-wd"
 	containerFlagRemoveImage = "remove-image"
+	containerFlagNoCache     = "no-cache"
 )
 
 type containerEnv struct {
-	driver  driver.ContainerRunner
-	imgres  ChainImageBuildResolver
-	dtype   driver.Type
-	nameprv ContainerNameProvider
+	driver   driver.ContainerRunner
+	imgres   ChainImageBuildResolver
+	imgccres imageBuildCacheResolver
+	dtype    driver.Type
+	nameprv  ContainerNameProvider
 
 	// Runtime flags
 	useVolWD  bool
 	removeImg bool
+	noCache   bool
 }
 
 // ContainerNameProvider provides an ability to generate a random container name
@@ -86,6 +90,13 @@ func (c *containerEnv) FlagsDefinition() OptionsList {
 			Type:        jsonschema.Boolean,
 			Default:     false,
 		},
+		&Option{
+			Name:        containerFlagNoCache,
+			Title:       "No cache",
+			Description: "Send command to build container without cache",
+			Type:        jsonschema.Boolean,
+			Default:     false,
+		},
 	}
 }
 
@@ -94,15 +105,20 @@ func (c *containerEnv) UseFlags(flags TypeOpts) error {
 		c.useVolWD = v.(bool)
 	}
 
-	if v, ok := flags[containerFlagRemoveImage]; ok {
-		c.removeImg = v.(bool)
+	if r, ok := flags[containerFlagRemoveImage]; ok {
+		c.removeImg = r.(bool)
+	}
+
+	if nc, ok := flags[containerFlagNoCache]; ok {
+		c.noCache = nc.(bool)
 	}
 
 	return nil
 }
 
-func (c *containerEnv) AddImageBuildResolver(r ImageBuildResolver)       { c.imgres = append(c.imgres, r) }
-func (c *containerEnv) SetContainerNameProvider(p ContainerNameProvider) { c.nameprv = p }
+func (c *containerEnv) AddImageBuildResolver(r ImageBuildResolver)           { c.imgres = append(c.imgres, r) }
+func (c *containerEnv) AddimageBuildCacheResolver(s imageBuildCacheResolver) { c.imgccres = s }
+func (c *containerEnv) SetContainerNameProvider(p ContainerNameProvider)     { c.nameprv = p }
 
 func (c *containerEnv) Init() (err error) {
 	if c.driver == nil {
@@ -266,6 +282,14 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		}
 	}()
 
+	defer func() {
+		if err == nil {
+			if err = c.imgccres.Save(); err != nil {
+				log.Err("Error during actions summary update: %v", err)
+			}
+		}
+	}()
+
 	return err
 }
 
@@ -296,14 +320,53 @@ func (c *containerEnv) imageRemove(ctx context.Context, a *Action) error {
 	return err
 }
 
+func (c *containerEnv) isRebuildRequired(a *Action) (bool, error) {
+	doRebuild := false
+	if c.imgccres.IsDryRun() {
+		return false, nil
+	}
+
+	storeItem, err := c.imgccres.GetItem(a.ID)
+	if err != nil {
+		return doRebuild, err
+	}
+
+	dirSum, err := dirhash.HashDir(absPath(a.Dir()), hashPrefix, dirhash.Hash1)
+	if err != nil {
+		return doRebuild, err
+	}
+
+	if storeItem.sum != "" {
+		doRebuild = storeItem.sum != dirSum
+	}
+
+	if doRebuild || storeItem.sum == "" {
+		err = c.imgccres.AddItem(SumItem{
+			id:  a.ID,
+			sum: dirSum,
+		})
+	}
+
+	return doRebuild, err
+}
+
 func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
 	streams := a.GetInput().IO
 	image := a.ActionDef().Image
 	// Prepend action to have the top priority in image build resolution.
 	r := ChainImageBuildResolver{append(ChainImageBuildResolver{a}, c.imgres...)}
+
+	buildInfo := r.ImageBuildInfo(image)
+	forceRebuild, err := c.isRebuildRequired(a)
+	if err != nil {
+		return err
+	}
+
 	status, err := c.driver.ImageEnsure(ctx, types.ImageOptions{
-		Name:  image,
-		Build: r.ImageBuildInfo(image),
+		Name:         image,
+		Build:        buildInfo,
+		Nocache:      c.noCache,
+		ForceRebuild: forceRebuild,
 	})
 	if err != nil {
 		return err

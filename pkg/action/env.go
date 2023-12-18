@@ -49,6 +49,8 @@ type ContainerRunEnvironment interface {
 	SetContainerNameProvider(ContainerNameProvider)
 	// AddImageBuildResolver adds an image build resolver to a chain.
 	AddImageBuildResolver(ImageBuildResolver)
+	// AddEnvSumService adds an image build resolver to a chain.
+	AddimageBuildCacheResolver(imageBuildCacheResolver)
 }
 
 // ImageBuildResolver is an interface to resolve image build info from its source.

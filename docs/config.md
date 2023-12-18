@@ -28,7 +28,15 @@ images:
 ...
 ```
 
+After first successful build, `actions.sum` file will be created in `.launchr` dir.
+It stores dir hash sum of each action. That approach allows us to determine
+when image should be rebuilt.
+
 The build will be done in the following order:
 1. Check if image already exists
 2. Check action local build definition
 3. Search global configuration for image name or tags 
+
+With `actions.sum` file order includes:
+1. Check if actions.sum exists, compare action dir hash with 
+2. if sum doesn't match - force rebuild,

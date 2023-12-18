@@ -59,7 +59,8 @@ func (d *dockerDriver) ImageEnsure(ctx context.Context, image types.ImageOptions
 			return nil, err
 		}
 	}
-	if insp.ID != "" {
+
+	if insp.ID != "" && !image.ForceRebuild && !image.Nocache {
 		return &types.ImageStatusResponse{Status: types.ImageExists}, nil
 	}
 	// Build the image if it doesn't exist.
@@ -72,6 +73,7 @@ func (d *dockerDriver) ImageEnsure(ctx context.Context, image types.ImageOptions
 			Tags:       []string{image.Name},
 			BuildArgs:  image.Build.Args,
 			Dockerfile: image.Build.Buildfile,
+			NoCache:    image.Nocache,
 		})
 		if errBuild != nil {
 			return nil, errBuild

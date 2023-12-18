@@ -197,9 +197,11 @@ func WithDefaultRunEnvironment(m Manager, a *Action) {
 // WithContainerRunEnvironmentConfig configures a ContainerRunEnvironment.
 func WithContainerRunEnvironmentConfig(cfg launchr.Config, prefix string) DecorateWithFn {
 	r := LaunchrConfigImageBuildResolver{cfg}
+	ccr := newImageBuildCacheResolver(cfg, false)
 	return func(m Manager, a *Action) {
 		if env, ok := a.env.(ContainerRunEnvironment); ok {
 			env.AddImageBuildResolver(r)
+			env.AddimageBuildCacheResolver(ccr)
 			env.SetContainerNameProvider(ContainerNameProvider{Prefix: prefix, RandomSuffix: true})
 		}
 	}
