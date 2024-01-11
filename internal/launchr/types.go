@@ -34,6 +34,7 @@ type AppVersion struct {
 	OS          string
 	Arch        string
 	BuiltWith   string
+	CoreVersion string
 	CoreReplace string
 	Plugins     []string
 }

@@ -48,6 +48,7 @@ func (p UsePluginInfo) String() string {
 // BuildOptions stores launchr build parameters.
 type BuildOptions struct {
 	LaunchrVersion *launchr.AppVersion
+	Version        string
 	CorePkg        UsePluginInfo
 	PkgName        string
 	ModReplace     map[string]string
@@ -179,13 +180,17 @@ func (b *Builder) goBuild(ctx context.Context) error {
 	// Set build result file.
 	args := []string{"build", "-o", out}
 	// Collect ldflags
-	ldflags := make([]string, 0, 4)
+	ldflags := make([]string, 0, 5)
 	// Set application version metadata.
 	ldflags = append(
 		ldflags,
 		"-X", "'"+launchr.PkgPath+".name="+b.PkgName+"'",
 		"-X", "'"+launchr.PkgPath+".builtWith="+b.LaunchrVersion.Short()+"'",
 	)
+
+	if b.Version != "" {
+		ldflags = append(ldflags, "-X", "'"+launchr.PkgPath+".version="+b.Version+"'")
+	}
 
 	// Include or trim debug information.
 	if b.Debug {
