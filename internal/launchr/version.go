@@ -37,13 +37,17 @@ func NewVersion(name, ver, bwith string, plugins PluginsMap) *AppVersion {
 	buildInfo.Deps = append(buildInfo.Deps, &buildInfo.Main)
 	// Check core version when built or used in a plugin.
 	var coreRep string
-	ver, coreRep = getCoreInfo(ver, buildInfo)
+	coreVer, coreRep := getCoreInfo(ver, buildInfo)
+	if bwith == "" {
+		ver = coreVer
+	}
 
 	return &AppVersion{
 		Name:        name,
 		Version:     ver,
 		OS:          runtime.GOOS,
 		Arch:        runtime.GOARCH,
+		CoreVersion: coreVer,
 		CoreReplace: coreRep,
 		BuiltWith:   bwith,
 		Plugins:     getPluginModules(plugins, buildInfo),
@@ -120,6 +124,9 @@ const versionTmplStr = `
 {{- .Short}}
 {{- if .BuiltWith}}
 Built with {{.BuiltWith}}
+{{- end}}
+{{- if ne .CoreVersion .Version}}
+Core version: {{.CoreVersion}}
 {{- end}}
 {{- if .CoreReplace}}
 Core replace: {{.CoreReplace}}
