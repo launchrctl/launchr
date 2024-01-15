@@ -4,7 +4,6 @@ package yamldiscovery
 
 import (
 	"io/fs"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -30,18 +29,12 @@ func (p *Plugin) PluginInfo() launchr.PluginInfo {
 // OnAppInit implements launchr.Plugin interface to provide discovered actions.
 func (p *Plugin) OnAppInit(app launchr.App) error {
 	p.app = app
-	dp := p.app.GetWD()
-	appFs := os.DirFS(dp)
-	actions, err := discoverActions(appFs)
-	if err != nil {
-		return err
-	}
-	var actionMngr action.Manager
-	app.GetService(&actionMngr)
-	for _, actConf := range actions {
-		actionMngr.Add(actConf)
-	}
 	return nil
+}
+
+// DiscoverActions implements launchr.ActionDiscoveryPlugin interface.
+func (p *Plugin) DiscoverActions(fs fs.FS) ([]*action.Action, error) {
+	return action.NewYamlDiscovery(fs).Discover()
 }
 
 // CobraAddCommands implements launchr.CobraPlugin interface to provide discovered actions.
@@ -50,10 +43,13 @@ func (p *Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
 		Use:   "discover",
 		Short: "Discovers available actions in filesystem",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dp := p.app.GetWD()
-			actions, err := discoverActions(os.DirFS(dp))
-			if err != nil {
-				return err
+			var actions []*action.Action
+			for _, fs := range p.app.GetDiscoveryFS() {
+				res, err := p.DiscoverActions(fs)
+				if err != nil {
+					return err
+				}
+				actions = append(actions, res...)
 			}
 
 			// @todo cache discovery to read fs only once.
@@ -67,8 +63,4 @@ func (p *Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
 	// Discover actions.
 	rootCmd.AddCommand(discoverCmd)
 	return nil
-}
-
-func discoverActions(fs fs.FS) ([]*action.Action, error) {
-	return action.NewYamlDiscovery(fs).Discover()
 }

@@ -94,7 +94,7 @@ func Test_Discover_isValid(t *testing.T) {
 	}
 
 	// Run tests.
-	ad := NewYamlDiscovery(fstest.MapFS{}).(*yamlDiscovery)
+	ad := NewYamlDiscovery(fstest.MapFS{})
 	for _, tt := range tts {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {

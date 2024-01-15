@@ -2,6 +2,7 @@ package launchr
 
 import (
 	"fmt"
+	"io/fs"
 
 	"github.com/spf13/cobra"
 
@@ -25,6 +26,10 @@ type App interface {
 	// GetService retrieves a service of type v and assigns it to v.
 	// Panics if a service is not found.
 	GetService(v interface{})
+	// AddDiscoveryFS registers a File System for discovery of actions in launchr.
+	AddDiscoveryFS(fs fs.FS)
+	// GetDiscoveryFS returns an array of registered File Systems for action discovery.
+	GetDiscoveryFS() []fs.FS
 }
 
 // AppVersion stores application version.

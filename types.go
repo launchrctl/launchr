@@ -5,6 +5,7 @@ import (
 	"io/fs"
 
 	"github.com/launchrctl/launchr/internal/launchr"
+	"github.com/launchrctl/launchr/pkg/action"
 )
 
 const (
@@ -31,6 +32,8 @@ type (
 	Plugin = launchr.Plugin
 	// OnAppInitPlugin is an interface to implement a plugin for app initialisation.
 	OnAppInitPlugin = launchr.OnAppInitPlugin
+	// ActionDiscoveryPlugin is an interface to implement a plugin to discover actions.
+	ActionDiscoveryPlugin = action.DiscoveryPlugin
 	// CobraPlugin is an interface to implement a plugin for cobra.
 	CobraPlugin = launchr.CobraPlugin
 	// PluginGeneratedData is a struct containing a result information of plugin generation.
