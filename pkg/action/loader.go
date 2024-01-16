@@ -1,14 +1,10 @@
 package action
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
-	"io"
-	"io/fs"
 	"regexp"
 	"strings"
-	"sync"
 	"text/template"
 
 	"github.com/a8m/envsubst"
@@ -27,71 +23,6 @@ type Loader interface {
 // LoadContext stores relevant and isolated data needed for processors.
 type LoadContext struct {
 	Action *Action
-}
-
-type yamlFileLoader struct {
-	processor LoadProcessor
-	raw       *Definition
-	cached    []byte
-	open      func() (fs.File, error)
-	mx        sync.Mutex
-}
-
-func (l *yamlFileLoader) Content() ([]byte, error) {
-	l.mx.Lock()
-	defer l.mx.Unlock()
-	// @todo unload unused, maybe manager must do it.
-	var err error
-	if l.cached != nil {
-		return l.cached, nil
-	}
-	f, err := l.open()
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	l.cached, err = io.ReadAll(f)
-	if err != nil {
-		return nil, err
-	}
-	return l.cached, nil
-}
-
-func (l *yamlFileLoader) LoadRaw() (*Definition, error) {
-	var err error
-	buf, err := l.Content()
-	if err != nil {
-		return nil, err
-	}
-	l.mx.Lock()
-	defer l.mx.Unlock()
-	if l.raw == nil {
-		l.raw, err = CreateFromYamlTpl(buf)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return l.raw, err
-}
-
-func (l *yamlFileLoader) Load(ctx LoadContext) (res *Definition, err error) {
-	// Open a file and cache content for future reads.
-	c, err := l.Content()
-	if err != nil {
-		return nil, err
-	}
-	buf := make([]byte, len(c))
-	copy(buf, c)
-	buf, err = l.processor.Process(ctx, buf)
-	if err != nil {
-		return nil, err
-	}
-	r := bytes.NewReader(buf)
-	res, err = CreateFromYaml(r)
-	if err != nil {
-		return nil, err
-	}
-	return res, err
 }
 
 // LoadProcessor is an interface for processing input on load.
@@ -118,30 +49,6 @@ func (p *pipeProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
 		}
 	}
 	return b, nil
-}
-
-type escapeYamlTplCommentsProcessor struct{}
-
-func (p escapeYamlTplCommentsProcessor) Process(_ LoadContext, b []byte) ([]byte, error) {
-	// Read by line.
-	scanner := bufio.NewScanner(bytes.NewBuffer(b))
-	res := make([]byte, 0, len(b))
-	for scanner.Scan() {
-		l := scanner.Bytes()
-		if i := bytes.IndexByte(l, '#'); i != -1 {
-			// Check the comment symbol is not inside a string.
-			// Multiline strings are not supported for now.
-			if !(bytes.LastIndexByte(l[:i], '"') != -1 && bytes.IndexByte(l[i:], '"') != -1 ||
-				bytes.LastIndexByte(l[:i], '\'') != -1 && bytes.IndexByte(l[i:], '\'') != -1) {
-				// Strip data after comment symbol.
-				l = l[:i]
-			}
-		}
-		// Collect the modified lines.
-		res = append(res, l...)
-		res = append(res, '\n')
-	}
-	return res, nil
 }
 
 type envProcessor struct{}

@@ -50,18 +50,18 @@ func (l *consoleLogger) Warn(format string, v ...any) {
 // Err implements Logger.Err.
 func (l *consoleLogger) Err(format string, v ...any) {
 	if l.Verbosity <= ErrLvl {
-		l.err.Printf("ERROR: "+format, v...)
+		l.err.Printf("ERROR: "+format, v...) //nolint goconst
 	}
 }
 
 // Panic implements Logger.Panic.
 func (l *consoleLogger) Panic(format string, v ...any) {
-	l.err.Panicf("ERROR: "+format, v...)
+	l.err.Panicf("ERROR: "+format, v...) //nolint goconst
 }
 
 // Fatal implements Logger.Fatal.
 func (l *consoleLogger) Fatal(format string, v ...any) {
-	l.err.Fatalf("ERROR: "+format, v...)
+	l.err.Fatalf("ERROR: "+format, v...) //nolint goconst
 }
 
 // SetLevel implements Logger.SetLevel.
