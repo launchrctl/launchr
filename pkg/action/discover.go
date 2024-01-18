@@ -59,7 +59,7 @@ type Discovery struct {
 
 // NewDiscovery creates an instance of action discovery.
 func NewDiscovery(fs DiscoveryFS, ds DiscoveryStrategy) *Discovery {
-	fsDir := launchr.GetFsAbsPath(fs)
+	fsDir := launchr.GetFsAbsPath(fs.fs)
 	return &Discovery{fs, fsDir, ds}
 }
 
