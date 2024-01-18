@@ -158,7 +158,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	if c.useVolWD {
 		// @todo test somehow.
 		cli.Println(`Flag "--%s" is set. Copying the working directory inside the container.`, containerFlagUseVolumeWD)
-		err = c.copyDirToContainer(ctx, cid, ".", containerHostMount)
+		err = c.copyDirToContainer(ctx, cid, a.WorkDir(), containerHostMount)
 		if err != nil {
 			return err
 		}
@@ -229,7 +229,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	// Copy back the result from the volume.
 	// @todo it's a bad implementation considering consequential runs, need to find a better way to sync with remote.
 	if c.useVolWD {
-		path := absPath(".")
+		path := a.WorkDir()
 		cli.Println(`Flag "--%s" is set. Copying back the result of the action run.`, containerFlagUseVolumeWD)
 		err = c.copyFromContainer(ctx, cid, containerHostMount, filepath.Dir(path), filepath.Base(path))
 		defer func() {
@@ -384,7 +384,7 @@ func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *typ
 		}
 	} else {
 		createOpts.Binds = []string{
-			absPath(".") + ":" + containerHostMount,
+			absPath(a.WorkDir()) + ":" + containerHostMount,
 			absPath(a.Dir()) + ":" + containerActionMount,
 		}
 	}

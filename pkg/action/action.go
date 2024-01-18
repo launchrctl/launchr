@@ -68,11 +68,14 @@ func (a *Action) Reset() { a.def = nil }
 // GetInput returns action input.
 func (a *Action) GetInput() Input { return a.input }
 
+// WorkDir returns action working directory.
+func (a *Action) WorkDir() string { return a.wd }
+
 // Filepath returns action file path.
 func (a *Action) Filepath() string { return a.fpath }
 
 // Dir returns an action file directory.
-func (a *Action) Dir() string { return filepath.Dir(filepath.Join(a.wd, a.Filepath())) }
+func (a *Action) Dir() string { return filepath.Dir(a.Filepath()) }
 
 // SetRunEnvironment sets environment to run the action.
 func (a *Action) SetRunEnvironment(env RunEnvironment) { a.env = env }

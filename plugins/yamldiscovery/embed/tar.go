@@ -18,7 +18,7 @@ func createActionTar(cfs fs.FS, buildPath string) (string, []*action.Action, err
 	name := "actions.tar.gz"
 	target := filepath.Join(buildPath, name)
 	// Discover actions.
-	ad := action.NewYamlDiscovery(cfs)
+	ad := action.NewYamlDiscovery(action.NewDiscoveryFS(cfs, ""))
 	actions, err := ad.Discover()
 	if err != nil {
 		return name, nil, err

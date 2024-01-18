@@ -74,6 +74,7 @@ func testContainerAction(aconf *DefAction) *Action {
 		ID:     "test",
 		Loader: &Definition{Action: aconf},
 		fpath:  "my/action/test/action.yaml",
+		wd:     absPath("test"),
 	}
 }
 
@@ -292,7 +293,7 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 
 	eqCfg := *runCfg
 	eqCfg.Binds = []string{
-		absPath(".") + ":" + containerHostMount,
+		absPath(a.WorkDir()) + ":" + containerHostMount,
 		absPath(a.Dir()) + ":" + containerActionMount,
 	}
 	eqCfg.WorkingDir = containerHostMount
@@ -522,7 +523,7 @@ func Test_ContainerExec(t *testing.T) {
 		NetworkMode:   types.NetworkModeHost,
 		ExtraHosts:    actConf.ExtraHosts,
 		Binds: []string{
-			absPath(".") + ":" + containerHostMount,
+			absPath(act.WorkDir()) + ":" + containerHostMount,
 			absPath(act.Dir()) + ":" + containerActionMount,
 		},
 		WorkingDir:   containerHostMount,

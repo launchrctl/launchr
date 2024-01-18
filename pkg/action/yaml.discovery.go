@@ -12,7 +12,7 @@ import (
 var rgxYamlFile = regexp.MustCompile(`^action\.(yaml|yml)$`)
 
 // NewYamlDiscovery is an implementation of discovery for searching yaml files.
-func NewYamlDiscovery(fs fs.FS) *Discovery {
+func NewYamlDiscovery(fs DiscoveryFS) *Discovery {
 	return NewDiscovery(fs, YamlDiscoveryStrategy{TargetRgx: rgxYamlFile})
 }
 

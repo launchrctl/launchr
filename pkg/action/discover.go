@@ -20,7 +20,25 @@ var actionsSubdir = strings.Join([]string{"", actionsDirname, ""}, string(filepa
 // DiscoveryPlugin is a launchr plugin to discover actions.
 type DiscoveryPlugin interface {
 	launchr.Plugin
-	DiscoverActions(fs fs.FS) ([]*Action, error)
+	DiscoverActions(fs launchr.ManagedFS) ([]*Action, error)
+}
+
+// DiscoveryFS is a file system to discover actions.
+type DiscoveryFS struct {
+	fs fs.FS
+	wd string
+}
+
+// NewDiscoveryFS creates a DiscoveryFS given fs - a filesystem to discover
+// and wd - working directory for an action, leave empty for current path.
+func NewDiscoveryFS(fs fs.FS, wd string) DiscoveryFS { return DiscoveryFS{fs, wd} }
+
+// FS implements launchr.ManagedFS.
+func (f DiscoveryFS) FS() fs.FS { return f.fs }
+
+// Open implements fs.FS and decorates the managed fs.
+func (f DiscoveryFS) Open(name string) (fs.File, error) {
+	return f.FS().Open(name)
 }
 
 // FileLoadFn is a type for loading a file.
@@ -34,15 +52,15 @@ type DiscoveryStrategy interface {
 
 // Discovery defines a common functionality for discovering action files.
 type Discovery struct {
-	fs  fs.FS
-	cwd string
-	s   DiscoveryStrategy
+	fs    DiscoveryFS
+	fsDir string
+	s     DiscoveryStrategy
 }
 
 // NewDiscovery creates an instance of action discovery.
-func NewDiscovery(fs fs.FS, ds DiscoveryStrategy) *Discovery {
-	cwd := launchr.GetFsAbsPath(fs)
-	return &Discovery{fs, cwd, ds}
+func NewDiscovery(fs DiscoveryFS, ds DiscoveryStrategy) *Discovery {
+	fsDir := launchr.GetFsAbsPath(fs)
+	return &Discovery{fs, fsDir, ds}
 }
 
 func (ad *Discovery) isValid(path string, d fs.DirEntry) bool {
@@ -123,7 +141,7 @@ func (ad *Discovery) parseFile(f string) *Action {
 	if id == "" {
 		panic(fmt.Errorf("action id cannot be empty, file %q", f))
 	}
-	a := NewAction(id, ad.cwd, f)
+	a := NewAction(id, absPath(ad.fs.wd), filepath.Join(ad.fsDir, f))
 	a.Loader = ad.s.Loader(
 		func() (fs.File, error) { return ad.fs.Open(f) },
 		envProcessor{},

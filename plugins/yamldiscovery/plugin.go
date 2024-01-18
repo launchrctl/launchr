@@ -3,8 +3,6 @@
 package yamldiscovery
 
 import (
-	"io/fs"
-
 	"github.com/spf13/cobra"
 
 	"github.com/launchrctl/launchr/internal/launchr"
@@ -33,8 +31,11 @@ func (p *Plugin) OnAppInit(app launchr.App) error {
 }
 
 // DiscoverActions implements launchr.ActionDiscoveryPlugin interface.
-func (p *Plugin) DiscoverActions(fs fs.FS) ([]*action.Action, error) {
-	return action.NewYamlDiscovery(fs).Discover()
+func (p *Plugin) DiscoverActions(fs launchr.ManagedFS) ([]*action.Action, error) {
+	if fs, ok := fs.(action.DiscoveryFS); ok {
+		return action.NewYamlDiscovery(fs).Discover()
+	}
+	return nil, nil
 }
 
 // CobraAddCommands implements launchr.CobraPlugin interface to provide discovered actions.
@@ -44,7 +45,7 @@ func (p *Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
 		Short: "Discovers available actions in filesystem",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var actions []*action.Action
-			for _, fs := range p.app.GetDiscoveryFS() {
+			for _, fs := range p.app.GetRegisteredFS() {
 				res, err := p.DiscoverActions(fs)
 				if err != nil {
 					return err

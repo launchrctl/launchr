@@ -71,7 +71,7 @@ func (p *Plugin) Generate(buildPath string, workDir string) (*launchr.PluginGene
 
 	fmt.Println("[INFO] Generating embed actions go file")
 	var buf bytes.Buffer
-	structName := launchr.ToCamelCase(id, false)
+	structName := "ActionsYamlDiscoveryGen"
 	err = tpl.Execute(&buf, &pluginVars{
 		ID:             id,
 		StructName:     structName,

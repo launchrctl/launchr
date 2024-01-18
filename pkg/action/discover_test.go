@@ -8,6 +8,7 @@ import (
 	"testing/fstest"
 
 	"github.com/moby/moby/pkg/namesgenerator"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_Discover(t *testing.T) {
@@ -44,7 +45,7 @@ func Test_Discover(t *testing.T) {
 
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			ad := NewYamlDiscovery(tt.fs)
+			ad := NewYamlDiscovery(NewDiscoveryFS(tt.fs, ""))
 			actions, err := ad.Discover()
 			if err != nil {
 				t.Errorf("unexpected error %v", err)
@@ -54,6 +55,27 @@ func Test_Discover(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_Discover_ActionWD(t *testing.T) {
+	// Test if working directory is correctly set to actions on discovery.
+	tfs := _getFsMapActions(1, validEmptyVersionYaml, true)
+	var expFPath string
+	for expFPath = range tfs {
+		break
+	}
+	expectedWD := "expectedWD"
+	ad := NewYamlDiscovery(NewDiscoveryFS(tfs, expectedWD))
+	actions, err := ad.Discover()
+	assert.NoError(t, err)
+	assert.Equal(t, expFPath, actions[0].fpath)
+	assert.Equal(t, absPath(expectedWD), actions[0].wd)
+
+	ad = NewYamlDiscovery(NewDiscoveryFS(tfs, ""))
+	actions, err = ad.Discover()
+	assert.NoError(t, err)
+	assert.Equal(t, expFPath, actions[0].fpath)
+	assert.Equal(t, absPath(""), actions[0].wd)
 }
 
 type dirEntry string
@@ -94,7 +116,7 @@ func Test_Discover_isValid(t *testing.T) {
 	}
 
 	// Run tests.
-	ad := NewYamlDiscovery(fstest.MapFS{})
+	ad := NewYamlDiscovery(NewDiscoveryFS(fstest.MapFS{}, ""))
 	for _, tt := range tts {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {

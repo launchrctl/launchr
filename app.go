@@ -3,7 +3,6 @@ package launchr
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -33,7 +32,7 @@ type appImpl struct {
 	actionMngr action.Manager
 	pluginMngr PluginManager
 	config     Config
-	regFS      []fs.FS
+	mFS        []ManagedFS
 }
 
 // getPluginByType returns specific plugins from the app.
@@ -70,8 +69,8 @@ func (app *appImpl) Name() string         { return name }
 func (app *appImpl) GetWD() string        { return app.workDir }
 func (app *appImpl) Streams() cli.Streams { return app.streams }
 
-func (app *appImpl) AddDiscoveryFS(fs fs.FS) { app.regFS = append(app.regFS, fs) }
-func (app *appImpl) GetDiscoveryFS() []fs.FS { return app.regFS }
+func (app *appImpl) RegisterFS(fs ManagedFS)      { app.mFS = append(app.mFS, fs) }
+func (app *appImpl) GetRegisteredFS() []ManagedFS { return app.mFS }
 
 func (app *appImpl) AddService(s Service) {
 	info := s.ServiceInfo()
@@ -112,12 +111,12 @@ func (app *appImpl) init() error {
 	var err error
 	// Set working dir and config dir.
 	app.cfgDir = "." + name
-	app.workDir, err = filepath.Abs("./")
+	app.workDir, err = filepath.Abs(".")
 	if err != nil {
 		return err
 	}
-	app.regFS = make([]fs.FS, 0, 4)
-	app.AddDiscoveryFS(os.DirFS(app.workDir))
+	app.mFS = make([]ManagedFS, 0, 4)
+	app.RegisterFS(action.NewDiscoveryFS(os.DirFS(app.workDir), app.GetWD()))
 	// Prepare dependencies.
 	app.streams = cli.StandardStreams()
 	app.services = make(map[ServiceInfo]Service)
@@ -142,7 +141,7 @@ func (app *appImpl) init() error {
 
 	// Discover actions.
 	for _, p := range getPluginByType[ActionDiscoveryPlugin](app) {
-		for _, fs := range app.GetDiscoveryFS() {
+		for _, fs := range app.GetRegisteredFS() {
 			actions, err := p.DiscoverActions(fs)
 			if err != nil {
 				return err

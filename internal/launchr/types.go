@@ -26,10 +26,11 @@ type App interface {
 	// GetService retrieves a service of type v and assigns it to v.
 	// Panics if a service is not found.
 	GetService(v interface{})
-	// AddDiscoveryFS registers a File System for discovery of actions in launchr.
-	AddDiscoveryFS(fs fs.FS)
-	// GetDiscoveryFS returns an array of registered File Systems for action discovery.
-	GetDiscoveryFS() []fs.FS
+	// RegisterFS registers a File System in launchr.
+	// It may be a FS for action discovery, see action.DiscoveryFS.
+	RegisterFS(fs ManagedFS)
+	// GetRegisteredFS returns an array of registered File Systems.
+	GetRegisteredFS() []ManagedFS
 }
 
 // AppVersion stores application version.
@@ -145,4 +146,10 @@ type Service interface {
 // InitServiceInfo sets private fields for internal usage only.
 func InitServiceInfo(si *ServiceInfo, s Service) {
 	si.pkgPath, si.typeName = GetTypePkgPathName(s)
+}
+
+// ManagedFS is a common interface for FS registered in launchr.
+type ManagedFS interface {
+	fs.FS
+	FS() fs.FS
 }

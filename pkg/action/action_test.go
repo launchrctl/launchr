@@ -13,7 +13,7 @@ func Test_Action(t *testing.T) {
 	assert := assert.New(t)
 	// Prepare an action.
 	fs := _getFsMapActions(1, validFullYaml, true)
-	ad := NewYamlDiscovery(fs)
+	ad := NewYamlDiscovery(NewDiscoveryFS(fs, ""))
 	actions, err := ad.Discover()
 	assert.NoError(err)
 	assert.NotEmpty(actions)

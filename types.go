@@ -50,6 +50,8 @@ type (
 	Config = launchr.Config
 	// ConfigAware provides an interface for structs to support launchr configuration setting.
 	ConfigAware = launchr.ConfigAware
+	// ManagedFS is a File System managed by launchr.
+	ManagedFS = launchr.ManagedFS
 )
 
 // Version provides app version info.
@@ -63,6 +65,3 @@ func GetFsAbsPath(fs fs.FS) string { return launchr.GetFsAbsPath(fs) }
 
 // EnsurePath creates all directories in the path.
 func EnsurePath(parts ...string) error { return launchr.EnsurePath(parts...) }
-
-// ToCamelCase converts a string to CamelCase.
-func ToCamelCase(s string, capFirst bool) string { return launchr.ToCamelCase(s, capFirst) }
