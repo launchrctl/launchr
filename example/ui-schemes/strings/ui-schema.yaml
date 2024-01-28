@@ -1,0 +1,7 @@
+uiSchema:
+  # UI schema
+  textArea:
+    'ui:widget': textarea
+    'ui:placeholder': This is a placeholder
+  color:
+    'ui:widget': color

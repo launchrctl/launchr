@@ -1,0 +1,19 @@
+action:
+  title: Example of Enumeration
+  description: Enumeration examples
+  arguments:
+    select:
+      title: Select
+      type: string
+      enum: [Ola, Hello, Bonjour, Buongiorno, GutenTag]
+
+    radio:
+      title: Radio
+      type: string
+      enum: [Ola, Hello, Bonjour, Buongiorno, GutenTag]
+
+    buttonGroup:
+      type: string
+      enum: [Ola, Hello, Bonjour, Buongiorno, GutenTag]
+      default: Ola
+      description: With default value set

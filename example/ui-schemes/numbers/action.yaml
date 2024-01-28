@@ -1,0 +1,32 @@
+action:
+  title: Example of Numbers
+  description: Numbers arguments
+  arguments:
+    float:
+      title: Number (float)
+      type: number
+
+    integer:
+      default: 5
+      title: Number (integer)
+      type: integer
+
+    numberConstrained:
+      title: Number with constraints
+      description: min + max + multiple of
+      type: integer
+      minimum: 50
+      maximum: 100
+      multipleOf: 10
+
+    range:
+      title: Range with default
+      default: 28
+      type: integer
+
+    rangeConstrained:
+      title: Range  with constraints
+      type: integer
+      minimum: -50
+      maximum: 50
+      multipleOf: 25

@@ -1,0 +1,26 @@
+action:
+  title: Example of strings
+  description: Example of strings arguments
+  arguments:
+    simpleString:
+      title: Simple inline string
+      type: string
+      default: With default value from schema
+
+    stringConstrained:
+      title: String with constraints
+      type: string
+      pattern: '^[A-Z \d\W]+$'
+      minLength: 2
+      maxLength: 10
+      description: Only UPPERCASE with 2 to 10 characters is allowed.
+
+    textArea:
+      title: Text area
+      description: Using UI schema options.
+      type: string
+
+    color:
+      title: Color picker
+      type: string
+      default: '#4a90e2'
