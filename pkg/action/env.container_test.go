@@ -11,10 +11,10 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/moby/moby/pkg/jsonmessage"
 	"github.com/moby/moby/pkg/stdcopy"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/cli"

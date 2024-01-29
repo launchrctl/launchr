@@ -12,7 +12,7 @@ import (
 )
 
 // ResizeOptions is a struct for terminal resizing.
-type ResizeOptions = types.ResizeOptions
+type ResizeOptions = typescontainer.ResizeOptions
 
 // BuildDefinition stores image build definition.
 type BuildDefinition struct {
@@ -159,7 +159,7 @@ type ContainerWaitResponse struct {
 }
 
 // ContainerAttachOptions stores options for attaching to a running container.
-type ContainerAttachOptions = types.ContainerAttachOptions
+type ContainerAttachOptions = typescontainer.AttachOptions
 
 // ContainerStopOptions stores options to stop a container.
 type ContainerStopOptions struct {
@@ -167,4 +167,4 @@ type ContainerStopOptions struct {
 }
 
 // ContainerRemoveOptions stores options to remove a container.
-type ContainerRemoveOptions = types.ContainerRemoveOptions
+type ContainerRemoveOptions = typescontainer.RemoveOptions

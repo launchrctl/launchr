@@ -33,7 +33,7 @@ func NewDockerDriver() (ContainerRunner, error) {
 func (d *dockerDriver) ContainerList(ctx context.Context, opts types.ContainerListOptions) []types.ContainerListResult {
 	f := filters.NewArgs()
 	f.Add("name", opts.SearchName)
-	l, err := d.cli.ContainerList(ctx, dockertypes.ContainerListOptions{
+	l, err := d.cli.ContainerList(ctx, container.ListOptions{
 		Filters: f,
 		All:     true,
 	})
@@ -146,7 +146,7 @@ func (d *dockerDriver) ContainerCreate(ctx context.Context, opts types.Container
 }
 
 func (d *dockerDriver) ContainerStart(ctx context.Context, cid string, _ types.ContainerStartOptions) error {
-	return d.cli.ContainerStart(ctx, cid, dockertypes.ContainerStartOptions{})
+	return d.cli.ContainerStart(ctx, cid, container.StartOptions{})
 }
 
 func (d *dockerDriver) ContainerWait(ctx context.Context, cid string, opts types.ContainerWaitOptions) (<-chan types.ContainerWaitResponse, <-chan error) {
@@ -169,7 +169,7 @@ func (d *dockerDriver) ContainerWait(ctx context.Context, cid string, opts types
 }
 
 func (d *dockerDriver) ContainerAttach(ctx context.Context, containerID string, options types.ContainerAttachOptions) (*ContainerInOut, error) {
-	resp, err := d.cli.ContainerAttach(ctx, containerID, dockertypes.ContainerAttachOptions(options))
+	resp, err := d.cli.ContainerAttach(ctx, containerID, container.AttachOptions(options))
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +182,7 @@ func (d *dockerDriver) ContainerStop(ctx context.Context, cid string) error {
 }
 
 func (d *dockerDriver) ContainerRemove(ctx context.Context, cid string, _ types.ContainerRemoveOptions) error {
-	return d.cli.ContainerRemove(ctx, cid, dockertypes.ContainerRemoveOptions{})
+	return d.cli.ContainerRemove(ctx, cid, container.RemoveOptions{})
 }
 
 func (d *dockerDriver) ContainerKill(ctx context.Context, containerID, signal string) error {
@@ -190,14 +190,14 @@ func (d *dockerDriver) ContainerKill(ctx context.Context, containerID, signal st
 }
 
 func (d *dockerDriver) ContainerResize(ctx context.Context, cid string, opts types.ResizeOptions) error {
-	return d.cli.ContainerResize(ctx, cid, dockertypes.ResizeOptions{
+	return d.cli.ContainerResize(ctx, cid, container.ResizeOptions{
 		Height: opts.Height,
 		Width:  opts.Width,
 	})
 }
 
 func (d *dockerDriver) ContainerExecResize(ctx context.Context, cid string, opts types.ResizeOptions) error {
-	return d.cli.ContainerExecResize(ctx, cid, dockertypes.ResizeOptions{
+	return d.cli.ContainerExecResize(ctx, cid, container.ResizeOptions{
 		Height: opts.Height,
 		Width:  opts.Width,
 	})

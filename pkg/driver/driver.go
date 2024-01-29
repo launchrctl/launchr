@@ -1,6 +1,6 @@
 // Package driver hold implementation for action drivers.
 //
-//go:generate mockgen -destination=mocks/driver.go -package=mocks . ContainerRunner
+//go:generate go run go.uber.org/mock/mockgen@latest -destination=mocks/driver.go -package=mocks . ContainerRunner
 package driver
 
 import (
