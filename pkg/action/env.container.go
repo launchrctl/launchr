@@ -147,6 +147,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		Env:           actConf.Env,
 		User:          getCurrentUser(),
 	}
+	log.Debug("Creating a container for action %q", a.ID)
 	cid, err := c.containerCreate(ctx, a, runConfig)
 	if err != nil {
 		return err
@@ -154,6 +155,8 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	if cid == "" {
 		return errors.New("error on creating a container")
 	}
+
+	log.Debug("Successfully created container %q for action %q", cid, a.ID)
 	// Copy working dirs to the container.
 	if c.useVolWD {
 		// @todo test somehow.
@@ -174,12 +177,14 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	}
 
 	if !runConfig.Tty {
+		log.Debug("Start watching signals %q, action %q", cid, a.ID)
 		sigc := notifyAllSignals()
 		go ForwardAllSignals(ctx, c.driver, cid, sigc)
 		defer signal.StopCatch(sigc)
 	}
 
 	// Attach streams to the terminal.
+	log.Debug("Attaching streams of %q, action %q", cid, a.ID)
 	cio, errCh, err := c.attachContainer(ctx, streams, cid, runConfig)
 	if err != nil {
 		return err
@@ -187,10 +192,13 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	defer func() {
 		_ = cio.Close()
 	}()
+	log.Debug("Watching status of %q, action %q", cid, a.ID)
 	statusCh := c.containerWait(ctx, cid, runConfig)
 
 	// Start the container
+	log.Debug("Starting container %q, action %q", cid, a.ID)
 	if err = c.driver.ContainerStart(ctx, cid, types.ContainerStartOptions{}); err != nil {
+		log.Debug("Failed starting the container %q, action %q", cid, a.ID)
 		cancelFn()
 		<-errCh
 		if runConfig.AutoRemove {
@@ -201,11 +209,13 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 
 	// Resize TTY on window resize.
 	if runConfig.Tty {
+		log.Debug("Watching TTY resize %q, action %q", cid, a.ID)
 		if err = driver.MonitorTtySize(ctx, c.driver, streams, cid, false); err != nil {
 			log.Err("Error monitoring TTY size:", err)
 		}
 	}
 
+	log.Debug("Waiting execution of %q, action %q", cid, a.ID)
 	if errCh != nil {
 		if err = <-errCh; err != nil {
 			if _, ok := err.(term.EscapeError); ok {
@@ -247,6 +257,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		if !c.removeImg {
 			return
 		}
+		log.Debug("Removing container %q, action %q", cid, a.ID)
 		err = c.imageRemove(ctx, a)
 		if err != nil {
 			log.Err("Image remove returned an error: %v", err)
