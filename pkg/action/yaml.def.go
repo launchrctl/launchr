@@ -86,6 +86,7 @@ func CreateFromYamlTpl(b []byte) (*Definition, error) {
 // Definition is a representation of an action file
 type Definition struct {
 	Version string     `yaml:"version"`
+	WD      string     `yaml:"working_directory"`
 	Action  *DefAction `yaml:"action"`
 }
 

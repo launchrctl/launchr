@@ -141,7 +141,7 @@ func (ad *Discovery) parseFile(f string) *Action {
 	if id == "" {
 		panic(fmt.Errorf("action id cannot be empty, file %q", f))
 	}
-	a := NewAction(id, absPath(ad.fs.wd), filepath.Join(ad.fsDir, f))
+	a := NewAction(id, absPath(ad.fs.wd), ad.fsDir, filepath.Join(ad.fsDir, f))
 	a.Loader = ad.s.Loader(
 		func() (fs.File, error) { return ad.fs.Open(f) },
 		envProcessor{},

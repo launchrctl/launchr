@@ -10,6 +10,7 @@ action:
 
 const validFullYaml = `
 version: "1"
+working_directory: "{{ .current_wd }}"
 action:
   title: Title
   description: Description

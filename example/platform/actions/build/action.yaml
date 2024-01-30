@@ -1,3 +1,4 @@
+working_directory: "{{ .current_wd }}"
 action:
   title: Verb
   description: Handles some logic

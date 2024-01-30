@@ -15,14 +15,18 @@ import (
 // Action is an action definition with a contextual id (name), working directory path
 // and a runtime context such as input arguments and options.
 type Action struct {
-	ID     string
-	Loader Loader
-	wd     string
-	fpath  string
-	def    *Definition
+	ID     string // ID is an action unique id compiled from path.
+	Loader Loader // Loader is a function to load action definition. Helpful to reload with replaced variables.
 
-	env   RunEnvironment
-	input Input
+	// wd is a working directory set from app level.
+	// Usually current working directory, but may be overridden by a plugin.
+	wd    string
+	fsdir string      // fsdir is a base directory where the action was discovered (for better ID naming).
+	fpath string      // fpath is a path to action definition file.
+	def   *Definition // def is an action definition. Loaded by Loader, may be nil when not initialized.
+
+	env   RunEnvironment // env is the run environment driver to execute the action.
+	input Input          // input is a container for env variables.
 }
 
 // Input is a container for action input arguments and options.
@@ -40,10 +44,11 @@ type (
 )
 
 // NewAction creates a new action.
-func NewAction(id, wd, fpath string) *Action {
+func NewAction(id, wd, fsdir, fpath string) *Action {
 	return &Action{
 		ID:    id,
 		wd:    wd,
+		fsdir: fsdir,
 		fpath: fpath,
 	}
 }
@@ -56,6 +61,7 @@ func (a *Action) Clone() *Action {
 	c := &Action{
 		ID:     a.ID,
 		wd:     a.wd,
+		fsdir:  a.fsdir,
 		fpath:  a.fpath,
 		Loader: a.Loader,
 	}
@@ -69,7 +75,15 @@ func (a *Action) Reset() { a.def = nil }
 func (a *Action) GetInput() Input { return a.input }
 
 // WorkDir returns action working directory.
-func (a *Action) WorkDir() string { return a.wd }
+func (a *Action) WorkDir() string {
+	if a.def != nil && a.def.WD != "" {
+		wd, err := filepath.Abs(filepath.Clean(a.def.WD))
+		if err == nil {
+			return wd
+		}
+	}
+	return a.wd
+}
 
 // Filepath returns action file path.
 func (a *Action) Filepath() string { return a.fpath }

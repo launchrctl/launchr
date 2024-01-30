@@ -85,7 +85,7 @@ func (p inputProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
 	}
 	// Collect template variables.
 	data := ConvertInputToTplVars(a.GetInput(), def.Action)
-	addPredefinedVariables(data)
+	addPredefinedVariables(data, a)
 
 	// Parse action without variables to validate
 	tpl := template.New(a.ID)
@@ -163,7 +163,7 @@ func ConvertInputToTplVars(input Input, ac *DefAction) map[string]interface{} {
 	return values
 }
 
-func addPredefinedVariables(data map[string]interface{}) {
+func addPredefinedVariables(data map[string]interface{}, a *Action) {
 	cuser := getCurrentUser()
 	// Set zeros for running in environments like Windows
 	data["current_uid"] = 0
@@ -173,4 +173,6 @@ func addPredefinedVariables(data map[string]interface{}) {
 		data["current_uid"] = s[0]
 		data["current_gid"] = s[1]
 	}
+	data["current_wd"] = a.wd
+	data["action_wd"] = a.fsdir
 }

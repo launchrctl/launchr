@@ -315,6 +315,24 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal(expCid, cid)
 
+	// Create with a custom wd
+	a.def.WD = "../myactiondir"
+	wd := absPath(a.def.WD)
+	eqCfg.Binds = []string{
+		wd + ":" + containerHostMount,
+		absPath(a.Dir()) + ":" + containerActionMount,
+	}
+	d.EXPECT().
+		ImageEnsure(ctx, types.ImageOptions{Name: act.Image}).
+		Return(&types.ImageStatusResponse{Status: types.ImageExists}, nil)
+	d.EXPECT().
+		ContainerCreate(ctx, gomock.Eq(eqCfg)).
+		Return(expCid, nil)
+
+	cid, err = r.containerCreate(ctx, a, runCfg)
+	assert.NoError(err)
+	assert.Equal(expCid, cid)
+
 	// Create with anonymous volumes.
 	r.useVolWD = true
 	eqCfg.Binds = nil
