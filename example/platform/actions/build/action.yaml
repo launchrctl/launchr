@@ -1,4 +1,4 @@
-working_directory: "{{ .current_wd }}"
+working_directory: "{{ .current_working_dir }}"
 action:
   title: Verb
   description: Handles some logic
