@@ -76,12 +76,23 @@ Arguments can only be of type `string` and are always required.
 
 The action provides basic templating for all file based on arguments, options and environment variables.  
 
+### Arguments and options 
+
 For templating, standard Go templating engine is used. 
 Refer to [documentation](https://pkg.go.dev/text/template).   
 
 Arguments and Options are available by their machine names - `{{ .myArg1 }}`, `{{ .optStr }}`, `{{ .optArr }}`, etc.
 
-Environment variables:
+### Predefined variables:
+
+1. `current_uid` - current user ID. In Windows environment set to 0.
+2. `current_gid` - current group ID. In Windows environment set to 0.
+3. `current_working_dir` - app working directory.
+4. `actions_base_dir` - actions base directory where the action was found. By default, current working directory, 
+    but other paths may be provided by plugins.
+5. `action_dir` - directory of the action file.
+
+### Environment variables:
 
 | __Expression__     | __Meaning__                                                          |
 |--------------------|----------------------------------------------------------------------|
