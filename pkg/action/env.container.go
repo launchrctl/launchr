@@ -258,9 +258,9 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 			return
 		}
 		log.Debug("Removing container %q, action %q", cid, a.ID)
-		err = c.imageRemove(ctx, a)
-		if err != nil {
-			log.Err("Image remove returned an error: %v", err)
+		errImg := c.imageRemove(ctx, a)
+		if errImg != nil {
+			log.Err("Image remove returned an error: %v", errImg)
 		} else {
 			cli.Println("Image %q was successfully removed", a.ActionDef().Image)
 		}
