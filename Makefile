@@ -70,8 +70,6 @@ ifeq ($(wildcard $(GOLANGCI_BIN)),)
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(LOCAL_BIN) v$(GOLANGCI_TAG)
 endif
 
-# TODO depend on gomock somehow
-
 # Runs linters
 .PHONY: .lint
 .lint:

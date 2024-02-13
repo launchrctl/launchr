@@ -28,15 +28,18 @@ images:
 ...
 ```
 
-After first successful build, `actions.sum` file will be created in `.launchr` dir.
-It stores dir hash sum of each action. That approach allows us to determine
-when image should be rebuilt.
+Image definition search process:
+1. Check if image already exists in Docker
+2. Check action build definition in `action.yaml`
+3. Check global configuration for image name or tags
 
-The build will be done in the following order:
-1. Check if image already exists
-2. Check action local build definition
-3. Search global configuration for image name or tags 
 
-With `actions.sum` file order includes:
-1. Check if actions.sum exists, compare action dir hash with 
-2. if sum doesn't match - force rebuild,
+## Action build hash sum
+
+After first successful build, `actions.sum` file is created in `.launchr` directory.
+It stores action directory hash sum of all actions to determine if an image rebuild is required on the next run.
+
+Checking sum difference:
+1. Check if `actions.sum` file exists
+2. Compare action directory content hash sum with the saved
+3. If sum doesn't match, rebuild action image

@@ -15,7 +15,6 @@ import (
 	"github.com/moby/moby/pkg/namesgenerator"
 	"github.com/moby/sys/signal"
 	"github.com/moby/term"
-	"golang.org/x/mod/sumdb/dirhash"
 
 	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/driver"
@@ -25,6 +24,7 @@ import (
 )
 
 const (
+	// Container mount paths.
 	containerHostMount   = "/host"
 	containerActionMount = "/action"
 
@@ -35,10 +35,12 @@ const (
 )
 
 type containerEnv struct {
-	driver   driver.ContainerRunner
+	driver driver.ContainerRunner
+	dtype  driver.Type
+
+	// Container related functionality extenders
 	imgres   ChainImageBuildResolver
-	imgccres imageBuildCacheResolver
-	dtype    driver.Type
+	imgccres *ImageBuildCacheResolver
 	nameprv  ContainerNameProvider
 
 	// Runtime flags
@@ -116,9 +118,9 @@ func (c *containerEnv) UseFlags(flags TypeOpts) error {
 	return nil
 }
 
-func (c *containerEnv) AddImageBuildResolver(r ImageBuildResolver)           { c.imgres = append(c.imgres, r) }
-func (c *containerEnv) AddimageBuildCacheResolver(s imageBuildCacheResolver) { c.imgccres = s }
-func (c *containerEnv) SetContainerNameProvider(p ContainerNameProvider)     { c.nameprv = p }
+func (c *containerEnv) AddImageBuildResolver(r ImageBuildResolver)            { c.imgres = append(c.imgres, r) }
+func (c *containerEnv) SetImageBuildCacheResolver(s *ImageBuildCacheResolver) { c.imgccres = s }
+func (c *containerEnv) SetContainerNameProvider(p ContainerNameProvider)      { c.nameprv = p }
 
 func (c *containerEnv) Init() (err error) {
 	if c.driver == nil {
@@ -282,14 +284,6 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		}
 	}()
 
-	defer func() {
-		if err == nil {
-			if err = c.imgccres.Save(); err != nil {
-				log.Err("Error during actions summary update: %v", err)
-			}
-		}
-	}()
-
 	return err
 }
 
@@ -320,34 +314,36 @@ func (c *containerEnv) imageRemove(ctx context.Context, a *Action) error {
 	return err
 }
 
-func (c *containerEnv) isRebuildRequired(a *Action) (bool, error) {
-	doRebuild := false
-	if c.imgccres.IsDryRun() {
+func (c *containerEnv) isRebuildRequired(bi *types.BuildDefinition) (bool, error) {
+	// @todo test image cache resolution somehow.
+	if c.imgccres == nil || bi == nil {
 		return false, nil
 	}
 
-	storeItem, err := c.imgccres.GetItem(a.ID)
+	err := c.imgccres.EnsureLoaded()
 	if err != nil {
-		return doRebuild, err
+		return false, err
 	}
 
-	dirSum, err := dirhash.HashDir(absPath(a.Dir()), hashPrefix, dirhash.Hash1)
+	dirSum, err := c.imgccres.DirHash(bi.Context)
 	if err != nil {
-		return doRebuild, err
+		return false, err
 	}
 
-	if storeItem.sum != "" {
-		doRebuild = storeItem.sum != dirSum
+	doRebuild := false
+	for _, tag := range bi.Tags {
+		sum := c.imgccres.GetSum(tag)
+		if sum != dirSum {
+			c.imgccres.SetSum(tag, dirSum)
+			doRebuild = true
+		}
 	}
 
-	if doRebuild || storeItem.sum == "" {
-		err = c.imgccres.AddItem(SumItem{
-			id:  a.ID,
-			sum: dirSum,
-		})
+	if errCache := c.imgccres.Save(); errCache != nil {
+		log.Warn("Failed to update actions.sum file: %v", errCache)
 	}
 
-	return doRebuild, err
+	return doRebuild, nil
 }
 
 func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
@@ -357,7 +353,7 @@ func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
 	r := ChainImageBuildResolver{append(ChainImageBuildResolver{a}, c.imgres...)}
 
 	buildInfo := r.ImageBuildInfo(image)
-	forceRebuild, err := c.isRebuildRequired(a)
+	forceRebuild, err := c.isRebuildRequired(buildInfo)
 	if err != nil {
 		return err
 	}
@@ -365,7 +361,7 @@ func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
 	status, err := c.driver.ImageEnsure(ctx, types.ImageOptions{
 		Name:         image,
 		Build:        buildInfo,
-		Nocache:      c.noCache,
+		NoCache:      c.noCache,
 		ForceRebuild: forceRebuild,
 	})
 	if err != nil {

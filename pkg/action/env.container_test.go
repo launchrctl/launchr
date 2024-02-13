@@ -38,7 +38,6 @@ func (e eqImageOpts) String() string {
 }
 
 var cfgImgRes = LaunchrConfigImageBuildResolver{launchrCfg()}
-var ccImgRes = newImageBuildCacheResolver(launchrCfg(), true)
 
 func launchrCfg() launchr.Config {
 	cfgRoot := fstest.MapFS{"config.yaml": &fstest.MapFile{Data: []byte(cfgYaml)}}
@@ -52,7 +51,6 @@ func prepareContainerTestSuite(t *testing.T) (*assert.Assertions, *gomock.Contro
 	d.EXPECT().Close()
 	r := &containerEnv{driver: d, dtype: "mock"}
 	r.AddImageBuildResolver(cfgImgRes)
-	r.AddimageBuildCacheResolver(ccImgRes)
 	r.SetContainerNameProvider(ContainerNameProvider{Prefix: containerNamePrefix})
 
 	return assert, ctrl, d, r

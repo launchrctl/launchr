@@ -60,7 +60,7 @@ func (b *BuildDefinition) UnmarshalYAML(n *yaml.Node) (err error) {
 type ImageOptions struct {
 	Name         string
 	Build        *BuildDefinition
-	Nocache      bool
+	NoCache      bool
 	ForceRebuild bool
 }
 

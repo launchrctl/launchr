@@ -101,11 +101,11 @@ Global Flags:
   -v, --verbose count   log verbosity level, use -vvv DEBUG, -vv WARN, -v INFO
 ```
 
-### Container flags
+### Container environment flags
 
---no-cache        No cache: Send command to build container without cache
---remove-image    Remove Image: Remove an image after execution of action
---use-volume-wd   Use volume as a WD: Copy the working directory to a container volume and not bind local paths. Usually used with remote environments.
+ * `--no-cache`        No cache: Send command to build container without cache
+ * `--remove-image`    Remove Image: Remove an image after execution of action
+ * `--use-volume-wd`   Use volume as a WD: Copy the working directory to a container volume and not bind local paths. Usually used with remote environments.
 
 
 ### Mounts in execution environment
