@@ -1,6 +1,6 @@
 # Global configuration
 
-Launchr provides a way to make a global configuration for all actions.  
+Launchr provides a way to make a global configuration for all actions.
 The global configuration is read from directory `.launchr`. It should have `config.yaml` file.
 
 ## Build images
@@ -15,9 +15,6 @@ images:
     args:
       arg1: val1
       arg2: val2
-    tags:
-      - my/image:version2
-      - my/image:version3
   my/image2:version:
     context: ./
     buildfile: test2.Dockerfile

@@ -7,8 +7,6 @@ action:
     - "example.com:127.0.0.1"
   build:
     context: ./
-    tags:
-      - extrahosts:latest
   command:
     - sh
     - /action/main.sh

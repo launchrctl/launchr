@@ -7,8 +7,6 @@ action:
     #ACTION_ENV: ${HOST_ENV} # Dynamic value comming from host env vars
   build:
     context: ./
-    tags:
-      - envvars:latest
   command:
     - sh
     - /action/main.sh

@@ -4,8 +4,6 @@ action:
   image: buildargs:latest
   build:
     context: ./
-    tags:
-      - buildargs:latest
     args:
       USER_ID: {{ .current_uid }}
       GROUP_ID: {{ .current_gid }}
