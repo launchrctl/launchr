@@ -58,8 +58,10 @@ func (b *BuildDefinition) UnmarshalYAML(n *yaml.Node) (err error) {
 
 // ImageOptions stores options for creating/pulling an image.
 type ImageOptions struct {
-	Name  string
-	Build *BuildDefinition
+	Name         string
+	Build        *BuildDefinition
+	NoCache      bool
+	ForceRebuild bool
 }
 
 // ImageRemoveOptions stores options for removing an image.
