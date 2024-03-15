@@ -103,6 +103,7 @@ Global Flags:
 
 ### Container environment flags
 
+ * `----entrypoint`    Entrypoint: Send command directly into container replacing action command
  * `--no-cache`        No cache: Send command to build container without cache
  * `--remove-image`    Remove Image: Remove an image after execution of action
  * `--use-volume-wd`   Use volume as a WD: Copy the working directory to a container volume and not bind local paths. Usually used with remote environments.
