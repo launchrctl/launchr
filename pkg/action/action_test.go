@@ -44,7 +44,7 @@ func Test_Action(t *testing.T) {
 		"optarr": []interface{}{"opt5.1val", "opt5.2val"},
 		"opt6":   "unexpectedOpt",
 	}
-	err = act.SetInput(Input{inputArgs, inputOpts, nil})
+	err = act.SetInput(Input{inputArgs, inputOpts, nil, nil})
 	assert.NoError(err)
 	assert.Equal(inputArgs, act.input.Args)
 	assert.Equal(inputOpts, act.input.Opts)

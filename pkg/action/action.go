@@ -31,9 +31,10 @@ type Action struct {
 
 // Input is a container for action input arguments and options.
 type Input struct {
-	Args TypeArgs
-	Opts TypeOpts
-	IO   cli.Streams // @todo should it be in Input?
+	Args    TypeArgs
+	Opts    TypeOpts
+	IO      cli.Streams // @todo should it be in Input?
+	ArgsRaw []string
 }
 
 type (
