@@ -134,6 +134,7 @@ type ContainerCreateOptions struct {
 	Tty           bool
 	Env           []string
 	User          string
+	Entrypoint    []string
 }
 
 // ContainerStartOptions stores options for starting a container.

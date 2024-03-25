@@ -164,6 +164,12 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		autoRemove = false
 	}
 
+	// Add entrypoint command option.
+	var entry []string
+	if c.entrypoint != "" {
+		entry = strings.Split(c.entrypoint, " ")
+	}
+
 	// Create container.
 	runConfig := &types.ContainerCreateOptions{
 		ContainerName: name,
@@ -177,6 +183,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		Tty:           streams.In().IsTerminal(),
 		Env:           actConf.Env,
 		User:          getCurrentUser(),
+		Entrypoint:    entry,
 	}
 	log.Debug("Creating a container for action %q", a.ID)
 	cid, err := c.containerCreate(ctx, a, runConfig)
@@ -442,11 +449,6 @@ func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *typ
 	// Create a container
 	actConf := a.ActionDef()
 
-	// Replace action command with entrypoint command if it set.
-	if c.entrypoint != "" {
-		actConf.Command = strings.Split(c.entrypoint, " ")
-	}
-
 	createOpts := types.ContainerCreateOptions{
 		ContainerName: opts.ContainerName,
 		Image:         actConf.Image,
@@ -463,6 +465,7 @@ func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *typ
 		Tty:           opts.Tty,
 		Env:           opts.Env,
 		User:          opts.User,
+		Entrypoint:    opts.Entrypoint,
 	}
 
 	if c.useVolWD {
