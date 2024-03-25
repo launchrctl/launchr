@@ -32,6 +32,7 @@ const (
 	containerFlagUseVolumeWD = "use-volume-wd"
 	containerFlagRemoveImage = "remove-image"
 	containerFlagNoCache     = "no-cache"
+	containerFlagEntrypoint  = "entrypoint"
 )
 
 type containerEnv struct {
@@ -44,9 +45,10 @@ type containerEnv struct {
 	nameprv  ContainerNameProvider
 
 	// Runtime flags
-	useVolWD  bool
-	removeImg bool
-	noCache   bool
+	useVolWD   bool
+	removeImg  bool
+	noCache    bool
+	entrypoint string
 }
 
 // ContainerNameProvider provides an ability to generate a random container name
@@ -99,6 +101,13 @@ func (c *containerEnv) FlagsDefinition() OptionsList {
 			Type:        jsonschema.Boolean,
 			Default:     false,
 		},
+		&Option{
+			Name:        containerFlagEntrypoint,
+			Title:       "Entrypoint",
+			Description: "Send command directly into container replacing action command",
+			Type:        jsonschema.String,
+			Default:     "",
+		},
 	}
 }
 
@@ -113,6 +122,10 @@ func (c *containerEnv) UseFlags(flags TypeOpts) error {
 
 	if nc, ok := flags[containerFlagNoCache]; ok {
 		c.noCache = nc.(bool)
+	}
+
+	if e, ok := flags[containerFlagEntrypoint]; ok {
+		c.entrypoint = e.(string)
 	}
 
 	return nil
@@ -151,6 +164,12 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		autoRemove = false
 	}
 
+	// Add entrypoint command option.
+	var entry []string
+	if c.entrypoint != "" {
+		entry = strings.Split(c.entrypoint, " ")
+	}
+
 	// Create container.
 	runConfig := &types.ContainerCreateOptions{
 		ContainerName: name,
@@ -164,6 +183,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		Tty:           streams.In().IsTerminal(),
 		Env:           actConf.Env,
 		User:          getCurrentUser(),
+		Entrypoint:    entry,
 	}
 	log.Debug("Creating a container for action %q", a.ID)
 	cid, err := c.containerCreate(ctx, a, runConfig)
@@ -428,6 +448,7 @@ func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *typ
 
 	// Create a container
 	actConf := a.ActionDef()
+
 	createOpts := types.ContainerCreateOptions{
 		ContainerName: opts.ContainerName,
 		Image:         actConf.Image,
@@ -444,6 +465,7 @@ func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *typ
 		Tty:           opts.Tty,
 		Env:           opts.Env,
 		User:          opts.User,
+		Entrypoint:    opts.Entrypoint,
 	}
 
 	if c.useVolWD {
