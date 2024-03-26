@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/launchrctl/launchr/pkg/cli"
+	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 // PkgPath is a main module path.
@@ -31,6 +32,10 @@ type App interface {
 	RegisterFS(fs ManagedFS)
 	// GetRegisteredFS returns an array of registered File Systems.
 	GetRegisteredFS() []ManagedFS
+
+	AddProcessor(name string, vp ValueProcessor) error
+
+	GetRegisteredProcessors() map[string]ValueProcessor
 }
 
 // AppVersion stores application version.
@@ -152,4 +157,16 @@ func InitServiceInfo(si *ServiceInfo, s Service) {
 type ManagedFS interface {
 	fs.FS
 	FS() fs.FS
+}
+
+// ProcessorDiscoveryPlugin is an interface for discovering processors.
+type ProcessorDiscoveryPlugin interface {
+	Plugin
+	DiscoverProcessors(app App) error
+}
+
+// ValueProcessor defines an interface for processing a value based on its type and some options.
+type ValueProcessor interface {
+	IsApplicable(valueType jsonschema.Type) bool
+	Execute(value interface{}, options map[string]interface{}) (interface{}, error)
 }

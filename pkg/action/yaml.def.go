@@ -284,7 +284,13 @@ type Option struct {
 	Type        jsonschema.Type `yaml:"type"`
 	Default     interface{}     `yaml:"default"`
 	Required    bool            `yaml:"required"` // @todo that conflicts with json schema object definition
+	Process     process         `yaml:"process"`
 	RawMap      map[string]interface{}
+}
+
+type process struct {
+	Name    string                 `yaml:"name"`
+	Options map[string]interface{} `yaml:"options"`
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler to parse Option.

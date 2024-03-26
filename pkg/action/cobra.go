@@ -7,13 +7,14 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 	"github.com/launchrctl/launchr/pkg/log"
 )
 
 // CobraImpl returns cobra command implementation for an action command.
-func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
+func CobraImpl(a *Action, streams cli.Streams, processors map[string]launchr.ValueProcessor) (*cobra.Command, error) {
 	actConf := a.ActionDef()
 	argsDef := actConf.Arguments
 	use := a.ID
@@ -36,10 +37,17 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 					return err
 				}
 			}
+
+			opts := derefOpts(options)
+			err := processOpts(opts, a.def.Action.Options, processors)
+			if err != nil {
+				return err
+			}
+
 			// Set action input.
-			err := a.SetInput(Input{
+			err = a.SetInput(Input{
 				Args: argsToMap(args, argsDef),
-				Opts: derefOpts(options),
+				Opts: opts,
 				IO:   streams,
 			})
 			if err != nil {
@@ -64,6 +72,32 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 	}
 
 	return cmd, nil
+}
+
+func processOpts(opts TypeOpts, schema OptionsList, processors map[string]launchr.ValueProcessor) error {
+	for _, schemaItem := range schema {
+		if _, ok := opts[schemaItem.Name]; !ok {
+			continue
+		}
+
+		procName := schemaItem.Process.Name
+		if procName == "" {
+			continue
+		}
+
+		proc, ok := processors[procName]
+		if !ok {
+			return fmt.Errorf("requested processor %s doesn't exist", procName)
+		}
+
+		value, err := proc.Execute(opts[schemaItem.Name], schemaItem.Process.Options)
+		if err != nil {
+			return err
+		}
+		opts[schemaItem.Name] = value
+	}
+
+	return nil
 }
 
 func setCobraOptions(cmd *cobra.Command, defs OptionsList, opts TypeOpts) error {
