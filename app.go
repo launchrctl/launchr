@@ -139,6 +139,14 @@ func (app *appImpl) init() error {
 		}
 	}
 
+	// Skip discover actions if we check version.
+	args := os.Args[1:]
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--version" {
+			return nil
+		}
+	}
+
 	// Discover actions.
 	for _, p := range getPluginByType[ActionDiscoveryPlugin](app) {
 		for _, fs := range app.GetRegisteredFS() {
