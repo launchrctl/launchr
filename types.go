@@ -52,8 +52,6 @@ type (
 	ConfigAware = launchr.ConfigAware
 	// ManagedFS is a File System managed by launchr.
 	ManagedFS = launchr.ManagedFS
-	// ProcessorDiscoveryPlugin is an interface to implement a plugin to discover processors.
-	ProcessorDiscoveryPlugin = launchr.ProcessorDiscoveryPlugin
 	// ValueProcessor is an interface for entities that process and transform values
 	ValueProcessor = launchr.ValueProcessor
 )

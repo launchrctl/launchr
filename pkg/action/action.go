@@ -4,12 +4,22 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"path/filepath"
+
+	"github.com/launchrctl/launchr/internal/launchr"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
 	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/types"
+)
+
+var (
+	errInvalidProcessor       = errors.New("invalid configuration, processor is required")
+	tmpNotApplicableProcessor = "invalid configuration, processor can't be applied to value of type %s"
+	tmpNonExistProcessor      = "requested processor %q doesn't exist"
 )
 
 // Action is an action definition with a contextual id (name), working directory path
@@ -25,8 +35,9 @@ type Action struct {
 	fpath string      // fpath is a path to action definition file.
 	def   *Definition // def is an action definition. Loaded by Loader, may be nil when not initialized.
 
-	env   RunEnvironment // env is the run environment driver to execute the action.
-	input Input          // input is a container for env variables.
+	env        RunEnvironment // env is the run environment driver to execute the action.
+	input      Input          // input is a container for env variables.
+	processors map[string]launchr.ValueProcessor
 }
 
 // Input is a container for action input arguments and options.
@@ -66,6 +77,16 @@ func (a *Action) Clone() *Action {
 		Loader: a.Loader,
 	}
 	return c
+}
+
+// SetProcessors sets the value processors for an Action.
+func (a *Action) SetProcessors(list map[string]launchr.ValueProcessor) {
+	a.processors = list
+}
+
+// GetProcessors returns processors map.
+func (a *Action) GetProcessors() map[string]launchr.ValueProcessor {
+	return a.processors
 }
 
 // Reset unsets loaded action to force reload.
@@ -128,10 +149,98 @@ func (a *Action) SetInput(input Input) (err error) {
 	//if err = a.ValidateInput(input); err != nil {
 	//	return err
 	//}
+
+	err = a.processArgs(input.Args)
+	if err != nil {
+		return err
+	}
+
+	err = a.processOptions(input.Opts)
+	if err != nil {
+		return err
+	}
+
 	a.input = input
 	// Reset to load the action file again with new replacements.
 	a.Reset()
 	return a.EnsureLoaded()
+}
+
+// nolint:dupl
+func (a *Action) processOptions(opts TypeOpts) error {
+	processors := a.GetProcessors()
+	for _, optDef := range a.ActionDef().Options {
+		if _, ok := opts[optDef.Name]; !ok {
+			continue
+		}
+
+		value := opts[optDef.Name]
+		toApply := optDef.Process
+		for _, processor := range toApply {
+			if processor.Processor == "" {
+				return errInvalidProcessor
+			}
+
+			proc, ok := processors[processor.Processor]
+			if !ok {
+				return fmt.Errorf(tmpNonExistProcessor, processor.Processor)
+			}
+
+			if !proc.IsApplicable(optDef.Type) {
+				return fmt.Errorf(tmpNotApplicableProcessor, optDef.Type)
+			}
+
+			newValue, err := proc.Execute(value, processor.Options)
+			if err != nil {
+				return err
+			}
+
+			value = newValue
+		}
+
+		opts[optDef.Name] = value
+	}
+
+	return nil
+}
+
+// nolint:dupl
+func (a *Action) processArgs(args TypeArgs) error {
+	processors := a.GetProcessors()
+
+	for _, argDef := range a.ActionDef().Arguments {
+		if _, ok := args[argDef.Name]; !ok {
+			continue
+		}
+
+		value := args[argDef.Name]
+		toApply := argDef.Process
+		for _, processor := range toApply {
+			if processor.Processor == "" {
+				return errInvalidProcessor
+			}
+
+			proc, ok := processors[processor.Processor]
+			if !ok {
+				return fmt.Errorf(tmpNonExistProcessor, processor.Processor)
+			}
+
+			if !proc.IsApplicable(argDef.Type) {
+				return fmt.Errorf(tmpNotApplicableProcessor, argDef.Type)
+			}
+
+			newValue, err := proc.Execute(value, processor.Options)
+			if err != nil {
+				return err
+			}
+
+			value = newValue
+		}
+
+		args[argDef.Name] = value
+	}
+
+	return nil
 }
 
 // ValidateInput validates arguments and options according to

@@ -251,6 +251,7 @@ type Argument struct {
 	Title       string          `yaml:"title"`
 	Description string          `yaml:"description"`
 	Type        jsonschema.Type `yaml:"type"`
+	Process     []Process       `yaml:"process"`
 	RawMap      map[string]interface{}
 }
 
@@ -284,13 +285,14 @@ type Option struct {
 	Type        jsonschema.Type `yaml:"type"`
 	Default     interface{}     `yaml:"default"`
 	Required    bool            `yaml:"required"` // @todo that conflicts with json schema object definition
-	Process     process         `yaml:"process"`
+	Process     []Process       `yaml:"process"`
 	RawMap      map[string]interface{}
 }
 
-type process struct {
-	Name    string                 `yaml:"name"`
-	Options map[string]interface{} `yaml:"options"`
+// Process stores information about processor and options that should be applied to processor.
+type Process struct {
+	Processor string                 `yaml:"processor"`
+	Options   map[string]interface{} `yaml:"options"`
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler to parse Option.

@@ -22,6 +22,10 @@ type Manager interface {
 	Get(id string) (*Action, bool)
 	// GetRef returns an original action value from the storage.
 	GetRef(id string) (*Action, bool)
+	// AddProcessor adds processor to list of available processors
+	AddProcessor(name string, vp launchr.ValueProcessor)
+	// GetRegisteredProcessors returns list of available processors
+	GetRegisteredProcessors() map[string]launchr.ValueProcessor
 	// Decorate decorates an action with given behaviors and returns its copy.
 	// If functions withFn are not provided, default functions are applied.
 	Decorate(a *Action, withFn ...DecorateWithFn) *Action
@@ -49,6 +53,7 @@ type actionManagerMap struct {
 	mx          sync.Mutex
 	mxRun       sync.Mutex
 	dwFns       []DecorateWithFn
+	processors  map[string]launchr.ValueProcessor
 }
 
 // NewManager constructs a new action manager.
@@ -57,6 +62,7 @@ func NewManager(withFns ...DecorateWithFn) Manager {
 		actionStore: make(map[string]*Action),
 		runStore:    make(map[string]RunInfo),
 		dwFns:       withFns,
+		processors:  make(map[string]launchr.ValueProcessor),
 	}
 }
 
@@ -95,6 +101,18 @@ func (m *actionManagerMap) GetRef(id string) (*Action, bool) {
 	defer m.mx.Unlock()
 	a, ok := m.actionStore[id]
 	return a, ok
+}
+
+func (m *actionManagerMap) AddProcessor(name string, vp launchr.ValueProcessor) {
+	if _, ok := m.processors[name]; ok {
+		panic("processor with the same name already exists")
+	}
+
+	m.processors[name] = vp
+}
+
+func (m *actionManagerMap) GetRegisteredProcessors() map[string]launchr.ValueProcessor {
+	return m.processors
 }
 
 func (m *actionManagerMap) Decorate(a *Action, withFns ...DecorateWithFn) *Action {
@@ -204,5 +222,12 @@ func WithContainerRunEnvironmentConfig(cfg launchr.Config, prefix string) Decora
 			env.SetImageBuildCacheResolver(ccr)
 			env.SetContainerNameProvider(ContainerNameProvider{Prefix: prefix, RandomSuffix: true})
 		}
+	}
+}
+
+// WithManagerProcessors sets processors for action from manager.
+func WithManagerProcessors() DecorateWithFn {
+	return func(m Manager, a *Action) {
+		a.SetProcessors(m.GetRegisteredProcessors())
 	}
 }

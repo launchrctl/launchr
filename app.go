@@ -9,8 +9,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/launchrctl/launchr/pkg/jsonschema"
-
 	"github.com/spf13/cobra"
 
 	"github.com/launchrctl/launchr/internal/launchr"
@@ -35,57 +33,6 @@ type appImpl struct {
 	pluginMngr PluginManager
 	config     Config
 	mFS        []ManagedFS
-	processors map[string]ValueProcessor
-}
-
-// ProcessorCallback is a function signature used as a callback in processors.
-type ProcessorCallback func(value interface{}, options map[string]interface{}) (interface{}, error)
-
-// FuncProcessor represents a processor that applies a callback function to values based on certain applicable formats.
-// It has two fields: applicableFormats and callback.
-//
-// applicableFormats is a slice of jsonschema.Type, which defines the formats that this processor is applicable to.
-//
-// callback is a ProcessorCallback function that takes a value of any type and options as a map[string]interface{},
-// and returns a processed value and an error.
-// If the callback is successfully executed, the processed value and nil error are returned.
-// Otherwise, an error is returned.
-type FuncProcessor struct {
-	applicableFormats []jsonschema.Type
-	callback          ProcessorCallback
-}
-
-// NewFuncProcessor creates a new instance of FuncProcessor with the specified formats and callback.
-//
-// Parameter formats is a slice of jsonschema.Type representing the applicable formats.
-//
-// Parameter callback is a ProcessorCallback function that takes a value and options map as input,
-// and returns a processed value and an error.
-//
-// Returns a FuncProcessor instance initialized with the given formats and callback.
-func NewFuncProcessor(formats []jsonschema.Type, callback ProcessorCallback) FuncProcessor {
-	return FuncProcessor{
-		applicableFormats: formats,
-		callback:          callback,
-	}
-}
-
-// IsApplicable checks if the given valueType is present in the applicableFormats slice of the FuncProcessor.
-// It returns true if the valueType is found, otherwise it returns false.
-func (p FuncProcessor) IsApplicable(valueType jsonschema.Type) bool {
-	for _, item := range p.applicableFormats {
-		if valueType == item {
-			return true
-		}
-	}
-
-	return false
-}
-
-// Execute applies the callback function of the FuncProcessor to the given value and options.
-// It returns the result of the callback function and any error that occurred during execution.
-func (p FuncProcessor) Execute(value interface{}, options map[string]interface{}) (interface{}, error) {
-	return p.callback(value, options)
 }
 
 // getPluginByType returns specific plugins from the app.
@@ -124,24 +71,6 @@ func (app *appImpl) Streams() cli.Streams { return app.streams }
 
 func (app *appImpl) RegisterFS(fs ManagedFS)      { app.mFS = append(app.mFS, fs) }
 func (app *appImpl) GetRegisteredFS() []ManagedFS { return app.mFS }
-
-func (app *appImpl) AddProcessor(name string, vp ValueProcessor) error {
-	if app.processors == nil {
-		app.processors = make(map[string]ValueProcessor)
-	}
-
-	if _, ok := app.processors[name]; ok {
-		return errors.New("processor with the same name already exists")
-	}
-
-	app.processors[name] = vp
-
-	return nil
-}
-
-func (app *appImpl) GetRegisteredProcessors() map[string]ValueProcessor {
-	return app.processors
-}
 
 func (app *appImpl) AddService(s Service) {
 	info := s.ServiceInfo()
@@ -196,6 +125,7 @@ func (app *appImpl) init() error {
 	app.actionMngr = action.NewManager(
 		action.WithDefaultRunEnvironment,
 		action.WithContainerRunEnvironmentConfig(app.config, name+"_"),
+		action.WithManagerProcessors(),
 	)
 
 	// Register services for other modules.
@@ -220,12 +150,6 @@ func (app *appImpl) init() error {
 			for _, actConf := range actions {
 				app.actionMngr.Add(actConf)
 			}
-		}
-	}
-
-	for _, p := range getPluginByType[ProcessorDiscoveryPlugin](app) {
-		if err = p.DiscoverProcessors(app); err != nil {
-			return err
 		}
 	}
 
@@ -282,7 +206,7 @@ func (app *appImpl) exec() error {
 				fmt.Fprintf(os.Stdout, "[WARNING] Action %q was skipped because it has an incorrect definition:\n%v\n", a.ID, err)
 				continue
 			}
-			cmd, err := action.CobraImpl(a, app.Streams(), app.GetRegisteredProcessors())
+			cmd, err := action.CobraImpl(a, app.Streams())
 			if err != nil {
 				fmt.Fprintf(os.Stdout, "[WARNING] Action %q was skipped:\n%v\n", a.ID, err)
 				continue
