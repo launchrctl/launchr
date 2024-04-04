@@ -13,6 +13,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
 	"github.com/launchrctl/launchr/pkg/cli"
+	schema "github.com/launchrctl/launchr/pkg/jsonschema"
 	"github.com/launchrctl/launchr/pkg/types"
 )
 
@@ -166,9 +167,7 @@ func (a *Action) SetInput(input Input) (err error) {
 	return a.EnsureLoaded()
 }
 
-// nolint:dupl
 func (a *Action) processOptions(opts TypeOpts) error {
-	processors := a.GetProcessors()
 	for _, optDef := range a.ActionDef().Options {
 		if _, ok := opts[optDef.Name]; !ok {
 			continue
@@ -176,26 +175,10 @@ func (a *Action) processOptions(opts TypeOpts) error {
 
 		value := opts[optDef.Name]
 		toApply := optDef.Process
-		for _, processor := range toApply {
-			if processor.Processor == "" {
-				return errInvalidProcessor
-			}
 
-			proc, ok := processors[processor.Processor]
-			if !ok {
-				return fmt.Errorf(tplNonExistProcessor, processor.Processor)
-			}
-
-			if !proc.IsApplicable(optDef.Type) {
-				return fmt.Errorf(tplNotApplicableProcessor, optDef.Type)
-			}
-
-			newValue, err := proc.Execute(value, processor.Options)
-			if err != nil {
-				return err
-			}
-
-			value = newValue
+		value, err := a.processValue(value, optDef.Type, toApply)
+		if err != nil {
+			return err
 		}
 
 		opts[optDef.Name] = value
@@ -204,10 +187,7 @@ func (a *Action) processOptions(opts TypeOpts) error {
 	return nil
 }
 
-// nolint:dupl
 func (a *Action) processArgs(args TypeArgs) error {
-	processors := a.GetProcessors()
-
 	for _, argDef := range a.ActionDef().Arguments {
 		if _, ok := args[argDef.Name]; !ok {
 			continue
@@ -215,32 +195,44 @@ func (a *Action) processArgs(args TypeArgs) error {
 
 		value := args[argDef.Name]
 		toApply := argDef.Process
-		for _, processor := range toApply {
-			if processor.Processor == "" {
-				return errInvalidProcessor
-			}
-
-			proc, ok := processors[processor.Processor]
-			if !ok {
-				return fmt.Errorf(tplNonExistProcessor, processor.Processor)
-			}
-
-			if !proc.IsApplicable(argDef.Type) {
-				return fmt.Errorf(tplNotApplicableProcessor, argDef.Type)
-			}
-
-			newValue, err := proc.Execute(value, processor.Options)
-			if err != nil {
-				return err
-			}
-
-			value = newValue
+		value, err := a.processValue(value, argDef.Type, toApply)
+		if err != nil {
+			return err
 		}
 
 		args[argDef.Name] = value
 	}
 
 	return nil
+}
+
+func (a *Action) processValue(value interface{}, valueType schema.Type, toApplyProcessors []ValueProcessDef) (interface{}, error) {
+	newValue := value
+	processors := a.GetProcessors()
+
+	for _, processor := range toApplyProcessors {
+		if processor.Processor == "" {
+			return value, errInvalidProcessor
+		}
+
+		proc, ok := processors[processor.Processor]
+		if !ok {
+			return value, fmt.Errorf(tplNonExistProcessor, processor.Processor)
+		}
+
+		if !proc.IsApplicable(valueType) {
+			return value, fmt.Errorf(tplNotApplicableProcessor, valueType)
+		}
+
+		processedValue, err := proc.Execute(newValue, processor.Options)
+		if err != nil {
+			return value, err
+		}
+
+		newValue = processedValue
+	}
+
+	return newValue, nil
 }
 
 // ValidateInput validates arguments and options according to
