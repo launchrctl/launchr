@@ -18,8 +18,8 @@ import (
 
 var (
 	errInvalidProcessor       = errors.New("invalid configuration, processor is required")
-	tmpNotApplicableProcessor = "invalid configuration, processor can't be applied to value of type %s"
-	tmpNonExistProcessor      = "requested processor %q doesn't exist"
+	tplNotApplicableProcessor = "invalid configuration, processor can't be applied to value of type %s"
+	tplNonExistProcessor      = "requested processor %q doesn't exist"
 )
 
 // Action is an action definition with a contextual id (name), working directory path
@@ -35,9 +35,9 @@ type Action struct {
 	fpath string      // fpath is a path to action definition file.
 	def   *Definition // def is an action definition. Loaded by Loader, may be nil when not initialized.
 
-	env        RunEnvironment // env is the run environment driver to execute the action.
-	input      Input          // input is a container for env variables.
-	processors map[string]launchr.ValueProcessor
+	env        RunEnvironment                    // env is the run environment driver to execute the action.
+	input      Input                             // input is a container for env variables.
+	processors map[string]launchr.ValueProcessor // processors are ValueProcessors for manipulating input.
 }
 
 // Input is a container for action input arguments and options.
@@ -183,11 +183,11 @@ func (a *Action) processOptions(opts TypeOpts) error {
 
 			proc, ok := processors[processor.Processor]
 			if !ok {
-				return fmt.Errorf(tmpNonExistProcessor, processor.Processor)
+				return fmt.Errorf(tplNonExistProcessor, processor.Processor)
 			}
 
 			if !proc.IsApplicable(optDef.Type) {
-				return fmt.Errorf(tmpNotApplicableProcessor, optDef.Type)
+				return fmt.Errorf(tplNotApplicableProcessor, optDef.Type)
 			}
 
 			newValue, err := proc.Execute(value, processor.Options)
@@ -222,11 +222,11 @@ func (a *Action) processArgs(args TypeArgs) error {
 
 			proc, ok := processors[processor.Processor]
 			if !ok {
-				return fmt.Errorf(tmpNonExistProcessor, processor.Processor)
+				return fmt.Errorf(tplNonExistProcessor, processor.Processor)
 			}
 
 			if !proc.IsApplicable(argDef.Type) {
-				return fmt.Errorf(tmpNotApplicableProcessor, argDef.Type)
+				return fmt.Errorf(tplNotApplicableProcessor, argDef.Type)
 			}
 
 			newValue, err := proc.Execute(value, processor.Options)

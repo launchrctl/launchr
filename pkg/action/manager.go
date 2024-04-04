@@ -22,10 +22,10 @@ type Manager interface {
 	Get(id string) (*Action, bool)
 	// GetRef returns an original action value from the storage.
 	GetRef(id string) (*Action, bool)
-	// AddProcessor adds processor to list of available processors
-	AddProcessor(name string, vp launchr.ValueProcessor)
-	// GetRegisteredProcessors returns list of available processors
-	GetRegisteredProcessors() map[string]launchr.ValueProcessor
+	// AddValueProcessor adds processor to list of available processors
+	AddValueProcessor(name string, vp launchr.ValueProcessor)
+	// GetValueProcessors returns list of available processors
+	GetValueProcessors() map[string]launchr.ValueProcessor
 	// Decorate decorates an action with given behaviors and returns its copy.
 	// If functions withFn are not provided, default functions are applied.
 	Decorate(a *Action, withFn ...DecorateWithFn) *Action
@@ -103,7 +103,7 @@ func (m *actionManagerMap) GetRef(id string) (*Action, bool) {
 	return a, ok
 }
 
-func (m *actionManagerMap) AddProcessor(name string, vp launchr.ValueProcessor) {
+func (m *actionManagerMap) AddValueProcessor(name string, vp launchr.ValueProcessor) {
 	if _, ok := m.processors[name]; ok {
 		panic("processor with the same name already exists")
 	}
@@ -111,7 +111,7 @@ func (m *actionManagerMap) AddProcessor(name string, vp launchr.ValueProcessor) 
 	m.processors[name] = vp
 }
 
-func (m *actionManagerMap) GetRegisteredProcessors() map[string]launchr.ValueProcessor {
+func (m *actionManagerMap) GetValueProcessors() map[string]launchr.ValueProcessor {
 	return m.processors
 }
 
@@ -225,9 +225,9 @@ func WithContainerRunEnvironmentConfig(cfg launchr.Config, prefix string) Decora
 	}
 }
 
-// WithManagerProcessors sets processors for action from manager.
-func WithManagerProcessors() DecorateWithFn {
+// WithValueProcessors sets processors for action from manager.
+func WithValueProcessors() DecorateWithFn {
 	return func(m Manager, a *Action) {
-		a.SetProcessors(m.GetRegisteredProcessors())
+		a.SetProcessors(m.GetValueProcessors())
 	}
 }

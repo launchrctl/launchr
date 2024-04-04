@@ -125,7 +125,7 @@ func (app *appImpl) init() error {
 	app.actionMngr = action.NewManager(
 		action.WithDefaultRunEnvironment,
 		action.WithContainerRunEnvironmentConfig(app.config, name+"_"),
-		action.WithManagerProcessors(),
+		action.WithValueProcessors(),
 	)
 
 	// Register services for other modules.
@@ -143,9 +143,9 @@ func (app *appImpl) init() error {
 	// Discover actions.
 	for _, p := range getPluginByType[ActionDiscoveryPlugin](app) {
 		for _, fs := range app.GetRegisteredFS() {
-			actions, errDiscover := p.DiscoverActions(fs)
-			if errDiscover != nil {
-				return errDiscover
+			actions, err := p.DiscoverActions(fs)
+			if err != nil {
+				return err
 			}
 			for _, actConf := range actions {
 				app.actionMngr.Add(actConf)

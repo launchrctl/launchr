@@ -36,7 +36,6 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 					return err
 				}
 			}
-
 			// Set action input.
 			err := a.SetInput(Input{
 				Args: argsToMap(args, argsDef),

@@ -52,8 +52,6 @@ type (
 	ConfigAware = launchr.ConfigAware
 	// ManagedFS is a File System managed by launchr.
 	ManagedFS = launchr.ManagedFS
-	// ValueProcessor is an interface for entities that process and transform values
-	ValueProcessor = launchr.ValueProcessor
 )
 
 // Version provides app version info.
