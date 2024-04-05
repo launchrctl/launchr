@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/santhosh-tekuri/jsonschema/v5"
+	jsvalidate "github.com/santhosh-tekuri/jsonschema/v5"
 
 	"github.com/launchrctl/launchr/pkg/cli"
-	schema "github.com/launchrctl/launchr/pkg/jsonschema"
+	"github.com/launchrctl/launchr/pkg/jsonschema"
 	"github.com/launchrctl/launchr/pkg/types"
 )
 
@@ -204,7 +204,7 @@ func (a *Action) processArgs(args TypeArgs) error {
 	return nil
 }
 
-func (a *Action) processValue(value interface{}, valueType schema.Type, toApplyProcessors []ValueProcessDef) (interface{}, error) {
+func (a *Action) processValue(value interface{}, valueType jsonschema.Type, toApplyProcessors []ValueProcessDef) (interface{}, error) {
 	newValue := value
 	processors := a.GetProcessors()
 
@@ -235,6 +235,7 @@ func (a *Action) processValue(value interface{}, valueType schema.Type, toApplyP
 
 // ValidateInput validates arguments and options according to
 // a specified json schema in action definition.
+// @todo move to jsonschema
 func (a *Action) ValidateInput(inp Input) error {
 	jsch := a.JSONSchema()
 	// @todo cache jsonschema and resources.
@@ -243,7 +244,7 @@ func (a *Action) ValidateInput(inp Input) error {
 		return err
 	}
 	buf := bytes.NewBuffer(b)
-	c := jsonschema.NewCompiler()
+	c := jsvalidate.NewCompiler()
 	err = c.AddResource(a.Filepath(), buf)
 	if err != nil {
 		return err
