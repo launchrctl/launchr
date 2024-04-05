@@ -125,6 +125,7 @@ func (app *appImpl) init() error {
 	app.actionMngr = action.NewManager(
 		action.WithDefaultRunEnvironment,
 		action.WithContainerRunEnvironmentConfig(app.config, name+"_"),
+		action.WithValueProcessors(),
 	)
 
 	// Register services for other modules.

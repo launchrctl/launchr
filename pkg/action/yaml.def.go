@@ -247,10 +247,11 @@ func (l *ArgumentsList) UnmarshalYAML(nodeList *yaml.Node) (err error) {
 
 // Argument stores command arguments declaration.
 type Argument struct {
-	Name        string          `yaml:"name"`
-	Title       string          `yaml:"title"`
-	Description string          `yaml:"description"`
-	Type        jsonschema.Type `yaml:"type"`
+	Name        string            `yaml:"name"`
+	Title       string            `yaml:"title"`
+	Description string            `yaml:"description"`
+	Type        jsonschema.Type   `yaml:"type"`
+	Process     []ValueProcessDef `yaml:"process"`
 	RawMap      map[string]interface{}
 }
 
@@ -277,14 +278,21 @@ func (l *OptionsList) UnmarshalYAML(nodeList *yaml.Node) (err error) {
 
 // Option stores command options declaration.
 type Option struct {
-	Name        string          `yaml:"name"`
-	Shorthand   string          `yaml:"shorthand"` // @todo test definition, validate, catch panic if overlay, add to readme.
-	Title       string          `yaml:"title"`
-	Description string          `yaml:"description"`
-	Type        jsonschema.Type `yaml:"type"`
-	Default     interface{}     `yaml:"default"`
-	Required    bool            `yaml:"required"` // @todo that conflicts with json schema object definition
+	Name        string            `yaml:"name"`
+	Shorthand   string            `yaml:"shorthand"` // @todo test definition, validate, catch panic if overlay, add to readme.
+	Title       string            `yaml:"title"`
+	Description string            `yaml:"description"`
+	Type        jsonschema.Type   `yaml:"type"`
+	Default     interface{}       `yaml:"default"`
+	Required    bool              `yaml:"required"` // @todo that conflicts with json schema object definition
+	Process     []ValueProcessDef `yaml:"process"`
 	RawMap      map[string]interface{}
+}
+
+// ValueProcessDef stores information about processor and options that should be applied to processor.
+type ValueProcessDef struct {
+	Processor string                 `yaml:"processor"`
+	Options   map[string]interface{} `yaml:"options"`
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler to parse Option.

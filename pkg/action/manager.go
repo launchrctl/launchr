@@ -2,6 +2,7 @@ package action
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"sync"
 	"time"
@@ -22,6 +23,10 @@ type Manager interface {
 	Get(id string) (*Action, bool)
 	// GetRef returns an original action value from the storage.
 	GetRef(id string) (*Action, bool)
+	// AddValueProcessor adds processor to list of available processors
+	AddValueProcessor(name string, vp ValueProcessor)
+	// GetValueProcessors returns list of available processors
+	GetValueProcessors() map[string]ValueProcessor
 	// Decorate decorates an action with given behaviors and returns its copy.
 	// If functions withFn are not provided, default functions are applied.
 	Decorate(a *Action, withFn ...DecorateWithFn) *Action
@@ -49,6 +54,7 @@ type actionManagerMap struct {
 	mx          sync.Mutex
 	mxRun       sync.Mutex
 	dwFns       []DecorateWithFn
+	processors  map[string]ValueProcessor
 }
 
 // NewManager constructs a new action manager.
@@ -57,6 +63,7 @@ func NewManager(withFns ...DecorateWithFn) Manager {
 		actionStore: make(map[string]*Action),
 		runStore:    make(map[string]RunInfo),
 		dwFns:       withFns,
+		processors:  make(map[string]ValueProcessor),
 	}
 }
 
@@ -95,6 +102,18 @@ func (m *actionManagerMap) GetRef(id string) (*Action, bool) {
 	defer m.mx.Unlock()
 	a, ok := m.actionStore[id]
 	return a, ok
+}
+
+func (m *actionManagerMap) AddValueProcessor(name string, vp ValueProcessor) {
+	if _, ok := m.processors[name]; ok {
+		panic(fmt.Sprintf("processor `%q` with the same name already exists", name))
+	}
+
+	m.processors[name] = vp
+}
+
+func (m *actionManagerMap) GetValueProcessors() map[string]ValueProcessor {
+	return m.processors
 }
 
 func (m *actionManagerMap) Decorate(a *Action, withFns ...DecorateWithFn) *Action {
@@ -204,5 +223,12 @@ func WithContainerRunEnvironmentConfig(cfg launchr.Config, prefix string) Decora
 			env.SetImageBuildCacheResolver(ccr)
 			env.SetContainerNameProvider(ContainerNameProvider{Prefix: prefix, RandomSuffix: true})
 		}
+	}
+}
+
+// WithValueProcessors sets processors for action from manager.
+func WithValueProcessors() DecorateWithFn {
+	return func(m Manager, a *Action) {
+		a.SetProcessors(m.GetValueProcessors())
 	}
 }
