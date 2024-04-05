@@ -16,9 +16,9 @@ import (
 )
 
 var (
-	errInvalidProcessor       = errors.New("invalid configuration, processor is required")
-	tplNotApplicableProcessor = "invalid configuration, processor can't be applied to value of type %s"
-	tplNonExistProcessor      = "requested processor %q doesn't exist"
+	errInvalidProcessor          = errors.New("invalid configuration, processor is required")
+	errTplNotApplicableProcessor = "invalid configuration, processor can't be applied to value of type %s"
+	errTplNonExistProcessor      = "requested processor %q doesn't exist"
 )
 
 // Action is an action definition with a contextual id (name), working directory path
@@ -215,11 +215,11 @@ func (a *Action) processValue(value interface{}, valueType jsonschema.Type, toAp
 
 		proc, ok := processors[processor.Processor]
 		if !ok {
-			return value, fmt.Errorf(tplNonExistProcessor, processor.Processor)
+			return value, fmt.Errorf(errTplNonExistProcessor, processor.Processor)
 		}
 
 		if !proc.IsApplicable(valueType) {
-			return value, fmt.Errorf(tplNotApplicableProcessor, valueType)
+			return value, fmt.Errorf(errTplNotApplicableProcessor, valueType)
 		}
 
 		processedValue, err := proc.Execute(newValue, processor.Options)
