@@ -2,6 +2,7 @@ package action
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"sync"
 	"time"
@@ -23,9 +24,9 @@ type Manager interface {
 	// GetRef returns an original action value from the storage.
 	GetRef(id string) (*Action, bool)
 	// AddValueProcessor adds processor to list of available processors
-	AddValueProcessor(name string, vp launchr.ValueProcessor)
+	AddValueProcessor(name string, vp ValueProcessor)
 	// GetValueProcessors returns list of available processors
-	GetValueProcessors() map[string]launchr.ValueProcessor
+	GetValueProcessors() map[string]ValueProcessor
 	// Decorate decorates an action with given behaviors and returns its copy.
 	// If functions withFn are not provided, default functions are applied.
 	Decorate(a *Action, withFn ...DecorateWithFn) *Action
@@ -53,7 +54,7 @@ type actionManagerMap struct {
 	mx          sync.Mutex
 	mxRun       sync.Mutex
 	dwFns       []DecorateWithFn
-	processors  map[string]launchr.ValueProcessor
+	processors  map[string]ValueProcessor
 }
 
 // NewManager constructs a new action manager.
@@ -62,7 +63,7 @@ func NewManager(withFns ...DecorateWithFn) Manager {
 		actionStore: make(map[string]*Action),
 		runStore:    make(map[string]RunInfo),
 		dwFns:       withFns,
-		processors:  make(map[string]launchr.ValueProcessor),
+		processors:  make(map[string]ValueProcessor),
 	}
 }
 
@@ -103,15 +104,15 @@ func (m *actionManagerMap) GetRef(id string) (*Action, bool) {
 	return a, ok
 }
 
-func (m *actionManagerMap) AddValueProcessor(name string, vp launchr.ValueProcessor) {
+func (m *actionManagerMap) AddValueProcessor(name string, vp ValueProcessor) {
 	if _, ok := m.processors[name]; ok {
-		panic("processor with the same name already exists")
+		panic(fmt.Sprintf("processor `%q` with the same name already exists", name))
 	}
 
 	m.processors[name] = vp
 }
 
-func (m *actionManagerMap) GetValueProcessors() map[string]launchr.ValueProcessor {
+func (m *actionManagerMap) GetValueProcessors() map[string]ValueProcessor {
 	return m.processors
 }
 

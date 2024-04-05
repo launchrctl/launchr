@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/launchrctl/launchr/internal/launchr"
-
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
 	"github.com/launchrctl/launchr/pkg/cli"
@@ -36,9 +34,9 @@ type Action struct {
 	fpath string      // fpath is a path to action definition file.
 	def   *Definition // def is an action definition. Loaded by Loader, may be nil when not initialized.
 
-	env        RunEnvironment                    // env is the run environment driver to execute the action.
-	input      Input                             // input is a container for env variables.
-	processors map[string]launchr.ValueProcessor // processors are ValueProcessors for manipulating input.
+	env        RunEnvironment            // env is the run environment driver to execute the action.
+	input      Input                     // input is a container for env variables.
+	processors map[string]ValueProcessor // processors are ValueProcessors for manipulating input.
 }
 
 // Input is a container for action input arguments and options.
@@ -81,12 +79,12 @@ func (a *Action) Clone() *Action {
 }
 
 // SetProcessors sets the value processors for an Action.
-func (a *Action) SetProcessors(list map[string]launchr.ValueProcessor) {
+func (a *Action) SetProcessors(list map[string]ValueProcessor) {
 	a.processors = list
 }
 
 // GetProcessors returns processors map.
-func (a *Action) GetProcessors() map[string]launchr.ValueProcessor {
+func (a *Action) GetProcessors() map[string]ValueProcessor {
 	return a.processors
 }
 

@@ -27,7 +27,7 @@ type LoadContext struct {
 
 // LoadProcessor is an interface for processing input on load.
 type LoadProcessor interface {
-	// ValueProcessDef gets an input action file data and returns a processed result.
+	// Process gets an input action file data and returns a processed result.
 	Process(LoadContext, []byte) ([]byte, error)
 }
 

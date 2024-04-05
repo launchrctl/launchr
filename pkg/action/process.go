@@ -1,12 +1,20 @@
 package action
 
 import (
-	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
+// ValueProcessor defines an interface for processing a value based on its type and some options.
+type ValueProcessor interface {
+	IsApplicable(valueType jsonschema.Type) bool
+	Execute(value interface{}, options map[string]interface{}) (interface{}, error)
+}
+
+// ValueProcessorFn is a function signature used as a callback in processors.
+type ValueProcessorFn func(value interface{}, options map[string]interface{}) (interface{}, error)
+
 // NewFuncProcessor creates a new instance of FuncProcessor with the specified formats and callback.
-func NewFuncProcessor(formats []jsonschema.Type, callback launchr.ValueProcessorFn) FuncProcessor {
+func NewFuncProcessor(formats []jsonschema.Type, callback ValueProcessorFn) FuncProcessor {
 	return FuncProcessor{
 		applicableFormats: formats,
 		callback:          callback,
@@ -16,7 +24,7 @@ func NewFuncProcessor(formats []jsonschema.Type, callback launchr.ValueProcessor
 // FuncProcessor represents a processor that applies a callback function to values based on certain applicable formats.
 type FuncProcessor struct {
 	applicableFormats []jsonschema.Type
-	callback          launchr.ValueProcessorFn
+	callback          ValueProcessorFn
 }
 
 // IsApplicable checks if the given valueType is present in the applicableFormats slice of the FuncProcessor.

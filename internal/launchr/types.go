@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/launchrctl/launchr/pkg/cli"
-	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 // PkgPath is a main module path.
@@ -154,12 +153,3 @@ type ManagedFS interface {
 	fs.FS
 	FS() fs.FS
 }
-
-// ValueProcessor defines an interface for processing a value based on its type and some options.
-type ValueProcessor interface {
-	IsApplicable(valueType jsonschema.Type) bool
-	Execute(value interface{}, options map[string]interface{}) (interface{}, error)
-}
-
-// ValueProcessorFn is a function signature used as a callback in processors.
-type ValueProcessorFn func(value interface{}, options map[string]interface{}) (interface{}, error)
