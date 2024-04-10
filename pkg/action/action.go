@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
@@ -126,7 +127,7 @@ func (a *Action) SetInput(input Input) (err error) {
 		return err
 	}
 	// @todo disabled for now until fully tested.
-	//if err = a.ValidateInput(input); err != nil {
+	//if err = a.validateJSONSchema(input); err != nil {
 	//	return err
 	//}
 	a.input = input
@@ -135,9 +136,9 @@ func (a *Action) SetInput(input Input) (err error) {
 	return a.EnsureLoaded()
 }
 
-// ValidateInput validates arguments and options according to
+// validateJSONSchema validates arguments and options according to
 // a specified json schema in action definition.
-func (a *Action) ValidateInput(inp Input) error {
+func (a *Action) validateJSONSchema(inp Input) error {
 	jsch := a.JSONSchema()
 	// @todo cache jsonschema and resources.
 	b, err := json.Marshal(jsch)
@@ -162,6 +163,20 @@ func (a *Action) ValidateInput(inp Input) error {
 		return err
 	}
 	// @todo validate must have info about which fields failed.
+	return nil
+}
+
+// ValidateInput validates input arguments in action definition.
+func (a *Action) ValidateInput(isExec bool) error {
+	// Check arguments if no exec flag present.
+	if !isExec {
+		argsInitNum := len(a.ActionDef().Arguments)
+		argsInputNum := len(a.input.Args)
+		if argsInitNum != argsInputNum {
+			return fmt.Errorf("expected (%d) arg(s), provided (%d) arg(s)", argsInitNum, argsInputNum)
+		}
+	}
+
 	return nil
 }
 
