@@ -4,13 +4,21 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 
-	"github.com/santhosh-tekuri/jsonschema/v5"
+	jsvalidate "github.com/santhosh-tekuri/jsonschema/v5"
 
 	"github.com/launchrctl/launchr/pkg/cli"
+	"github.com/launchrctl/launchr/pkg/jsonschema"
 	"github.com/launchrctl/launchr/pkg/types"
+)
+
+var (
+	errInvalidProcessor          = errors.New("invalid configuration, processor is required")
+	errTplNotApplicableProcessor = "invalid configuration, processor can't be applied to value of type %s"
+	errTplNonExistProcessor      = "requested processor %q doesn't exist"
 )
 
 // Action is an action definition with a contextual id (name), working directory path
@@ -26,8 +34,9 @@ type Action struct {
 	fpath string      // fpath is a path to action definition file.
 	def   *Definition // def is an action definition. Loaded by Loader, may be nil when not initialized.
 
-	env   RunEnvironment // env is the run environment driver to execute the action.
-	input Input          // input is a container for env variables.
+	env        RunEnvironment            // env is the run environment driver to execute the action.
+	input      Input                     // input is a container for env variables.
+	processors map[string]ValueProcessor // processors are ValueProcessors for manipulating input.
 }
 
 // Input is a container for action input arguments and options.
@@ -68,6 +77,16 @@ func (a *Action) Clone() *Action {
 		Loader: a.Loader,
 	}
 	return c
+}
+
+// SetProcessors sets the value processors for an Action.
+func (a *Action) SetProcessors(list map[string]ValueProcessor) {
+	a.processors = list
+}
+
+// GetProcessors returns processors map.
+func (a *Action) GetProcessors() map[string]ValueProcessor {
+	return a.processors
 }
 
 // Reset unsets loaded action to force reload.
@@ -130,6 +149,17 @@ func (a *Action) SetInput(input Input) (err error) {
 	//if err = a.validateJSONSchema(input); err != nil {
 	//	return err
 	//}
+
+	err = a.processArgs(input.Args)
+	if err != nil {
+		return err
+	}
+
+	err = a.processOptions(input.Opts)
+	if err != nil {
+		return err
+	}
+
 	a.input = input
 	// Reset to load the action file again with new replacements.
 	a.Reset()
@@ -137,7 +167,77 @@ func (a *Action) SetInput(input Input) (err error) {
 }
 
 // validateJSONSchema validates arguments and options according to
+func (a *Action) processOptions(opts TypeOpts) error {
+	for _, optDef := range a.ActionDef().Options {
+		if _, ok := opts[optDef.Name]; !ok {
+			continue
+		}
+
+		value := opts[optDef.Name]
+		toApply := optDef.Process
+
+		value, err := a.processValue(value, optDef.Type, toApply)
+		if err != nil {
+			return err
+		}
+
+		opts[optDef.Name] = value
+	}
+
+	return nil
+}
+
+func (a *Action) processArgs(args TypeArgs) error {
+	for _, argDef := range a.ActionDef().Arguments {
+		if _, ok := args[argDef.Name]; !ok {
+			continue
+		}
+
+		value := args[argDef.Name]
+		toApply := argDef.Process
+		value, err := a.processValue(value, argDef.Type, toApply)
+		if err != nil {
+			return err
+		}
+
+		args[argDef.Name] = value
+	}
+
+	return nil
+}
+
+func (a *Action) processValue(value interface{}, valueType jsonschema.Type, toApplyProcessors []ValueProcessDef) (interface{}, error) {
+	newValue := value
+	processors := a.GetProcessors()
+
+	for _, processor := range toApplyProcessors {
+		if processor.Processor == "" {
+			return value, errInvalidProcessor
+		}
+
+		proc, ok := processors[processor.Processor]
+		if !ok {
+			return value, fmt.Errorf(errTplNonExistProcessor, processor.Processor)
+		}
+
+		if !proc.IsApplicable(valueType) {
+			return value, fmt.Errorf(errTplNotApplicableProcessor, valueType)
+		}
+
+		processedValue, err := proc.Execute(newValue, processor.Options)
+		if err != nil {
+			return value, err
+		}
+
+		newValue = processedValue
+	}
+
+	return newValue, nil
+}
+
+// validateJSONSchema validates arguments and options according to
 // a specified json schema in action definition.
+// @todo move to jsonschema
 func (a *Action) validateJSONSchema(inp Input) error {
 	jsch := a.JSONSchema()
 	// @todo cache jsonschema and resources.
@@ -146,7 +246,7 @@ func (a *Action) validateJSONSchema(inp Input) error {
 		return err
 	}
 	buf := bytes.NewBuffer(b)
-	c := jsonschema.NewCompiler()
+	c := jsvalidate.NewCompiler()
 	err = c.AddResource(a.Filepath(), buf)
 	if err != nil {
 		return err

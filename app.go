@@ -125,6 +125,7 @@ func (app *appImpl) init() error {
 	app.actionMngr = action.NewManager(
 		action.WithDefaultRunEnvironment,
 		action.WithContainerRunEnvironmentConfig(app.config, name+"_"),
+		action.WithValueProcessors(),
 	)
 
 	// Register services for other modules.
@@ -136,6 +137,14 @@ func (app *appImpl) init() error {
 	for _, p := range getPluginByType[OnAppInitPlugin](app) {
 		if err = p.OnAppInit(app); err != nil {
 			return err
+		}
+	}
+
+	// Skip discover actions if we check version.
+	args := os.Args[1:]
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--version" {
+			return nil
 		}
 	}
 
