@@ -37,18 +37,18 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 					return err
 				}
 			}
+
 			// Set action input.
-			err := a.SetInput(Input{
+			input := Input{
 				Args:    argsToMap(args, argsDef),
 				Opts:    derefOpts(options),
 				IO:      streams,
 				ArgsRaw: args,
-			})
-			if err != nil {
+			}
+			if err := a.env.(RunEnvironmentFlags).ValidateInput(a, input.Args); err != nil {
 				return err
 			}
-
-			if err = a.env.(RunEnvironmentFlags).ValidateInput(a); err != nil {
+			if err := a.SetInput(input); err != nil {
 				return err
 			}
 

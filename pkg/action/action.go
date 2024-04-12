@@ -267,14 +267,11 @@ func (a *Action) validateJSONSchema(inp Input) error {
 }
 
 // ValidateInput validates input arguments in action definition.
-func (a *Action) ValidateInput(isExec bool) error {
-	// Check arguments if no exec flag present.
-	if !isExec {
-		argsInitNum := len(a.ActionDef().Arguments)
-		argsInputNum := len(a.input.Args)
-		if argsInitNum != argsInputNum {
-			return fmt.Errorf("expected (%d) arg(s), provided (%d) arg(s)", argsInitNum, argsInputNum)
-		}
+func (a *Action) ValidateInput(args TypeArgs) error {
+	argsInitNum := len(a.ActionDef().Arguments)
+	argsInputNum := len(args)
+	if argsInitNum != argsInputNum {
+		return fmt.Errorf("expected (%d) arg(s), provided (%d) arg(s)", argsInitNum, argsInputNum)
 	}
 
 	return nil

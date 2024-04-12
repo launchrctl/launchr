@@ -145,8 +145,13 @@ func (c *containerEnv) UseFlags(flags TypeOpts) error {
 
 	return nil
 }
-func (c *containerEnv) ValidateInput(a *Action) error {
-	return a.ValidateInput(c.exec)
+func (c *containerEnv) ValidateInput(a *Action, args TypeArgs) error {
+	if c.exec {
+		return nil
+	}
+
+	// Check arguments if no exec flag present.
+	return a.ValidateInput(args)
 }
 func (c *containerEnv) AddImageBuildResolver(r ImageBuildResolver)            { c.imgres = append(c.imgres, r) }
 func (c *containerEnv) SetImageBuildCacheResolver(s *ImageBuildCacheResolver) { c.imgccres = s }
