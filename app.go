@@ -24,15 +24,17 @@ var ActionsGroup = &cobra.Group{
 }
 
 type appImpl struct {
-	rootCmd    *cobra.Command
-	streams    cli.Streams
-	workDir    string
-	cfgDir     string
-	services   map[ServiceInfo]Service
-	actionMngr action.Manager
-	pluginMngr PluginManager
-	config     Config
-	mFS        []ManagedFS
+	rootCmd     *cobra.Command
+	streams     cli.Streams
+	workDir     string
+	cfgDir      string
+	services    map[ServiceInfo]Service
+	actionMngr  action.Manager
+	pluginMngr  PluginManager
+	config      Config
+	mFS         []ManagedFS
+	skipActions bool   // skipActions to skip loading if not requested.
+	reqCmd      string // reqCmd to search for the requested cobra command.
 }
 
 // getPluginByType returns specific plugins from the app.
@@ -140,23 +142,30 @@ func (app *appImpl) init() error {
 		}
 	}
 
-	// Skip discover actions if we check version.
+	// Quick parse arguments to see if a version or help was requested.
 	args := os.Args[1:]
 	for i := 0; i < len(args); i++ {
+		// Skip discover actions if we check version.
 		if args[i] == "--version" {
-			return nil
+			app.skipActions = true
+		}
+
+		if app.reqCmd == "" && !strings.HasPrefix(args[i], "-") {
+			app.reqCmd = args[i]
 		}
 	}
 
 	// Discover actions.
-	for _, p := range getPluginByType[ActionDiscoveryPlugin](app) {
-		for _, fs := range app.GetRegisteredFS() {
-			actions, err := p.DiscoverActions(fs)
-			if err != nil {
-				return err
-			}
-			for _, actConf := range actions {
-				app.actionMngr.Add(actConf)
+	if !app.skipActions {
+		for _, p := range getPluginByType[ActionDiscoveryPlugin](app) {
+			for _, fs := range app.GetRegisteredFS() {
+				actions, err := p.DiscoverActions(fs)
+				if err != nil {
+					return err
+				}
+				for _, actConf := range actions {
+					app.actionMngr.Add(actConf)
+				}
 			}
 		}
 	}
@@ -176,35 +185,25 @@ func (app *appImpl) exec() error {
 			return cmd.Help()
 		},
 	}
-	// Quick parse arguments to see if a version or help was requested.
-	args := os.Args[1:]
-	var skipActions bool // skipActions to skip loading if not requested.
-	var reqCmd string    // reqCmd to search for the requested cobra command.
-	for i := 0; i < len(args); i++ {
-		if args[i] == "--version" {
-			rootCmd.SetVersionTemplate(Version().Full())
-			skipActions = true
-		}
-		if reqCmd == "" && !strings.HasPrefix(args[i], "-") {
-			reqCmd = args[i]
-		}
-	}
 
+	if app.skipActions {
+		rootCmd.SetVersionTemplate(Version().Full())
+	}
 	// Convert actions to cobra commands.
 	actions := app.actionMngr.AllRef()
 	// Check the requested command to see what actions we must actually load.
-	if reqCmd != "" {
-		a, ok := actions[reqCmd]
+	if app.reqCmd != "" {
+		a, ok := actions[app.reqCmd]
 		if ok {
 			// Use only the requested action.
 			actions = map[string]*action.Action{a.ID: a}
 		} else {
 			// Action was not requested, no need to load them.
-			skipActions = true
+			app.skipActions = true
 		}
 	}
 	// @todo consider cobra completion and caching between runs.
-	if !skipActions {
+	if !app.skipActions {
 		if len(actions) > 0 {
 			rootCmd.AddGroup(ActionsGroup)
 		}
