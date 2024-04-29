@@ -46,13 +46,14 @@ func TarGzEmbedActions(f io.Writer, actions []*action.Action) error {
 	now := time.Now()
 
 	for _, a := range actions {
-		c, err := a.DefinitionEncoded()
+		act := (*a).(*action.FileAction)
+		c, err := act.DefinitionEncoded()
 		if err != nil {
 			return err
 		}
 
 		h := &tar.Header{
-			Name:    a.Filepath(),
+			Name:    act.Filepath(),
 			Mode:    0600,
 			ModTime: now,
 			Size:    int64(len(c)),

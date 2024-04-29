@@ -130,7 +130,7 @@ func (ad *Discovery) Discover() ([]*Action, error) {
 
 	// Sort alphabetically.
 	sort.Slice(actions, func(i, j int) bool {
-		return actions[i].ID < actions[j].ID
+		return (*actions[i]).GetID() < (*actions[j]).GetID()
 	})
 	return actions, nil
 }
@@ -141,13 +141,15 @@ func (ad *Discovery) parseFile(f string) *Action {
 	if id == "" {
 		panic(fmt.Errorf("action id cannot be empty, file %q", f))
 	}
-	a := NewAction(id, absPath(ad.fs.wd), ad.fsDir, filepath.Join(ad.fsDir, f))
+	a := NewFileAction(id, absPath(ad.fs.wd), ad.fsDir, filepath.Join(ad.fsDir, f))
 	a.Loader = ad.s.Loader(
 		func() (fs.File, error) { return ad.fs.Open(f) },
 		envProcessor{},
 		inputProcessor{},
 	)
-	return a
+
+	var act Action = a
+	return &act
 }
 
 // getActionID parses filename and returns CLI command name.

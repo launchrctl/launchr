@@ -3,6 +3,7 @@ package action
 import (
 	"context"
 	"fmt"
+	"github.com/launchrctl/launchr/pkg/cli"
 	"strconv"
 	"sync"
 	"time"
@@ -31,9 +32,9 @@ type Manager interface {
 	// If functions withFn are not provided, default functions are applied.
 	Decorate(a *Action, withFn ...DecorateWithFn) *Action
 	// Add saves an action in the manager.
-	Add(*Action)
+	Add(Action)
 	// DefaultRunEnvironment provides the default action run environment.
-	DefaultRunEnvironment() RunEnvironment
+	DefaultRunEnvironment(a *Action) RunEnvironment
 
 	// Run executes an action in foreground.
 	Run(ctx context.Context, a *Action) (RunInfo, error)
@@ -71,10 +72,18 @@ func (m *actionManagerMap) ServiceInfo() launchr.ServiceInfo {
 	return launchr.ServiceInfo{}
 }
 
-func (m *actionManagerMap) Add(a *Action) {
+func (m *actionManagerMap) Add(a Action) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
-	m.actionStore[a.ID] = a
+
+	act, ok := a.(*CallbackAction)
+	if ok {
+		//map1 := make(map[string]interface{})
+		//map2 := make(map[string]interface{})
+		cli.Println("%s", act.SomeVar)
+	}
+
+	m.actionStore[a.GetID()] = &a
 }
 
 func (m *actionManagerMap) AllRef() map[string]*Action {
@@ -123,15 +132,24 @@ func (m *actionManagerMap) Decorate(a *Action, withFns ...DecorateWithFn) *Actio
 	if withFns == nil {
 		withFns = m.dwFns
 	}
-	a = a.Clone()
+	act := (*a).Clone()
 	for _, fn := range withFns {
-		fn(m, a)
+		fn(m, &act)
 	}
-	return a
+	return &act
 }
 
-func (m *actionManagerMap) DefaultRunEnvironment() RunEnvironment {
-	return NewDockerEnvironment()
+func (m *actionManagerMap) DefaultRunEnvironment(a *Action) RunEnvironment {
+	var env RunEnvironment
+
+	switch (*a).(type) {
+	case *CallbackAction:
+		env = NewFunctionEnvironment()
+	case *FileAction:
+		env = NewDockerEnvironment()
+	}
+
+	return env
 }
 
 // RunInfo stores information about a running action.
@@ -147,7 +165,7 @@ func (m *actionManagerMap) registerRun(a *Action) RunInfo {
 	m.mxRun.Lock()
 	defer m.mxRun.Unlock()
 	// @todo validate the action is actually running and the method was not just incorrectly requested
-	id := strconv.FormatInt(time.Now().Unix(), 10) + "-" + a.ID
+	id := strconv.FormatInt(time.Now().Unix(), 10) + "-" + (*a).GetID()
 	ri := RunInfo{
 		ID:     id,
 		Action: a,
@@ -168,7 +186,7 @@ func (m *actionManagerMap) updateRunStatus(id string, st string) {
 
 func (m *actionManagerMap) Run(ctx context.Context, a *Action) (RunInfo, error) {
 	// @todo add the same status change info
-	return m.registerRun(a), a.Execute(ctx)
+	return m.registerRun(a), (*a).Execute(ctx)
 }
 
 func (m *actionManagerMap) RunBackground(ctx context.Context, a *Action) (RunInfo, chan error) {
@@ -176,7 +194,7 @@ func (m *actionManagerMap) RunBackground(ctx context.Context, a *Action) (RunInf
 	chErr := make(chan error)
 	go func() {
 		m.updateRunStatus(ri.ID, "running")
-		err := a.Execute(ctx)
+		err := (*a).Execute(ctx)
 		chErr <- err
 		close(chErr)
 		if err != nil {
@@ -194,7 +212,7 @@ func (m *actionManagerMap) RunInfoByAction(aid string) []RunInfo {
 	defer m.mxRun.Unlock()
 	run := make([]RunInfo, 0, len(m.runStore)/2)
 	for _, v := range m.runStore {
-		if v.Action.ID == aid {
+		if (*v.Action).GetID() == aid {
 			run = append(run, v)
 		}
 	}
@@ -210,7 +228,7 @@ func (m *actionManagerMap) RunInfoByID(id string) (RunInfo, bool) {
 
 // WithDefaultRunEnvironment adds a default RunEnvironment for an action.
 func WithDefaultRunEnvironment(m Manager, a *Action) {
-	a.SetRunEnvironment(m.DefaultRunEnvironment())
+	(*a).SetRunEnvironment(m.DefaultRunEnvironment(a))
 }
 
 // WithContainerRunEnvironmentConfig configures a ContainerRunEnvironment.
@@ -218,7 +236,7 @@ func WithContainerRunEnvironmentConfig(cfg launchr.Config, prefix string) Decora
 	r := LaunchrConfigImageBuildResolver{cfg}
 	ccr := NewImageBuildCacheResolver(cfg)
 	return func(m Manager, a *Action) {
-		if env, ok := a.env.(ContainerRunEnvironment); ok {
+		if env, ok := (*a).GetRunEnvironment().(ContainerRunEnvironment); ok {
 			env.AddImageBuildResolver(r)
 			env.SetImageBuildCacheResolver(ccr)
 			env.SetContainerNameProvider(ContainerNameProvider{Prefix: prefix, RandomSuffix: true})
@@ -229,6 +247,6 @@ func WithContainerRunEnvironmentConfig(cfg launchr.Config, prefix string) Decora
 // WithValueProcessors sets processors for action from manager.
 func WithValueProcessors() DecorateWithFn {
 	return func(m Manager, a *Action) {
-		a.SetProcessors(m.GetValueProcessors())
+		(*a).SetProcessors(m.GetValueProcessors())
 	}
 }

@@ -14,9 +14,10 @@ import (
 
 // CobraImpl returns cobra command implementation for an action command.
 func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
-	actConf := a.ActionDef()
+	act := (*a)
+	actConf := act.ActionDef()
 	argsDef := actConf.Arguments
-	use := a.ID
+	use := act.GetID()
 	for _, p := range argsDef {
 		use += " " + p.Name
 	}
@@ -30,14 +31,14 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true // Don't show usage help on a runtime error.
 			// Pass to the run environment its flags.
-			if env, ok := a.env.(RunEnvironmentFlags); ok {
+			if env, ok := act.GetRunEnvironment().(RunEnvironmentFlags); ok {
 				err := env.UseFlags(derefOpts(runOpts))
 				if err != nil {
 					return err
 				}
 			}
 			// Set action input.
-			err := a.SetInput(Input{
+			err := act.SetInput(Input{
 				Args: argsToMap(args, argsDef),
 				Opts: derefOpts(options),
 				IO:   streams,
@@ -46,7 +47,7 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 				return err
 			}
 			// @todo can we use action manager here and Manager.Run()
-			return a.Execute(cmd.Context())
+			return act.Execute(cmd.Context())
 		},
 	}
 
@@ -56,7 +57,7 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 		return nil, err
 	}
 	// Collect run environment flags.
-	if env, ok := a.env.(RunEnvironmentFlags); ok {
+	if env, ok := act.GetRunEnvironment().(RunEnvironmentFlags); ok {
 		err = setCobraOptions(cmd, env.FlagsDefinition(), runOpts)
 		if err != nil {
 			return nil, err

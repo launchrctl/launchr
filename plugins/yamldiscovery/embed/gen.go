@@ -61,7 +61,7 @@ func (p *Plugin) Generate(buildPath string, workDir string) (*launchr.PluginGene
 	}
 	fmt.Println("[INFO] Discovered:")
 	for i, a := range actions {
-		fmt.Printf("%d. %s\n", i+1, a.ID)
+		fmt.Printf("%d. %s\n", i+1, (*a).GetID())
 	}
 	var id = "actions.yamldiscovery.gen"
 	tpl, err := template.New(id).Parse(pluginTemplate)

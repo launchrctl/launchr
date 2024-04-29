@@ -55,7 +55,7 @@ func (p *Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
 
 			// @todo cache discovery to read fs only once.
 			for _, a := range actions {
-				cli.Println("%s", a.ID)
+				cli.Println("%s", (*a).GetID())
 			}
 
 			return nil

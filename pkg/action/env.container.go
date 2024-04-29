@@ -135,14 +135,20 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	if err = c.Init(); err != nil {
 		return err
 	}
-	streams := a.GetInput().IO
-	actConf := a.ActionDef()
-	log.Debug("Starting execution of the action %q in %q environment, command %v", a.ID, c.dtype, actConf.Command)
+
+	act, ok := (*a).(*FileAction)
+	if !ok {
+		panic("test")
+	}
+
+	streams := act.GetInput().IO
+	actConf := act.ActionDef()
+	log.Debug("Starting execution of the action %q in %q environment, command %v", act.GetID(), c.dtype, actConf.Command)
 	// @todo consider reusing the same container and run exec
-	name := c.nameprv.Get(a.ID)
+	name := c.nameprv.Get(act.GetID())
 	existing := c.driver.ContainerList(ctx, types.ContainerListOptions{SearchName: name})
 	if len(existing) > 0 {
-		return fmt.Errorf("the action %q can't start, the container name is in use, please, try again", a.ID)
+		return fmt.Errorf("the action %q can't start, the container name is in use, please, try again", act.GetID())
 	}
 
 	var autoRemove = true
@@ -165,7 +171,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		Env:           actConf.Env,
 		User:          getCurrentUser(),
 	}
-	log.Debug("Creating a container for action %q", a.ID)
+	log.Debug("Creating a container for action %q", act.GetID())
 	cid, err := c.containerCreate(ctx, a, runConfig)
 	if err != nil {
 		return err
@@ -174,16 +180,16 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		return errors.New("error on creating a container")
 	}
 
-	log.Debug("Successfully created container %q for action %q", cid, a.ID)
+	log.Debug("Successfully created container %q for action %q", cid, act.GetID())
 	// Copy working dirs to the container.
 	if c.useVolWD {
 		// @todo test somehow.
 		cli.Println(`Flag "--%s" is set. Copying the working directory inside the container.`, containerFlagUseVolumeWD)
-		err = c.copyDirToContainer(ctx, cid, a.WorkDir(), containerHostMount)
+		err = c.copyDirToContainer(ctx, cid, act.WorkDir(), containerHostMount)
 		if err != nil {
 			return err
 		}
-		err = c.copyDirToContainer(ctx, cid, a.Dir(), containerActionMount)
+		err = c.copyDirToContainer(ctx, cid, act.Dir(), containerActionMount)
 		if err != nil {
 			return err
 		}
@@ -195,14 +201,14 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	}
 
 	if !runConfig.Tty {
-		log.Debug("Start watching signals %q, action %q", cid, a.ID)
+		log.Debug("Start watching signals %q, action %q", cid, act.GetID())
 		sigc := notifyAllSignals()
 		go ForwardAllSignals(ctx, c.driver, cid, sigc)
 		defer signal.StopCatch(sigc)
 	}
 
 	// Attach streams to the terminal.
-	log.Debug("Attaching streams of %q, action %q", cid, a.ID)
+	log.Debug("Attaching streams of %q, action %q", cid, act.GetID())
 	cio, errCh, err := c.attachContainer(ctx, streams, cid, runConfig)
 	if err != nil {
 		return err
@@ -210,13 +216,13 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	defer func() {
 		_ = cio.Close()
 	}()
-	log.Debug("Watching status of %q, action %q", cid, a.ID)
+	log.Debug("Watching status of %q, action %q", cid, act.GetID())
 	statusCh := c.containerWait(ctx, cid, runConfig)
 
 	// Start the container
-	log.Debug("Starting container %q, action %q", cid, a.ID)
+	log.Debug("Starting container %q, action %q", cid, act.GetID())
 	if err = c.driver.ContainerStart(ctx, cid, types.ContainerStartOptions{}); err != nil {
-		log.Debug("Failed starting the container %q, action %q", cid, a.ID)
+		log.Debug("Failed starting the container %q, action %q", cid, act.GetID())
 		cancelFn()
 		<-errCh
 		if runConfig.AutoRemove {
@@ -227,13 +233,13 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 
 	// Resize TTY on window resize.
 	if runConfig.Tty {
-		log.Debug("Watching TTY resize %q, action %q", cid, a.ID)
+		log.Debug("Watching TTY resize %q, action %q", cid, act.GetID())
 		if err = driver.MonitorTtySize(ctx, c.driver, streams, cid, false); err != nil {
 			log.Err("Error monitoring TTY size:", err)
 		}
 	}
 
-	log.Debug("Waiting execution of %q, action %q", cid, a.ID)
+	log.Debug("Waiting execution of %q, action %q", cid, act.GetID())
 	if errCh != nil {
 		if err = <-errCh; err != nil {
 			if _, ok := err.(term.EscapeError); ok {
@@ -248,7 +254,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 
 	status := <-statusCh
 	// @todo maybe we should note that SIG was sent to the container. Code 130 is sent on Ctlr+C.
-	msg := fmt.Sprintf("action %q finished with the exit code %d", a.ID, status)
+	msg := fmt.Sprintf("action %q finished with the exit code %d", act.GetID(), status)
 	log.Info(msg)
 	if status != 0 {
 		err = RunStatusError{code: status, msg: msg}
@@ -257,7 +263,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	// Copy back the result from the volume.
 	// @todo it's a bad implementation considering consequential runs, need to find a better way to sync with remote.
 	if c.useVolWD {
-		path := a.WorkDir()
+		path := act.WorkDir()
 		cli.Println(`Flag "--%s" is set. Copying back the result of the action run.`, containerFlagUseVolumeWD)
 		err = c.copyFromContainer(ctx, cid, containerHostMount, filepath.Dir(path), filepath.Base(path))
 		defer func() {
@@ -275,12 +281,12 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		if !c.removeImg {
 			return
 		}
-		log.Debug("Removing container %q, action %q", cid, a.ID)
+		log.Debug("Removing container %q, action %q", cid, act.GetID())
 		errImg := c.imageRemove(ctx, a)
 		if errImg != nil {
 			log.Err("Image remove returned an error: %v", errImg)
 		} else {
-			cli.Println("Image %q was successfully removed", a.ActionDef().Image)
+			cli.Println("Image %q was successfully removed", act.ActionDef().Image)
 		}
 	}()
 
@@ -306,7 +312,7 @@ func (c *containerEnv) Close() error {
 }
 
 func (c *containerEnv) imageRemove(ctx context.Context, a *Action) error {
-	_, err := c.driver.ImageRemove(ctx, a.ActionDef().Image, types.ImageRemoveOptions{
+	_, err := c.driver.ImageRemove(ctx, (*a).ActionDef().Image, types.ImageRemoveOptions{
 		Force:         true,
 		PruneChildren: false,
 	})
@@ -347,10 +353,11 @@ func (c *containerEnv) isRebuildRequired(bi *types.BuildDefinition) (bool, error
 }
 
 func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
-	streams := a.GetInput().IO
-	image := a.ActionDef().Image
+	act := (*a).(*FileAction)
+	streams := act.GetInput().IO
+	image := act.ActionDef().Image
 	// Prepend action to have the top priority in image build resolution.
-	r := ChainImageBuildResolver{append(ChainImageBuildResolver{a}, c.imgres...)}
+	r := ChainImageBuildResolver{append(ChainImageBuildResolver{act}, c.imgres...)}
 
 	buildInfo := r.ImageBuildInfo(image)
 	forceRebuild, err := c.isRebuildRequired(buildInfo)
@@ -427,7 +434,8 @@ func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *typ
 	}
 
 	// Create a container
-	actConf := a.ActionDef()
+	act := (*a).(*FileAction)
+	actConf := act.ActionDef()
 	createOpts := types.ContainerCreateOptions{
 		ContainerName: opts.ContainerName,
 		Image:         actConf.Image,
@@ -454,8 +462,8 @@ func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *typ
 		}
 	} else {
 		createOpts.Binds = []string{
-			absPath(a.WorkDir()) + ":" + containerHostMount,
-			absPath(a.Dir()) + ":" + containerActionMount,
+			absPath(act.WorkDir()) + ":" + containerHostMount,
+			absPath(act.Dir()) + ":" + containerActionMount,
 		}
 	}
 	cid, err := c.driver.ContainerCreate(ctx, createOpts)

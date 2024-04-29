@@ -156,10 +156,19 @@ func (app *appImpl) init() error {
 				return err
 			}
 			for _, actConf := range actions {
-				app.actionMngr.Add(actConf)
+				app.actionMngr.Add(*actConf)
 			}
 		}
 	}
+
+	// test NewCallbackAction
+	defAction2 := action.DefAction{
+		Title:       "title",
+		Description: "description",
+	}
+	definition := action.Definition{Version: "0.1", WD: ".", Action: &defAction2}
+	actionCallback := action.NewCallbackAction("test", &definition)
+	app.actionMngr.Add(actionCallback)
 
 	return nil
 }
@@ -197,7 +206,7 @@ func (app *appImpl) exec() error {
 		a, ok := actions[reqCmd]
 		if ok {
 			// Use only the requested action.
-			actions = map[string]*action.Action{a.ID: a}
+			actions = map[string]*action.Action{(*a).GetID(): a}
 		} else {
 			// Action was not requested, no need to load them.
 			skipActions = true
@@ -210,13 +219,14 @@ func (app *appImpl) exec() error {
 		}
 		for _, a := range actions {
 			a = app.actionMngr.Decorate(a)
-			if err := a.EnsureLoaded(); err != nil {
-				fmt.Fprintf(os.Stdout, "[WARNING] Action %q was skipped because it has an incorrect definition:\n%v\n", a.ID, err)
+			refAct := (*a)
+			if err := refAct.EnsureLoaded(); err != nil {
+				fmt.Fprintf(os.Stdout, "[WARNING] Action %q was skipped because it has an incorrect definition:\n%v\n", refAct.GetID(), err)
 				continue
 			}
 			cmd, err := action.CobraImpl(a, app.Streams())
 			if err != nil {
-				fmt.Fprintf(os.Stdout, "[WARNING] Action %q was skipped:\n%v\n", a.ID, err)
+				fmt.Fprintf(os.Stdout, "[WARNING] Action %q was skipped:\n%v\n", refAct.GetID(), err)
 				continue
 			}
 			cmd.GroupID = ActionsGroup.ID

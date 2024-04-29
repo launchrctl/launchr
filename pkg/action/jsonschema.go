@@ -7,7 +7,7 @@ import (
 )
 
 // JSONSchema returns json schema of an action.
-func (a *Action) JSONSchema() jsonschema.Schema {
+func (a *FileAction) JSONSchema() jsonschema.Schema {
 	def := a.ActionDef()
 	s := def.JSONSchema()
 	// Set ID to a filepath. It's not exactly JSON Schema, but some canonical path.
