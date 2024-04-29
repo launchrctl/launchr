@@ -75,11 +75,12 @@ func (err errMissingVar) Error() string {
 }
 
 func (p inputProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
-	if ctx.Action == nil {
+	a, ok := (*ctx.Action).(*ContainerAction)
+	if ctx.Action == nil || !ok {
 		return b, nil
 	}
-	a := ctx.Action
-	def, err := ctx.Action.Loader.LoadRaw()
+	//a := ctx.Action
+	def, err := a.Loader.LoadRaw()
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +164,7 @@ func ConvertInputToTplVars(input Input, ac *DefAction) map[string]interface{} {
 	return values
 }
 
-func addPredefinedVariables(data map[string]interface{}, a *Action) {
+func addPredefinedVariables(data map[string]interface{}, a *ContainerAction) {
 	cuser := getCurrentUser()
 	// Set zeros for running in environments like Windows
 	data["current_uid"] = 0

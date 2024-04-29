@@ -90,6 +90,17 @@ type Definition struct {
 	Action  *DefAction `yaml:"action"`
 }
 
+// CallbackDefinitions is a representation of multiple named definitions.
+type CallbackDefinitions struct {
+	Definition []NamedDefinition `yaml:"definitions"`
+}
+
+// NamedDefinition represents definition with specific ID to
+type NamedDefinition struct {
+	ID         string      `yaml:"id"`
+	Definition *Definition `yaml:"definition"`
+}
+
 // Content implements Loader interface.
 func (d *Definition) Content() ([]byte, error) {
 	w := &bytes.Buffer{}
@@ -133,6 +144,7 @@ func validateV1(_ *Definition) error {
 
 // DefAction holds action configuration
 type DefAction struct {
+	Target      string                 `yaml:"target"`
 	Title       string                 `yaml:"title"`
 	Description string                 `yaml:"description"`
 	Arguments   ArgumentsList          `yaml:"arguments"`
@@ -154,14 +166,17 @@ func (a *DefAction) UnmarshalYAML(n *yaml.Node) (err error) {
 	}
 	*a = DefAction(y)
 
-	if a.Image == "" {
-		l, c := yamlNodeLineCol(n, "image")
-		return yamlTypeErrorLine(sErrEmptyActionImg, l, c)
+	if a.Target != "callback" {
+		if a.Image == "" {
+			l, c := yamlNodeLineCol(n, "image")
+			return yamlTypeErrorLine(sErrEmptyActionImg, l, c)
+		}
+		if len(a.Command) == 0 {
+			l, c := yamlNodeLineCol(n, "command")
+			return yamlTypeErrorLine(sErrEmptyActionCmd, l, c)
+		}
 	}
-	if len(a.Command) == 0 {
-		l, c := yamlNodeLineCol(n, "command")
-		return yamlTypeErrorLine(sErrEmptyActionCmd, l, c)
-	}
+
 	return nil
 }
 

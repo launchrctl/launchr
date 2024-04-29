@@ -28,9 +28,11 @@ type RunEnvironment interface {
 	// Init prepares the run environment.
 	Init() error
 	// Execute runs action a in the environment and operates with IO through streams.
-	Execute(ctx context.Context, a *Action) error
+	Execute(ctx context.Context, a Action) error
 	// Close does wrap up operations.
 	Close() error
+	// ValidateInput validates input arguments in action definition.
+	ValidateInput(a Action, args TypeArgs) error
 }
 
 // RunEnvironmentFlags is an interface to define environment specific runtime configuration.
@@ -40,8 +42,6 @@ type RunEnvironmentFlags interface {
 	FlagsDefinition() OptionsList
 	// UseFlags sets environment configuration.
 	UseFlags(flags TypeOpts) error
-	// ValidateInput validates input arguments in action definition.
-	ValidateInput(a *Action, args TypeArgs) error
 }
 
 // ContainerRunEnvironment is an interface for container run environments.
