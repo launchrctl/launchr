@@ -26,6 +26,8 @@ type App interface {
 	// GetService retrieves a service of type v and assigns it to v.
 	// Panics if a service is not found.
 	GetService(v interface{})
+
+	GetPluginAssets(p Plugin) fs.FS
 	// RegisterFS registers a File System in launchr.
 	// It may be a FS for action discovery, see action.DiscoveryFS.
 	RegisterFS(fs ManagedFS)
@@ -55,6 +57,11 @@ type PluginInfo struct {
 
 func (p PluginInfo) String() string {
 	return p.pkgPath + "." + p.typeName
+}
+
+// GetPackagePath returns the package path of the PluginInfo.
+func (p PluginInfo) GetPackagePath() string {
+	return p.pkgPath
 }
 
 // InitPluginInfo sets private fields for internal usage only.

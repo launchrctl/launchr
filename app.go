@@ -1,8 +1,10 @@
 package launchr
 
 import (
+	"embed"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -17,6 +19,10 @@ import (
 	_ "github.com/launchrctl/launchr/plugins" // include default plugins
 )
 
+var (
+	errTplAssetsNotFound = "assets not found for requested plugin %s"
+)
+
 // ActionsGroup is a cobra command group definition
 var ActionsGroup = &cobra.Group{
 	ID:    "actions",
@@ -24,17 +30,23 @@ var ActionsGroup = &cobra.Group{
 }
 
 type appImpl struct {
-	rootCmd     *cobra.Command
-	streams     cli.Streams
-	workDir     string
-	cfgDir      string
-	services    map[ServiceInfo]Service
-	actionMngr  action.Manager
-	pluginMngr  PluginManager
-	config      Config
-	mFS         []ManagedFS
+	rootCmd       *cobra.Command
+	streams       cli.Streams
+	workDir       string
+	cfgDir        string
+	services      map[ServiceInfo]Service
+	actionMngr    action.Manager
+	pluginMngr    PluginManager
+	config        Config
+	mFS           []ManagedFS
 	skipActions bool   // skipActions to skip loading if not requested.
 	reqCmd      string // reqCmd to search for the requested cobra command.
+	assetsStorage embed.FS
+}
+
+// AppOptions represents the launchr application options.
+type AppOptions struct {
+	AssetsFs embed.FS
 }
 
 // getPluginByType returns specific plugins from the app.
@@ -63,8 +75,8 @@ func getPluginByType[T Plugin](app *appImpl) []T {
 	return res
 }
 
-func newApp() *appImpl {
-	return &appImpl{}
+func newApp(options *AppOptions) *appImpl {
+	return &appImpl{assetsStorage: options.AssetsFs}
 }
 
 func (app *appImpl) Name() string         { return name }
@@ -106,6 +118,27 @@ func (app *appImpl) GetService(v interface{}) {
 		}
 	}
 	panic(fmt.Sprintf("service %q does not exist", stype))
+}
+
+func (app *appImpl) GetPluginAssets(p Plugin) fs.FS {
+	pluginsMap := app.pluginMngr.All()
+	var packagePath string
+	for pi, plg := range pluginsMap {
+		if plg == p {
+			packagePath = pi.GetPackagePath()
+		}
+	}
+
+	if packagePath == "" {
+		panic(errors.New("trying to get assets for unknown plugin"))
+	}
+
+	subFS, err := fs.Sub(app.assetsStorage, filepath.Join("assets", packagePath))
+	if err != nil {
+		panic(fmt.Errorf(errTplAssetsNotFound, packagePath))
+	}
+
+	return subFS
 }
 
 // init initializes application and plugins.
@@ -264,6 +297,6 @@ func (app *appImpl) Execute() int {
 }
 
 // Run executes launchr application.
-func Run() int {
-	return newApp().Execute()
+func Run(options *AppOptions) int {
+	return newApp(options).Execute()
 }

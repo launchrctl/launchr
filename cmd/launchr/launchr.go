@@ -11,5 +11,5 @@ import (
 )
 
 func main() {
-	os.Exit(launchr.Run())
+	os.Exit(launchr.Run(&launchr.AppOptions{}))
 }
