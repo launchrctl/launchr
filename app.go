@@ -35,6 +35,8 @@ type appImpl struct {
 	mFS        []ManagedFS
 }
 
+const versionFlag = "--version"
+
 // getPluginByType returns specific plugins from the app.
 func getPluginByType[T Plugin](app *appImpl) []T {
 	plugins := app.pluginMngr.All()
@@ -143,7 +145,7 @@ func (app *appImpl) init() error {
 	// Skip discover actions if we check version.
 	args := os.Args[1:]
 	for i := 0; i < len(args); i++ {
-		if args[i] == "--version" {
+		if args[i] == versionFlag {
 			return nil
 		}
 	}
@@ -181,7 +183,7 @@ func (app *appImpl) exec() error {
 	var skipActions bool // skipActions to skip loading if not requested.
 	var reqCmd string    // reqCmd to search for the requested cobra command.
 	for i := 0; i < len(args); i++ {
-		if args[i] == "--version" {
+		if args[i] == versionFlag {
 			rootCmd.SetVersionTemplate(Version().Full())
 			skipActions = true
 		}
