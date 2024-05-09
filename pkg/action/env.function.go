@@ -2,45 +2,41 @@ package action
 
 import (
 	"context"
-	"github.com/launchrctl/launchr/pkg/cli"
 )
 
-type FunctionEnv struct {
+type functionEnv struct {
 }
 
 // NewFunctionEnvironment creates a new action Docker environment.
 func NewFunctionEnvironment() RunEnvironment {
-	return &FunctionEnv{}
+	return &functionEnv{}
 }
 
-func (c *FunctionEnv) Init() error {
+// Init prepares the run environment.
+func (c *functionEnv) Init() error {
 	return nil
 }
 
-func (c *FunctionEnv) Execute(ctx context.Context, a *Action) (err error) {
+// Execute runs an action in the environment and operates with IO through streams.
+func (c *functionEnv) Execute(ctx context.Context, a Action) (err error) {
 	ctx, cancelFn := context.WithCancel(ctx)
 	defer cancelFn()
 	if err = c.Init(); err != nil {
 		return err
 	}
 
-	act, ok := (*a).(*CallbackAction)
+	act, ok := a.(*CallbackAction)
 	if !ok {
-		panic("not supported action type submitted to env")
+		panic("not supported action type submitted to function env")
 	}
 
-	cli.Println("%v", act)
-	cli.Println("%s", act.GetID())
-	cli.Println("%s", act.ActionDef().Title)
-
-	cli.Println("works")
-
 	call := act.GetCallback()
-	err = call(act.GetInput())
+	err = call(ctx, act.GetInput())
 
 	return err
 }
 
-func (c *FunctionEnv) Close() error {
+// Close does wrap up operations.
+func (c *functionEnv) Close() error {
 	return nil
 }

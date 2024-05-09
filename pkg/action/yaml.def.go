@@ -90,13 +90,15 @@ type Definition struct {
 	Action  *DefAction `yaml:"action"`
 }
 
-type MultipleDef struct {
-	Definition []CallbackDefinition `yaml:"definitions"`
+// CallbackDefinitions is a representation of multiple named definitions.
+type CallbackDefinitions struct {
+	Definition []NamedDefinition `yaml:"definitions"`
 }
 
-type CallbackDefinition struct {
-	ID         string     `yaml:"id"`
-	Definition Definition `yaml:"definition"`
+// NamedDefinition represents definition with specific ID to
+type NamedDefinition struct {
+	ID         string      `yaml:"id"`
+	Definition *Definition `yaml:"definition"`
 }
 
 // Content implements Loader interface.

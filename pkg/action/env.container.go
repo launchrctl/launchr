@@ -122,6 +122,7 @@ func (c *containerEnv) AddImageBuildResolver(r ImageBuildResolver)            { 
 func (c *containerEnv) SetImageBuildCacheResolver(s *ImageBuildCacheResolver) { c.imgccres = s }
 func (c *containerEnv) SetContainerNameProvider(p ContainerNameProvider)      { c.nameprv = p }
 
+// Init prepares the run environment.
 func (c *containerEnv) Init() (err error) {
 	if c.driver == nil {
 		c.driver, err = driver.New(c.dtype)
@@ -129,16 +130,17 @@ func (c *containerEnv) Init() (err error) {
 	return err
 }
 
-func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
+// Execute runs action a in the environment and operates with IO through streams.
+func (c *containerEnv) Execute(ctx context.Context, a Action) (err error) {
 	ctx, cancelFn := context.WithCancel(ctx)
 	defer cancelFn()
 	if err = c.Init(); err != nil {
 		return err
 	}
 
-	act, ok := (*a).(*ContainerAction)
+	act, ok := a.(*ContainerAction)
 	if !ok {
-		panic("not supported action type submitted to env")
+		panic("not supported action type submitted to container env")
 	}
 
 	streams := act.GetInput().IO
@@ -172,7 +174,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		User:          getCurrentUser(),
 	}
 	log.Debug("Creating a container for action %q", act.GetID())
-	cid, err := c.containerCreate(ctx, a, runConfig)
+	cid, err := c.containerCreate(ctx, act, runConfig)
 	if err != nil {
 		return err
 	}
@@ -282,7 +284,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 			return
 		}
 		log.Debug("Removing container %q, action %q", cid, act.GetID())
-		errImg := c.imageRemove(ctx, a)
+		errImg := c.imageRemove(ctx, act)
 		if errImg != nil {
 			log.Err("Image remove returned an error: %v", errImg)
 		} else {
@@ -307,12 +309,13 @@ func getCurrentUser() string {
 	return curuser
 }
 
+// Close does wrap up operations.
 func (c *containerEnv) Close() error {
 	return c.driver.Close()
 }
 
-func (c *containerEnv) imageRemove(ctx context.Context, a *Action) error {
-	_, err := c.driver.ImageRemove(ctx, (*a).ActionDef().Image, types.ImageRemoveOptions{
+func (c *containerEnv) imageRemove(ctx context.Context, a *ContainerAction) error {
+	_, err := c.driver.ImageRemove(ctx, a.ActionDef().Image, types.ImageRemoveOptions{
 		Force:         true,
 		PruneChildren: false,
 	})
@@ -352,12 +355,11 @@ func (c *containerEnv) isRebuildRequired(bi *types.BuildDefinition) (bool, error
 	return doRebuild, nil
 }
 
-func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
-	act := (*a).(*ContainerAction)
-	streams := act.GetInput().IO
-	image := act.ActionDef().Image
+func (c *containerEnv) imageEnsure(ctx context.Context, a *ContainerAction) error {
+	streams := a.GetInput().IO
+	image := a.ActionDef().Image
 	// Prepend action to have the top priority in image build resolution.
-	r := ChainImageBuildResolver{append(ChainImageBuildResolver{act}, c.imgres...)}
+	r := ChainImageBuildResolver{append(ChainImageBuildResolver{a}, c.imgres...)}
 
 	buildInfo := r.ImageBuildInfo(image)
 	forceRebuild, err := c.isRebuildRequired(buildInfo)
@@ -428,14 +430,13 @@ func displayJSONMessages(in io.Reader, streams cli.Streams) error {
 	return err
 }
 
-func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *types.ContainerCreateOptions) (string, error) {
+func (c *containerEnv) containerCreate(ctx context.Context, a *ContainerAction, opts *types.ContainerCreateOptions) (string, error) {
 	if err := c.imageEnsure(ctx, a); err != nil {
 		return "", err
 	}
 
 	// Create a container
-	act := (*a).(*ContainerAction)
-	actConf := act.ActionDef()
+	actConf := a.ActionDef()
 	createOpts := types.ContainerCreateOptions{
 		ContainerName: opts.ContainerName,
 		Image:         actConf.Image,
@@ -462,8 +463,8 @@ func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *typ
 		}
 	} else {
 		createOpts.Binds = []string{
-			absPath(act.WorkDir()) + ":" + containerHostMount,
-			absPath(act.Dir()) + ":" + containerActionMount,
+			absPath(a.WorkDir()) + ":" + containerHostMount,
+			absPath(a.Dir()) + ":" + containerActionMount,
 		}
 	}
 	cid, err := c.driver.ContainerCreate(ctx, createOpts)

@@ -2,9 +2,14 @@ package action
 
 import (
 	"fmt"
+
 	"github.com/launchrctl/launchr/pkg/cli"
 
 	"github.com/launchrctl/launchr/pkg/jsonschema"
+)
+
+const (
+	schemaOrg = "https://json-schema.org/draft/2020-12/schema#"
 )
 
 // JSONSchema returns json schema of an action.
@@ -15,7 +20,7 @@ func (a *ContainerAction) JSONSchema() jsonschema.Schema {
 	// It's better to override the value, if the ID is needed by a validator.
 	// In launchr, the id is overridden on loader, in web plugin with a server url.
 	s.ID = a.Filepath()
-	s.Schema = "https://json-schema.org/draft/2020-12/schema#"
+	s.Schema = schemaOrg
 	s.Title = fmt.Sprintf("%s (%s)", def.Title, a.ID) // @todo provide better title.
 	s.Description = def.Description
 	return s
@@ -34,7 +39,7 @@ func (a *CallbackAction) JSONSchema() jsonschema.Schema {
 	// It's better to override the value, if the ID is needed by a validator.
 	// In launchr, the id is overridden on loader, in web plugin with a server url.
 	s.ID = a.ID
-	s.Schema = "https://json-schema.org/draft/2020-12/schema#"
+	s.Schema = schemaOrg
 	s.Title = fmt.Sprintf("%s (%s)", def.Title, a.ID) // @todo provide better title.
 	s.Description = def.Description
 	return s

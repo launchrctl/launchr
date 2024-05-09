@@ -31,7 +31,7 @@ func (p *Plugin) OnAppInit(app launchr.App) error {
 }
 
 // DiscoverActions implements launchr.ActionDiscoveryPlugin interface.
-func (p *Plugin) DiscoverActions(fs launchr.ManagedFS) ([]*action.Action, error) {
+func (p *Plugin) DiscoverActions(fs launchr.ManagedFS) ([]action.Action, error) {
 	if fs, ok := fs.(action.DiscoveryFS); ok {
 		return action.NewYamlDiscovery(fs).Discover()
 	}
@@ -44,7 +44,7 @@ func (p *Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
 		Use:   "discover",
 		Short: "Discovers available actions in filesystem",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var actions []*action.Action
+			var actions []action.Action
 			for _, fs := range p.app.GetRegisteredFS() {
 				res, err := p.DiscoverActions(fs)
 				if err != nil {
@@ -55,7 +55,7 @@ func (p *Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
 
 			// @todo cache discovery to read fs only once.
 			for _, a := range actions {
-				cli.Println("%s", (*a).GetID())
+				cli.Println("%s", a.GetID())
 			}
 
 			return nil

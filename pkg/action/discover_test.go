@@ -68,7 +68,7 @@ func Test_Discover_ActionWD(t *testing.T) {
 	ad := NewYamlDiscovery(NewDiscoveryFS(tfs, expectedWD))
 	actions, err := ad.Discover()
 
-	act, ok := (*actions[0]).(*ContainerAction)
+	act, ok := actions[0].(*ContainerAction)
 	if !ok {
 		panic("invalid test")
 	}
@@ -80,7 +80,7 @@ func Test_Discover_ActionWD(t *testing.T) {
 	ad = NewYamlDiscovery(NewDiscoveryFS(tfs, ""))
 	actions, err = ad.Discover()
 
-	act, ok = (*actions[0]).(*ContainerAction)
+	act, ok = actions[0].(*ContainerAction)
 	if !ok {
 		panic("invalid test")
 	}

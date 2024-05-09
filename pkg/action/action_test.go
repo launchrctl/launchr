@@ -19,9 +19,9 @@ func Test_Action(t *testing.T) {
 	assert.NotEmpty(actions)
 	//act := actions[0]
 
-	act, ok := (*actions[0]).(*ContainerAction)
+	act, ok := actions[0].(*ContainerAction)
 	if !ok {
-		panic("invalid test")
+		panic("invalid action type")
 	}
 
 	err = (*act).EnsureLoaded()

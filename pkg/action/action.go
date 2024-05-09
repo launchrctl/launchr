@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
@@ -14,6 +15,8 @@ var (
 	errTplNonExistProcessor      = "requested processor %q doesn't exist"
 )
 
+// Action is an action definition with a contextual id (name), working directory path
+// and a runtime context such as input arguments and options.
 type Action interface {
 	GetID() string
 	ActionDef() *DefAction
@@ -38,6 +41,7 @@ type baseAction struct {
 	processors map[string]ValueProcessor // processors are ValueProcessors for manipulating input.
 }
 
+// GetID returns action unique ID
 func (a *baseAction) GetID() string {
 	return a.ID
 }
@@ -49,7 +53,7 @@ func (a *baseAction) execute(ctx context.Context, act Action) error {
 	}
 	defer a.env.Close()
 
-	return a.env.Execute(ctx, &act)
+	return a.env.Execute(ctx, act)
 }
 
 // GetInput returns action input.
@@ -58,6 +62,7 @@ func (a *baseAction) GetInput() Input { return a.input }
 // SetRunEnvironment sets environment to run the action.
 func (a *baseAction) SetRunEnvironment(env RunEnvironment) { a.env = env }
 
+// GetRunEnvironment returns action run environment.
 func (a *baseAction) GetRunEnvironment() RunEnvironment { return a.env }
 
 // ActionDef returns action definition with replaced variables.

@@ -4,6 +4,7 @@ import (
 	"context"
 )
 
+// CallbackAction is an action definition with purpose to work as function.
 type CallbackAction struct {
 	baseAction
 
@@ -11,7 +12,7 @@ type CallbackAction struct {
 }
 
 // ServiceCallbackFunc ...
-type ServiceCallbackFunc func(input Input) error
+type ServiceCallbackFunc func(ctx context.Context, input Input) error
 
 // SetInput saves arguments and options for later processing in run, templates, etc.
 func (a *CallbackAction) SetInput(input Input) (err error) {
@@ -32,10 +33,10 @@ func (a *CallbackAction) SetInput(input Input) (err error) {
 
 // Execute runs action in the specified environment.
 func (a *CallbackAction) Execute(ctx context.Context) error {
-	var act Action = a
-	return a.baseAction.execute(ctx, act)
+	return a.baseAction.execute(ctx, a)
 }
 
+// EnsureLoaded loads an action file with replaced arguments and options.
 func (a *CallbackAction) EnsureLoaded() (err error) {
 	return nil
 }
@@ -55,6 +56,7 @@ func (a *CallbackAction) Clone() Action {
 	return c
 }
 
+// GetCallback returns actions' ServiceCallbackFunc.
 func (a *CallbackAction) GetCallback() ServiceCallbackFunc {
 	return a.callback
 }

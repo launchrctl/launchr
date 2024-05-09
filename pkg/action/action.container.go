@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	jsvalidate "github.com/santhosh-tekuri/jsonschema/v5"
 	"path/filepath"
+
+	jsvalidate "github.com/santhosh-tekuri/jsonschema/v5"
 
 	"github.com/launchrctl/launchr/pkg/types"
 )
 
+// ContainerAction is an action definition with purpose to work in containerEnv.
 type ContainerAction struct {
 	baseAction
 	Loader Loader // Loader is a function to load action definition. Helpful to reload with replaced variables.
@@ -80,8 +82,7 @@ func (a *ContainerAction) ValidateInput(inp Input) error {
 
 // Execute runs action in the specified environment.
 func (a *ContainerAction) Execute(ctx context.Context) error {
-	var act Action = a
-	return a.baseAction.execute(ctx, act)
+	return a.baseAction.execute(ctx, a)
 }
 
 // Reset unsets loaded action to force reload.

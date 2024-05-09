@@ -197,7 +197,7 @@ func (app *appImpl) exec() error {
 		a, ok := actions[reqCmd]
 		if ok {
 			// Use only the requested action.
-			actions = map[string]*action.Action{(*a).GetID(): a}
+			actions = map[string]action.Action{a.GetID(): a}
 		} else {
 			// Action was not requested, no need to load them.
 			skipActions = true
@@ -210,14 +210,13 @@ func (app *appImpl) exec() error {
 		}
 		for _, a := range actions {
 			a = app.actionMngr.Decorate(a)
-			refAct := (*a)
-			if err := refAct.EnsureLoaded(); err != nil {
-				fmt.Fprintf(os.Stdout, "[WARNING] Action %q was skipped because it has an incorrect definition:\n%v\n", refAct.GetID(), err)
+			if err := a.EnsureLoaded(); err != nil {
+				fmt.Fprintf(os.Stdout, "[WARNING] Action %q was skipped because it has an incorrect definition:\n%v\n", a.GetID(), err)
 				continue
 			}
 			cmd, err := action.CobraImpl(a, app.Streams())
 			if err != nil {
-				fmt.Fprintf(os.Stdout, "[WARNING] Action %q was skipped:\n%v\n", refAct.GetID(), err)
+				fmt.Fprintf(os.Stdout, "[WARNING] Action %q was skipped:\n%v\n", a.GetID(), err)
 				continue
 			}
 			cmd.GroupID = ActionsGroup.ID
