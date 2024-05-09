@@ -25,6 +25,7 @@ type Action interface {
 	Execute(ctx context.Context) error
 	SetProcessors(list map[string]ValueProcessor)
 	GetProcessors() map[string]ValueProcessor
+	JSONSchema() jsonschema.Schema
 	Clone() Action
 }
 

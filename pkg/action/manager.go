@@ -3,7 +3,6 @@ package action
 import (
 	"context"
 	"fmt"
-	"github.com/launchrctl/launchr/pkg/cli"
 	"strconv"
 	"sync"
 	"time"
@@ -32,7 +31,7 @@ type Manager interface {
 	// If functions withFn are not provided, default functions are applied.
 	Decorate(a *Action, withFn ...DecorateWithFn) *Action
 	// Add saves an action in the manager.
-	Add(Action)
+	Add(*Action)
 	// DefaultRunEnvironment provides the default action run environment.
 	DefaultRunEnvironment(a *Action) RunEnvironment
 
@@ -72,18 +71,11 @@ func (m *actionManagerMap) ServiceInfo() launchr.ServiceInfo {
 	return launchr.ServiceInfo{}
 }
 
-func (m *actionManagerMap) Add(a Action) {
+func (m *actionManagerMap) Add(a *Action) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 
-	act, ok := a.(*CallbackAction)
-	if ok {
-		//map1 := make(map[string]interface{})
-		//map2 := make(map[string]interface{})
-		cli.Println("%s", act.SomeVar)
-	}
-
-	m.actionStore[a.GetID()] = &a
+	m.actionStore[(*a).GetID()] = a
 }
 
 func (m *actionManagerMap) AllRef() map[string]*Action {
@@ -145,7 +137,7 @@ func (m *actionManagerMap) DefaultRunEnvironment(a *Action) RunEnvironment {
 	switch (*a).(type) {
 	case *CallbackAction:
 		env = NewFunctionEnvironment()
-	case *FileAction:
+	case *ContainerAction:
 		env = NewDockerEnvironment()
 	}
 

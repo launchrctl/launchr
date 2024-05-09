@@ -22,7 +22,7 @@ type Loader interface {
 
 // LoadContext stores relevant and isolated data needed for processors.
 type LoadContext struct {
-	Action Action
+	Action *Action
 }
 
 // LoadProcessor is an interface for processing input on load.
@@ -75,7 +75,7 @@ func (err errMissingVar) Error() string {
 }
 
 func (p inputProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
-	a, ok := ctx.Action.(*FileAction)
+	a, ok := (*ctx.Action).(*ContainerAction)
 	if ctx.Action == nil || !ok {
 		return b, nil
 	}
@@ -164,7 +164,7 @@ func ConvertInputToTplVars(input Input, ac *DefAction) map[string]interface{} {
 	return values
 }
 
-func addPredefinedVariables(data map[string]interface{}, a *FileAction) {
+func addPredefinedVariables(data map[string]interface{}, a *ContainerAction) {
 	cuser := getCurrentUser()
 	// Set zeros for running in environments like Windows
 	data["current_uid"] = 0

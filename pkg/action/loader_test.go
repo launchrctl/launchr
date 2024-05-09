@@ -27,10 +27,15 @@ func testLoaderAction() *Action {
 			},
 		},
 	}
-	return &Action{
-		ID:     "my_actions",
+
+	var act Action = &ContainerAction{
+		baseAction: baseAction{
+			ID: "my_actions",
+		},
 		Loader: af,
 	}
+
+	return &act
 }
 
 func Test_EnvProcessor(t *testing.T) {
@@ -46,7 +51,7 @@ func Test_InputProcessor(t *testing.T) {
 	act := testLoaderAction()
 	ctx := LoadContext{Action: act}
 	proc := inputProcessor{}
-	err := act.SetInput(Input{TypeArgs{"arg1": "arg1"}, TypeOpts{"optStr": "optVal1", "opt-str": "opt-val2"}, nil})
+	err := (*act).SetInput(Input{TypeArgs{"arg1": "arg1"}, TypeOpts{"optStr": "optVal1", "opt-str": "opt-val2"}, nil})
 	assert.NoError(t, err)
 
 	s := "{{ .arg1 }},{{ .optStr }},{{ .opt_str }}"
@@ -72,7 +77,7 @@ func Test_YamlTplCommentsProcessor(t *testing.T) {
 		escapeYamlTplCommentsProcessor{},
 		inputProcessor{},
 	)
-	err := act.SetInput(Input{TypeArgs{"arg1": "arg1"}, TypeOpts{"optStr": "optVal1"}, nil})
+	err := (*act).SetInput(Input{TypeArgs{"arg1": "arg1"}, TypeOpts{"optStr": "optVal1"}, nil})
 	assert.NoError(t, err)
 	// Check the commented strings are not considered.
 	s := `
@@ -100,7 +105,7 @@ func Test_PipeProcessor(t *testing.T) {
 	)
 
 	_ = os.Setenv("TEST_ENV1", "VAL1")
-	err := act.SetInput(Input{TypeArgs{"arg1": "arg1"}, TypeOpts{"optStr": "optVal1"}, nil})
+	err := (*act).SetInput(Input{TypeArgs{"arg1": "arg1"}, TypeOpts{"optStr": "optVal1"}, nil})
 	assert.NoError(t, err)
 	s := "$TEST_ENV1,{{ .arg1 }},{{ .optStr }}"
 	res, err := proc.Process(ctx, []byte(s))

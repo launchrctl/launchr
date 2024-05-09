@@ -17,10 +17,16 @@ func Test_Action(t *testing.T) {
 	actions, err := ad.Discover()
 	assert.NoError(err)
 	assert.NotEmpty(actions)
-	act := actions[0]
-	err = act.EnsureLoaded()
+	//act := actions[0]
+
+	act, ok := (*actions[0]).(*ContainerAction)
+	if !ok {
+		panic("invalid test")
+	}
+
+	err = (*act).EnsureLoaded()
 	assert.NoError(err)
-	actConf := act.ActionDef()
+	actConf := (*act).ActionDef()
 	// Test image name.
 	assert.Equal("my/image:v1", actConf.Image)
 	// Test dir

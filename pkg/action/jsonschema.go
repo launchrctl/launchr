@@ -2,12 +2,13 @@ package action
 
 import (
 	"fmt"
+	"github.com/launchrctl/launchr/pkg/cli"
 
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 // JSONSchema returns json schema of an action.
-func (a *FileAction) JSONSchema() jsonschema.Schema {
+func (a *ContainerAction) JSONSchema() jsonschema.Schema {
 	def := a.ActionDef()
 	s := def.JSONSchema()
 	// Set ID to a filepath. It's not exactly JSON Schema, but some canonical path.
@@ -20,11 +21,32 @@ func (a *FileAction) JSONSchema() jsonschema.Schema {
 	return s
 }
 
+// JSONSchema returns json schema of an action.
+func (a *CallbackAction) JSONSchema() jsonschema.Schema {
+	def := a.ActionDef()
+	cli.Println("args %v", def.Arguments)
+	for _, v := range def.Arguments {
+		cli.Println("arg full %v", v)
+	}
+
+	s := def.JSONSchema()
+	// Set ID to a filepath. It's not exactly JSON Schema, but some canonical path.
+	// It's better to override the value, if the ID is needed by a validator.
+	// In launchr, the id is overridden on loader, in web plugin with a server url.
+	s.ID = a.ID
+	s.Schema = "https://json-schema.org/draft/2020-12/schema#"
+	s.Title = fmt.Sprintf("%s (%s)", def.Title, a.ID) // @todo provide better title.
+	s.Description = def.Description
+	return s
+}
+
 // JSONSchema returns jsonschema for the arguments and options of the action.
 func (a *DefAction) JSONSchema() jsonschema.Schema {
 	// @todo maybe it should return only properties and not schema.
 	args, argsReq := a.Arguments.JSONSchema()
 	opts, optsReq := a.Options.JSONSchema()
+
+	cli.Println("args 2 %v", args)
 
 	return jsonschema.Schema{
 		Type:     jsonschema.Object,
@@ -52,6 +74,7 @@ func (l *ArgumentsList) JSONSchema() (map[string]interface{}, []string) {
 	args := make(map[string]interface{}, len(s))
 	req := make([]string, 0, len(s))
 	for i := 0; i < len(s); i++ {
+		cli.Println("argumentschema %v", s[i])
 		args[s[i].Name] = s[i].JSONSchema()
 		req = append(req, s[i].Name)
 	}

@@ -46,7 +46,7 @@ func TarGzEmbedActions(f io.Writer, actions []*action.Action) error {
 	now := time.Now()
 
 	for _, a := range actions {
-		act := (*a).(*action.FileAction)
+		act := (*a).(*action.ContainerAction)
 		c, err := act.DefinitionEncoded()
 		if err != nil {
 			return err

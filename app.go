@@ -156,19 +156,10 @@ func (app *appImpl) init() error {
 				return err
 			}
 			for _, actConf := range actions {
-				app.actionMngr.Add(*actConf)
+				app.actionMngr.Add(actConf)
 			}
 		}
 	}
-
-	// test NewCallbackAction
-	defAction2 := action.DefAction{
-		Title:       "title",
-		Description: "description",
-	}
-	definition := action.Definition{Version: "0.1", WD: ".", Action: &defAction2}
-	actionCallback := action.NewCallbackAction("test", &definition)
-	app.actionMngr.Add(actionCallback)
 
 	return nil
 }

@@ -67,15 +67,27 @@ func Test_Discover_ActionWD(t *testing.T) {
 	expectedWD := "expectedWD"
 	ad := NewYamlDiscovery(NewDiscoveryFS(tfs, expectedWD))
 	actions, err := ad.Discover()
+
+	act, ok := (*actions[0]).(*ContainerAction)
+	if !ok {
+		panic("invalid test")
+	}
+
 	assert.NoError(t, err)
-	assert.Equal(t, expFPath, actions[0].fpath)
-	assert.Equal(t, absPath(expectedWD), actions[0].wd)
+	assert.Equal(t, expFPath, act.fpath)
+	assert.Equal(t, absPath(expectedWD), act.wd)
 
 	ad = NewYamlDiscovery(NewDiscoveryFS(tfs, ""))
 	actions, err = ad.Discover()
+
+	act, ok = (*actions[0]).(*ContainerAction)
+	if !ok {
+		panic("invalid test")
+	}
+
 	assert.NoError(t, err)
-	assert.Equal(t, expFPath, actions[0].fpath)
-	assert.Equal(t, absPath(""), actions[0].wd)
+	assert.Equal(t, expFPath, act.fpath)
+	assert.Equal(t, absPath(""), act.wd)
 }
 
 type dirEntry string

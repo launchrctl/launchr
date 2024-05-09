@@ -136,9 +136,9 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		return err
 	}
 
-	act, ok := (*a).(*FileAction)
+	act, ok := (*a).(*ContainerAction)
 	if !ok {
-		panic("test")
+		panic("not supported action type submitted to env")
 	}
 
 	streams := act.GetInput().IO
@@ -353,7 +353,7 @@ func (c *containerEnv) isRebuildRequired(bi *types.BuildDefinition) (bool, error
 }
 
 func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
-	act := (*a).(*FileAction)
+	act := (*a).(*ContainerAction)
 	streams := act.GetInput().IO
 	image := act.ActionDef().Image
 	// Prepend action to have the top priority in image build resolution.
@@ -434,7 +434,7 @@ func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *typ
 	}
 
 	// Create a container
-	act := (*a).(*FileAction)
+	act := (*a).(*ContainerAction)
 	actConf := act.ActionDef()
 	createOpts := types.ContainerCreateOptions{
 		ContainerName: opts.ContainerName,

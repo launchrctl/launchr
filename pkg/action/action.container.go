@@ -10,7 +10,7 @@ import (
 	"github.com/launchrctl/launchr/pkg/types"
 )
 
-type FileAction struct {
+type ContainerAction struct {
 	baseAction
 	Loader Loader // Loader is a function to load action definition. Helpful to reload with replaced variables.
 
@@ -22,7 +22,7 @@ type FileAction struct {
 }
 
 // SetInput saves arguments and options for later processing in run, templates, etc.
-func (a *FileAction) SetInput(input Input) (err error) {
+func (a *ContainerAction) SetInput(input Input) (err error) {
 	if err = a.EnsureLoaded(); err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func (a *FileAction) SetInput(input Input) (err error) {
 // ValidateInput validates arguments and options according to
 // a specified json schema in action definition.
 // @todo move to jsonschema
-func (a *FileAction) ValidateInput(inp Input) error {
+func (a *ContainerAction) ValidateInput(inp Input) error {
 	jsch := a.JSONSchema()
 	// @todo cache jsonschema and resources.
 	b, err := json.Marshal(jsch)
@@ -79,16 +79,16 @@ func (a *FileAction) ValidateInput(inp Input) error {
 }
 
 // Execute runs action in the specified environment.
-func (a *FileAction) Execute(ctx context.Context) error {
+func (a *ContainerAction) Execute(ctx context.Context) error {
 	var act Action = a
 	return a.baseAction.execute(ctx, act)
 }
 
 // Reset unsets loaded action to force reload.
-func (a *FileAction) Reset() { a.def = nil }
+func (a *ContainerAction) Reset() { a.def = nil }
 
 // WorkDir returns action working directory.
-func (a *FileAction) WorkDir() string {
+func (a *ContainerAction) WorkDir() string {
 	if a.def != nil && a.def.WD != "" {
 		wd, err := filepath.Abs(filepath.Clean(a.def.WD))
 		if err == nil {
@@ -99,34 +99,35 @@ func (a *FileAction) WorkDir() string {
 }
 
 // Filepath returns action file path.
-func (a *FileAction) Filepath() string { return a.fpath }
+func (a *ContainerAction) Filepath() string { return a.fpath }
 
 // Dir returns an action file directory.
-func (a *FileAction) Dir() string { return filepath.Dir(a.Filepath()) }
+func (a *ContainerAction) Dir() string { return filepath.Dir(a.Filepath()) }
 
 // DefinitionEncoded returns encoded action file content.
-func (a *FileAction) DefinitionEncoded() ([]byte, error) { return a.Loader.Content() }
+func (a *ContainerAction) DefinitionEncoded() ([]byte, error) { return a.Loader.Content() }
 
 // EnsureLoaded loads an action file with replaced arguments and options.
-func (a *FileAction) EnsureLoaded() (err error) {
+func (a *ContainerAction) EnsureLoaded() (err error) {
 	if a.def != nil {
 		return err
 	}
-	a.def, err = a.Loader.Load(LoadContext{Action: a})
+	var act Action = a
+	a.def, err = a.Loader.Load(LoadContext{Action: &act})
 	return err
 }
 
 // ImageBuildInfo implements ImageBuildResolver.
-func (a *FileAction) ImageBuildInfo(image string) *types.BuildDefinition {
+func (a *ContainerAction) ImageBuildInfo(image string) *types.BuildDefinition {
 	return a.ActionDef().Build.ImageBuildInfo(image, a.Dir())
 }
 
 // Clone returns a copy of an action.
-func (a *FileAction) Clone() Action {
+func (a *ContainerAction) Clone() Action {
 	if a == nil {
 		return nil
 	}
-	c := &FileAction{
+	c := &ContainerAction{
 		baseAction: baseAction{
 			ID: a.ID,
 		},
@@ -138,9 +139,9 @@ func (a *FileAction) Clone() Action {
 	return c
 }
 
-// NewFileAction creates a new action.
-func NewFileAction(id, wd, fsdir, fpath string) *FileAction {
-	return &FileAction{
+// NewContainerAction creates a new action.
+func NewContainerAction(id, wd, fsdir, fpath string) *ContainerAction {
+	return &ContainerAction{
 		baseAction: baseAction{
 			ID: id,
 		},

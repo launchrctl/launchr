@@ -2,22 +2,31 @@ package action
 
 import (
 	"context"
-	"github.com/launchrctl/launchr/pkg/cli"
 )
 
 type CallbackAction struct {
 	baseAction
 
-	callback FnAction
-	SomeVar  string
+	callback ServiceCallbackFunc
 }
 
-// FnAction ...
-type FnAction func(input map[string]interface{}, services map[string]interface{}) error
+// ServiceCallbackFunc ...
+type ServiceCallbackFunc func(input Input) error
 
 // SetInput saves arguments and options for later processing in run, templates, etc.
-func (a *CallbackAction) SetInput(_ Input) (err error) {
-	//panic("todo")
+func (a *CallbackAction) SetInput(input Input) (err error) {
+	err = a.processArgs(input.Args)
+	if err != nil {
+		return err
+	}
+
+	err = a.processOptions(input.Opts)
+	if err != nil {
+		return err
+	}
+
+	a.input = input
+
 	return nil
 }
 
@@ -42,29 +51,21 @@ func (a *CallbackAction) Clone() Action {
 			def: a.def,
 		},
 		callback: a.GetCallback(),
-		SomeVar:  a.SomeVar,
 	}
 	return c
 }
 
-func (a *CallbackAction) GetCallback() FnAction {
+func (a *CallbackAction) GetCallback() ServiceCallbackFunc {
 	return a.callback
 }
 
 // NewCallbackAction creates a new action.
-func NewCallbackAction(id string, definition *Definition) *CallbackAction {
-	var exampleFunc FnAction = func(input map[string]interface{}, services map[string]interface{}) error {
-		cli.Println("Executing example function...")
-
-		return nil // return nil error for successful execution
-	}
-
+func NewCallbackAction(id string, definition *Definition, callback ServiceCallbackFunc) *CallbackAction {
 	return &CallbackAction{
 		baseAction: baseAction{
 			ID:  id,
 			def: definition,
 		},
-		callback: exampleFunc,
-		SomeVar:  "abc",
+		callback: callback,
 	}
 }

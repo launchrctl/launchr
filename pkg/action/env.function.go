@@ -26,20 +26,17 @@ func (c *FunctionEnv) Execute(ctx context.Context, a *Action) (err error) {
 
 	act, ok := (*a).(*CallbackAction)
 	if !ok {
-		panic("test")
+		panic("not supported action type submitted to env")
 	}
 
 	cli.Println("%v", act)
-	cli.Println("%s", act.SomeVar)
 	cli.Println("%s", act.GetID())
-	cli.Println("%s", (*a).ActionDef().Title)
+	cli.Println("%s", act.ActionDef().Title)
 
 	cli.Println("works")
-	map1 := make(map[string]interface{})
-	map2 := make(map[string]interface{})
 
 	call := act.GetCallback()
-	err = call(map1, map2)
+	err = call(act.GetInput())
 
 	return err
 }
