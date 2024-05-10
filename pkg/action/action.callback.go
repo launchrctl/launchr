@@ -2,7 +2,11 @@ package action
 
 import (
 	"context"
+	"fmt"
 )
+
+// CallbackActionType is an action type name for CallbackAction.
+const CallbackActionType = "callback"
 
 // CallbackAction is an action definition with purpose to work as function.
 type CallbackAction struct {
@@ -38,6 +42,14 @@ func (a *CallbackAction) Execute(ctx context.Context) error {
 
 // EnsureLoaded loads an action file with replaced arguments and options.
 func (a *CallbackAction) EnsureLoaded() (err error) {
+	if a.def == nil {
+		return fmt.Errorf("invalid action definition provided for %s", a.GetID())
+	}
+
+	if a.def.Action.Target != CallbackActionType {
+		return fmt.Errorf("invalid action definition for %s, wrong `target`, expected %s", a.GetID(), CallbackActionType)
+	}
+
 	return nil
 }
 
