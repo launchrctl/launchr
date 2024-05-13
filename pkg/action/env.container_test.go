@@ -707,7 +707,7 @@ func Test_ContainerExec(t *testing.T) {
 			resCh, errCh := make(chan types.ContainerWaitResponse, 1), make(chan error, 1)
 			assert, ctrl, d, r := prepareContainerTestSuite(t)
 			a := act.Clone()
-			err := a.SetInput(Input{nil, nil, cli.NoopStreams()})
+			err := a.SetInput(Input{nil, nil, cli.NoopStreams(), nil})
 			assert.NoError(err)
 			defer ctrl.Finish()
 			defer r.Close()

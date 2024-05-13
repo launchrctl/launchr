@@ -23,28 +23,37 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 	options := make(TypeOpts)
 	runOpts := make(TypeOpts)
 	cmd := &cobra.Command{
-		Use:  use,
-		Args: cobra.ExactArgs(len(argsDef)),
+		Use: use,
+		// Using custom args validation in ValidateInput.
 		// @todo: maybe we need a long template for arguments description
 		Short: getDesc(actConf.Title, actConf.Description),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true // Don't show usage help on a runtime error.
 			// Pass to the run environment its flags.
 			if env, ok := a.env.(RunEnvironmentFlags); ok {
+				runOpts = filterFlags(cmd, runOpts)
 				err := env.UseFlags(derefOpts(runOpts))
 				if err != nil {
 					return err
 				}
 			}
+
 			// Set action input.
-			err := a.SetInput(Input{
-				Args: argsToMap(args, argsDef),
-				Opts: derefOpts(options),
-				IO:   streams,
-			})
-			if err != nil {
+			input := Input{
+				Args:    argsToMap(args, argsDef),
+				Opts:    derefOpts(options),
+				IO:      streams,
+				ArgsRaw: args,
+			}
+			if runEnv, ok := a.env.(RunEnvironmentFlags); ok {
+				if err := runEnv.ValidateInput(a, input.Args); err != nil {
+					return err
+				}
+			}
+			if err := a.SetInput(input); err != nil {
 				return err
 			}
+
 			// @todo can we use action manager here and Manager.Run()
 			return a.Execute(cmd.Context())
 		},
@@ -64,6 +73,17 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 	}
 
 	return cmd, nil
+}
+
+func filterFlags(cmd *cobra.Command, opts TypeOpts) TypeOpts {
+	filtered := make(TypeOpts)
+	for name, flag := range opts {
+		// Filter options not set.
+		if opts[name] != nil && cmd.Flags().Changed(name) {
+			filtered[name] = flag
+		}
+	}
+	return filtered
 }
 
 func setCobraOptions(cmd *cobra.Command, defs OptionsList, opts TypeOpts) error {
