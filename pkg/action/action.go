@@ -41,9 +41,10 @@ type Action struct {
 
 // Input is a container for action input arguments and options.
 type Input struct {
-	Args TypeArgs
-	Opts TypeOpts
-	IO   cli.Streams // @todo should it be in Input?
+	Args    TypeArgs
+	Opts    TypeOpts
+	IO      cli.Streams // @todo should it be in Input?
+	ArgsRaw []string
 }
 
 type (
@@ -145,7 +146,7 @@ func (a *Action) SetInput(input Input) (err error) {
 		return err
 	}
 	// @todo disabled for now until fully tested.
-	//if err = a.ValidateInput(input); err != nil {
+	//if err = a.validateJSONSchema(input); err != nil {
 	//	return err
 	//}
 
@@ -165,6 +166,7 @@ func (a *Action) SetInput(input Input) (err error) {
 	return a.EnsureLoaded()
 }
 
+// validateJSONSchema validates arguments and options according to
 func (a *Action) processOptions(opts TypeOpts) error {
 	for _, optDef := range a.ActionDef().Options {
 		if _, ok := opts[optDef.Name]; !ok {
@@ -233,10 +235,10 @@ func (a *Action) processValue(value interface{}, valueType jsonschema.Type, toAp
 	return newValue, nil
 }
 
-// ValidateInput validates arguments and options according to
+// validateJSONSchema validates arguments and options according to
 // a specified json schema in action definition.
 // @todo move to jsonschema
-func (a *Action) ValidateInput(inp Input) error {
+func (a *Action) validateJSONSchema(inp Input) error {
 	jsch := a.JSONSchema()
 	// @todo cache jsonschema and resources.
 	b, err := json.Marshal(jsch)
@@ -261,6 +263,17 @@ func (a *Action) ValidateInput(inp Input) error {
 		return err
 	}
 	// @todo validate must have info about which fields failed.
+	return nil
+}
+
+// ValidateInput validates input arguments in action definition.
+func (a *Action) ValidateInput(args TypeArgs) error {
+	argsInitNum := len(a.ActionDef().Arguments)
+	argsInputNum := len(args)
+	if argsInitNum != argsInputNum {
+		return fmt.Errorf("expected (%d) arg(s), provided (%d) arg(s)", argsInitNum, argsInputNum)
+	}
+
 	return nil
 }
 

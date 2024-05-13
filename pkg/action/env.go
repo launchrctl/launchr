@@ -40,6 +40,8 @@ type RunEnvironmentFlags interface {
 	FlagsDefinition() OptionsList
 	// UseFlags sets environment configuration.
 	UseFlags(flags TypeOpts) error
+	// ValidateInput validates input arguments in action definition.
+	ValidateInput(a *Action, args TypeArgs) error
 }
 
 // ContainerRunEnvironment is an interface for container run environments.
