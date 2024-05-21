@@ -156,6 +156,9 @@ func (app *appImpl) init() error {
 				return err
 			}
 			for _, actConf := range actions {
+				if err = actConf.EnsureLoaded(); err != nil {
+					return err
+				}
 				app.actionMngr.Add(actConf)
 			}
 		}
@@ -194,6 +197,11 @@ func (app *appImpl) exec() error {
 	actions := app.actionMngr.AllRef()
 	// Check the requested command to see what actions we must actually load.
 	if reqCmd != "" {
+		aliases := app.actionMngr.AllAliasRef()
+		if alias, ok := aliases[reqCmd]; ok {
+			reqCmd = alias
+		}
+
 		a, ok := actions[reqCmd]
 		if ok {
 			// Use only the requested action.

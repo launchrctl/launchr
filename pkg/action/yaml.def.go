@@ -147,6 +147,7 @@ type DefAction struct {
 	Target      string                 `yaml:"target"`
 	Title       string                 `yaml:"title"`
 	Description string                 `yaml:"description"`
+	Aliases     []string               `yaml:"aliases"`
 	Arguments   ArgumentsList          `yaml:"arguments"`
 	Options     OptionsList            `yaml:"options"`
 	Command     StrSliceOrStr          `yaml:"command"`

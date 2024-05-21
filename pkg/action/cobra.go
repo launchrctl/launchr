@@ -26,7 +26,8 @@ func CobraImpl(a Action, streams cli.Streams) (*cobra.Command, error) {
 		Use:  use,
 		Args: cobra.ExactArgs(len(argsDef)),
 		// @todo: maybe we need a long template for arguments description
-		Short: getDesc(actConf.Title, actConf.Description),
+		Short:   getDesc(actConf.Title, actConf.Description),
+		Aliases: actConf.Aliases,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true // Don't show usage help on a runtime error.
 			// Pass to the run environment its flags.
