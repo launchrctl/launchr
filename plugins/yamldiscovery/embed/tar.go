@@ -14,7 +14,7 @@ import (
 	"github.com/launchrctl/launchr/pkg/action"
 )
 
-func createActionTar(cfs fs.FS, buildPath string) (string, []*action.Action, error) {
+func createActionTar(cfs fs.FS, buildPath string) (string, []action.Action, error) {
 	name := "actions.tar.gz"
 	target := filepath.Join(buildPath, name)
 	// Discover actions.
@@ -38,7 +38,7 @@ func createActionTar(cfs fs.FS, buildPath string) (string, []*action.Action, err
 }
 
 // TarGzEmbedActions tars and gzip action files to a file f.
-func TarGzEmbedActions(f io.Writer, actions []*action.Action) error {
+func TarGzEmbedActions(f io.Writer, actions []action.Action) error {
 	gzw := gzip.NewWriter(f)
 	defer gzw.Close()
 	tw := tar.NewWriter(gzw)
@@ -46,13 +46,17 @@ func TarGzEmbedActions(f io.Writer, actions []*action.Action) error {
 	now := time.Now()
 
 	for _, a := range actions {
-		c, err := a.DefinitionEncoded()
+		act, ok := a.(*action.ContainerAction)
+		if !ok {
+			continue
+		}
+		c, err := act.DefinitionEncoded()
 		if err != nil {
 			return err
 		}
 
 		h := &tar.Header{
-			Name:    a.Filepath(),
+			Name:    act.Filepath(),
 			Mode:    0600,
 			ModTime: now,
 			Size:    int64(len(c)),

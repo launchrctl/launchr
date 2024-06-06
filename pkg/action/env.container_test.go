@@ -56,7 +56,7 @@ func prepareContainerTestSuite(t *testing.T) (*assert.Assertions, *gomock.Contro
 	return assert, ctrl, d, r
 }
 
-func testContainerAction(aconf *DefAction) *Action {
+func testContainerAction(aconf *DefAction) *ContainerAction {
 	if aconf == nil {
 		aconf = &DefAction{
 			Image: "myimage",
@@ -70,8 +70,11 @@ func testContainerAction(aconf *DefAction) *Action {
 			},
 		}
 	}
-	return &Action{
-		ID:     "test",
+
+	return &ContainerAction{
+		baseAction: baseAction{
+			ID: "test",
+		},
 		Loader: &Definition{Action: aconf},
 		fpath:  "my/action/test/action.yaml",
 		wd:     absPath("test"),
@@ -99,6 +102,7 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 			Context: ".",
 		},
 	})
+
 	err := actLoc.EnsureLoaded()
 	assert.NoError(t, err)
 	type testCase struct {
@@ -209,6 +213,7 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 			Context: ".",
 		},
 	})
+
 	err := actLoc.EnsureLoaded()
 	assert.NoError(t, err)
 	type testCase struct {
@@ -535,7 +540,7 @@ func Test_ContainerExec(t *testing.T) {
 	}
 
 	opts := types.ContainerCreateOptions{
-		ContainerName: nprv.Get(act.ID),
+		ContainerName: nprv.Get(act.GetID()),
 		Cmd:           actConf.Command,
 		Image:         actConf.Image,
 		NetworkMode:   types.NetworkModeHost,
