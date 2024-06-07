@@ -23,6 +23,13 @@ var ActionsGroup = &cobra.Group{
 	Title: "Actions:",
 }
 
+type launchrCfg struct {
+	ActionsNaming []struct {
+		Search  string `yaml:"search"`
+		Replace string `yaml:"replace"`
+	} `yaml:"actions_naming"`
+}
+
 type appImpl struct {
 	rootCmd     *cobra.Command
 	streams     cli.Streams
@@ -157,6 +164,12 @@ func (app *appImpl) init() error {
 
 	// Discover actions.
 	if !app.skipActions {
+		var launchrConfig *launchrCfg
+		err = app.config.Get("launcrctl", &launchrConfig)
+		if err != nil {
+			return err
+		}
+
 		for _, p := range getPluginByType[ActionDiscoveryPlugin](app) {
 			for _, fs := range app.GetRegisteredFS() {
 				actions, err := p.DiscoverActions(fs)
@@ -164,6 +177,14 @@ func (app *appImpl) init() error {
 					return err
 				}
 				for _, actConf := range actions {
+					if launchrConfig != nil && len(launchrConfig.ActionsNaming) > 0 {
+						actID := actConf.ID
+						for _, an := range launchrConfig.ActionsNaming {
+							actID = strings.ReplaceAll(actID, an.Search, an.Replace)
+						}
+						actConf.ID = actID
+					}
+
 					app.actionMngr.Add(actConf)
 				}
 			}
