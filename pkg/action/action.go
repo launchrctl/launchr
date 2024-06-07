@@ -271,7 +271,7 @@ func (a *Action) ValidateInput(args TypeArgs) error {
 	argsInitNum := len(a.ActionDef().Arguments)
 	argsInputNum := len(args)
 	if argsInitNum != argsInputNum {
-		return fmt.Errorf("expected (%d) arg(s), provided (%d) arg(s)", argsInitNum, argsInputNum)
+		return fmt.Errorf("accepts %d arg(s), received %d", argsInitNum, argsInputNum)
 	}
 
 	return nil
