@@ -8,8 +8,10 @@ require (
 	github.com/moby/moby v25.0.3+incompatible
 	github.com/moby/sys/signal v0.7.0
 	github.com/moby/term v0.5.0
+	github.com/otiai10/copy v1.14.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/spf13/cobra v1.8.0
+	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.4
 	go.uber.org/mock v0.4.0
 	golang.org/x/mod v0.15.0
@@ -43,11 +45,11 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.48.0 // indirect
 	go.opentelemetry.io/otel v1.23.1 // indirect
 	go.opentelemetry.io/otel/metric v1.23.1 // indirect
 	go.opentelemetry.io/otel/trace v1.23.1 // indirect
+	golang.org/x/sync v0.6.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	golang.org/x/tools v0.18.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect

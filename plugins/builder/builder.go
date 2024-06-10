@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"go/build"
 	"os"
 	"path"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"text/template"
 
+	cp "github.com/otiai10/copy"
 	"golang.org/x/mod/module"
 
 	"github.com/launchrctl/launchr/internal/launchr"
@@ -289,18 +291,25 @@ func (b *Builder) preBuild(ctx context.Context) error {
 			return err
 		}
 
-		if _, err = os.Stat(pluginAssetsPath); err == nil {
-			err = os.Remove(pluginAssetsPath)
-			if err != nil {
-				return err
-			}
-		}
-
 		// move assets from tmp dir to assets folder.
-		err = os.Rename(tmpPath, pluginAssetsPath)
+		log.Debug("moving assets from tmp to build folder")
+		err = cp.Copy(tmpPath, pluginAssetsPath, cp.Options{OnDirExists: func(src, dest string) cp.DirExistsAction {
+			return cp.Merge
+		}})
 		if err != nil {
 			return err
 		}
+
+		log.Debug("removing tmp files")
+		err = os.RemoveAll(tmpPath)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = os.RemoveAll(filepath.Join(os.TempDir(), buildName))
+	if err != nil {
+		return err
 	}
 
 	// create empty .info file for embed.
@@ -330,7 +339,12 @@ func (b *Builder) runGen(ctx context.Context) error {
 func getModulePath(name, version string) (string, error) {
 	cache, ok := os.LookupEnv("GOMODCACHE")
 	if !ok {
-		cache = path.Join(os.Getenv("GOPATH"), "pkg", "mod")
+		gopath := os.Getenv("GOPATH")
+		if gopath == "" {
+			gopath = build.Default.GOPATH
+		}
+
+		cache = path.Join(gopath, "pkg", "mod")
 	}
 
 	escapedPath, err := module.EscapePath(name)

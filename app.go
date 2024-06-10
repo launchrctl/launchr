@@ -46,8 +46,8 @@ type appImpl struct {
 	pluginMngr    PluginManager
 	config        Config
 	mFS           []ManagedFS
-	skipActions bool   // skipActions to skip loading if not requested.
-	reqCmd      string // reqCmd to search for the requested cobra command.
+	skipActions   bool   // skipActions to skip loading if not requested.
+	reqCmd        string // reqCmd to search for the requested cobra command.
 	assetsStorage embed.FS
 }
 
