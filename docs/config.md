@@ -3,6 +3,20 @@
 Launchr provides a way to make a global configuration for all actions.
 The global configuration is read from directory `.launchr`. It should have `config.yaml` file.
 
+
+## Beautify action names via config file
+
+It's possible to replace parts of the original action ID to receive prettier naming.
+
+```yaml
+launcrctl:
+  actions_naming:
+    - search: ".roles."
+      replace: "."
+    - search: "_"
+      replace: "-"
+```
+
 ## Build images
 
 Common images to be used by actions can be provided with the following schema:
