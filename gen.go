@@ -98,7 +98,7 @@ func (app *appImpl) Generate() int {
 
 // Gen generates application specific build files and returns os exit code.
 func Gen() int {
-	return newApp().Generate()
+	return newApp(&AppOptions{}).Generate()
 }
 
 type initTplVars struct {

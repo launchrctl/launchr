@@ -5,10 +5,13 @@ import (
 	"embed"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"text/template"
+
+	"golang.org/x/mod/module"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/cli"
@@ -152,6 +155,13 @@ func (b *Builder) Build(ctx context.Context) error {
 		return err
 	}
 
+	// prebuild
+	cli.Println("Executing prebuild scripts")
+	err = b.preBuild(ctx)
+	if err != nil {
+		return err
+	}
+
 	// Build the main go package.
 	cli.Println("Building %s", b.PkgName)
 	err = b.goBuild(ctx)
@@ -210,6 +220,101 @@ func (b *Builder) goBuild(ctx context.Context) error {
 	return nil
 }
 
+func (b *Builder) preBuild(ctx context.Context) error {
+	output, err := b.env.execGoList(ctx)
+	if err != nil {
+		return err
+	}
+
+	pluginVersionMap := make(map[string]string)
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		pv := strings.Split(line, " ")
+		for _, p := range b.BuildOptions.Plugins {
+			if strings.Contains(pv[0], p.Path) {
+				pluginVersionMap[p.Path] = pv[1]
+				continue
+			}
+		}
+	}
+
+	assetsPath := filepath.Join(b.wd, b.env.wd, "assets")
+	buildName := filepath.Base(b.env.wd)
+	err = os.MkdirAll(assetsPath, 0750)
+	if err != nil {
+		return err
+	}
+
+	for pluginName, v := range pluginVersionMap {
+		packagePath, _ := getModulePath(pluginName, v)
+		if _, err = os.Stat(packagePath); os.IsNotExist(err) {
+			log.Debug("you don't have this module/version installed (%s)", packagePath)
+			continue
+		}
+
+		// check if prebuild script exists.
+		prebuildScriptPath := filepath.Join(packagePath, "scripts", "prebuild.go")
+		if _, err = os.Stat(prebuildScriptPath); os.IsNotExist(err) {
+			log.Debug("prebuild script does not exist for %s, skipping", pluginName)
+			continue
+		}
+
+		tmpPath := filepath.Join(os.TempDir(), buildName, filepath.Base(pluginName))
+
+		// clean tmp folder if it existed before.
+		err = os.RemoveAll(tmpPath)
+		if err != nil {
+			return err
+		}
+
+		// prepare tmp folder for assets and force prebuild script to push data there.
+		err = os.MkdirAll(tmpPath, 0750)
+		if err != nil {
+			return err
+		}
+
+		log.Debug("executing prebuild script for plugin %s", pluginName)
+		cmd := b.env.NewCommand(ctx, b.env.Go(), "run", "scripts/prebuild.go", v, tmpPath)
+		cmd.Dir = packagePath
+
+		err = b.env.RunCmd(ctx, cmd)
+		if err != nil {
+			return err
+		}
+
+		// prepare plugin assets folder.
+		pluginAssetsPath := filepath.Join(assetsPath, pluginName)
+		err = os.MkdirAll(pluginAssetsPath, 0750)
+		if err != nil {
+			return err
+		}
+
+		if _, err = os.Stat(pluginAssetsPath); err == nil {
+			err = os.Remove(pluginAssetsPath)
+			if err != nil {
+				return err
+			}
+		}
+
+		// move assets from tmp dir to assets folder.
+		err = os.Rename(tmpPath, pluginAssetsPath)
+		if err != nil {
+			return err
+		}
+	}
+
+	// create empty .info file for embed.
+	// prevent embed error in case of 0 assets in folder.
+	file, err := os.Create(filepath.Clean(filepath.Join(assetsPath, ".info")))
+	if err != nil {
+		fmt.Println(err.Error())
+		os.Exit(2)
+	}
+	defer file.Close()
+
+	return nil
+}
+
 func (b *Builder) runGen(ctx context.Context) error {
 	genArgs := []string{"generate", "./..."}
 	cmd := b.env.NewCommand(ctx, b.env.Go(), genArgs...)
@@ -220,4 +325,23 @@ func (b *Builder) runGen(ctx context.Context) error {
 	env.Unset("GOARCH")
 	cmd.Env = env
 	return b.env.RunCmd(ctx, cmd)
+}
+
+func getModulePath(name, version string) (string, error) {
+	cache, ok := os.LookupEnv("GOMODCACHE")
+	if !ok {
+		cache = path.Join(os.Getenv("GOPATH"), "pkg", "mod")
+	}
+
+	escapedPath, err := module.EscapePath(name)
+	if err != nil {
+		return "", err
+	}
+
+	escapedVersion, err := module.EscapeVersion(version)
+	if err != nil {
+		return "", err
+	}
+
+	return path.Join(cache, escapedPath+"@"+escapedVersion), nil
 }

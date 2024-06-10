@@ -4,6 +4,7 @@ package builder
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -171,6 +172,25 @@ func (env *buildEnvironment) execGoMod(ctx context.Context, args ...string) erro
 func (env *buildEnvironment) execGoGet(ctx context.Context, args ...string) error {
 	cmd := env.NewCommand(ctx, env.Go(), append([]string{"get", "-d"}, args...)...)
 	return env.RunCmd(ctx, cmd)
+}
+
+func (env *buildEnvironment) execGoList(ctx context.Context, args ...string) (string, error) {
+	cmd := env.NewCommand(ctx, env.Go(), append([]string{"list", "-m", "all"}, args...)...)
+	cmd.Stdout = nil
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", err
+	}
+
+	var outputText string
+	go func() {
+		outputBytes, _ := io.ReadAll(stdout)
+		outputText = string(outputBytes)
+	}()
+
+	err = env.RunCmd(ctx, cmd)
+	return outputText, err
 }
 
 func (env *buildEnvironment) RunCmd(ctx context.Context, cmd *exec.Cmd) error {
