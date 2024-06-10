@@ -28,7 +28,6 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 		// @todo: maybe we need a long template for arguments description
 		Short: getDesc(actConf.Title, actConf.Description),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cmd.SilenceUsage = true // Don't show usage help on a runtime error.
 			// Pass to the run environment its flags.
 			if env, ok := a.env.(RunEnvironmentFlags); ok {
 				runOpts = filterFlags(cmd, runOpts)
@@ -50,6 +49,9 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 					return err
 				}
 			}
+
+			cmd.SilenceUsage = true // Don't show usage help on a runtime error.
+
 			if err := a.SetInput(input); err != nil {
 				return err
 			}
