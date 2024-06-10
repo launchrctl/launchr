@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/spf13/pflag"
+
 	"github.com/spf13/cobra"
 
 	"github.com/launchrctl/launchr/pkg/cli"
@@ -67,14 +69,89 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 		return nil, err
 	}
 	// Collect run environment flags.
+	globalFlags := []string{"help"}
+
 	if env, ok := a.env.(RunEnvironmentFlags); ok {
 		err = setCobraOptions(cmd, env.FlagsDefinition(), runOpts)
 		if err != nil {
 			return nil, err
 		}
+
+		for _, opt := range env.FlagsDefinition() {
+			globalFlags = append(globalFlags, opt.Name)
+		}
 	}
 
+	// Update usage template according new global flags
+	updateUsageTemplate(cmd, globalFlags)
+
 	return cmd, nil
+}
+
+func updateUsageTemplate(cmd *cobra.Command, globalOpts []string) {
+	cmd.InitDefaultHelpFlag()
+	originalFlags := cmd.LocalFlags()
+	if !originalFlags.HasAvailableFlags() {
+		return
+	}
+
+	localFlags := pflag.NewFlagSet("local", pflag.ContinueOnError)
+	globalFlags := pflag.NewFlagSet("global", pflag.ContinueOnError)
+
+	originalFlags.VisitAll(func(flag *pflag.Flag) {
+		toAdd := false
+		for _, name := range globalOpts {
+			if flag.Name == name {
+				toAdd = true
+				break
+			}
+		}
+
+		if toAdd {
+			globalFlags.AddFlag(flag)
+		} else {
+			localFlags.AddFlag(flag)
+		}
+	})
+
+	usagesLocal := strings.TrimRight(localFlags.FlagUsages(), " ")
+	usagesGlobal := strings.TrimRight(globalFlags.FlagUsages(), " ")
+
+	cmd.SetUsageTemplate(fmt.Sprintf(getUsageTemplate(), usagesLocal, usagesGlobal))
+}
+
+func getUsageTemplate() string {
+	return `Usage:{{if .Runnable}}
+  {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
+  {{.CommandPath}} [command]{{end}}{{if gt (len .Aliases) 0}}
+
+Aliases:
+  {{.NameAndAliases}}{{end}}{{if .HasExample}}
+
+Examples:
+{{.Example}}{{end}}{{if .HasAvailableSubCommands}}{{$cmds := .Commands}}{{if eq (len .Groups) 0}}
+
+Available Commands:{{range $cmds}}{{if (or .IsAvailableCommand (eq .Name "help"))}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{else}}{{range $group := .Groups}}
+
+{{.Title}}{{range $cmds}}{{if (and (eq .GroupID $group.ID) (or .IsAvailableCommand (eq .Name "help")))}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if not .AllChildCommandsHaveGroup}}
+
+Additional Commands:{{range $cmds}}{{if (and (eq .GroupID "") (or .IsAvailableCommand (eq .Name "help")))}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
+
+Flags:
+%s
+Global Action Flags:
+%s
+Global Flags:
+{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasHelpSubCommands}}
+
+Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
+  {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
+
+Use "{{.CommandPath}} [command] --help" for more information about a command.{{end}}
+`
 }
 
 func filterFlags(cmd *cobra.Command, opts TypeOpts) TypeOpts {
