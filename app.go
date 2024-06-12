@@ -198,7 +198,7 @@ func (app *appImpl) init() error {
 	// Discover actions.
 	if !app.skipActions {
 		var launchrConfig *launchrCfg
-		err = app.config.Get("launcrctl", &launchrConfig)
+		err = app.config.Get("launchrctl", &launchrConfig)
 		if err != nil {
 			return err
 		}

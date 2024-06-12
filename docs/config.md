@@ -9,7 +9,7 @@ The global configuration is read from directory `.launchr`. It should have `conf
 It's possible to replace parts of the original action ID to receive prettier naming.
 
 ```yaml
-launcrctl:
+launchrctl:
   actions_naming:
     - search: ".roles."
       replace: "."
