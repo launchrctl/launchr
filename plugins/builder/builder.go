@@ -276,10 +276,7 @@ func (b *Builder) preBuild(ctx context.Context) error {
 		}
 
 		log.Debug("executing prebuild script for plugin %s", pluginName)
-		cmd := b.env.NewCommand(ctx, b.env.Go(), "run", "scripts/prebuild.go", v, tmpPath)
-		cmd.Dir = packagePath
-
-		err = b.env.RunCmd(ctx, cmd)
+		err = b.runGoRun(ctx, packagePath, []string{"scripts/prebuild.go", v, tmpPath})
 		if err != nil {
 			return err
 		}
@@ -322,6 +319,19 @@ func (b *Builder) preBuild(ctx context.Context) error {
 	defer file.Close()
 
 	return nil
+}
+
+func (b *Builder) runGoRun(ctx context.Context, dir string, args []string) error {
+	runArgs := append([]string{"run"}, args...)
+	cmd := b.env.NewCommand(ctx, b.env.Go(), runArgs...)
+	cmd.Dir = dir
+	env := make(envVars, len(cmd.Env))
+	copy(env, cmd.Env)
+	// Exclude target platform information as it may break "go run".
+	env.Unset("GOOS")
+	env.Unset("GOARCH")
+	cmd.Env = env
+	return b.env.RunCmd(ctx, cmd)
 }
 
 func (b *Builder) runGen(ctx context.Context) error {
