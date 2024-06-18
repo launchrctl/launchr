@@ -135,6 +135,7 @@ func validateV1(_ *Definition) error {
 type DefAction struct {
 	Title       string                 `yaml:"title"`
 	Description string                 `yaml:"description"`
+	Aliases     []string               `yaml:"alias"`
 	Arguments   ArgumentsList          `yaml:"arguments"`
 	Options     OptionsList            `yaml:"options"`
 	Command     StrSliceOrStr          `yaml:"command"`

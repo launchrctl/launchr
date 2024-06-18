@@ -19,6 +19,8 @@ type Manager interface {
 	// Use it only if you need to read-only actions without allocations. It may be unsafe to read/write the map.
 	// If you need to run actions, use Get or All, it will provide configured for run Action.
 	AllRef() map[string]*Action
+	// AllAliasRef returns map of all aliased actions
+	AllAliasRef() map[string]string
 	// Get returns a copy of an action from the manager with default decorators.
 	Get(id string) (*Action, bool)
 	// GetRef returns an original action value from the storage.
@@ -49,21 +51,23 @@ type Manager interface {
 type DecorateWithFn = func(m Manager, a *Action)
 
 type actionManagerMap struct {
-	actionStore map[string]*Action
-	runStore    map[string]RunInfo // @todo consider persistent storage
-	mx          sync.Mutex
-	mxRun       sync.Mutex
-	dwFns       []DecorateWithFn
-	processors  map[string]ValueProcessor
+	actionStore   map[string]*Action
+	actionAliases map[string]string
+	runStore      map[string]RunInfo // @todo consider persistent storage
+	mx            sync.Mutex
+	mxRun         sync.Mutex
+	dwFns         []DecorateWithFn
+	processors    map[string]ValueProcessor
 }
 
 // NewManager constructs a new action manager.
 func NewManager(withFns ...DecorateWithFn) Manager {
 	return &actionManagerMap{
-		actionStore: make(map[string]*Action),
-		runStore:    make(map[string]RunInfo),
-		dwFns:       withFns,
-		processors:  make(map[string]ValueProcessor),
+		actionStore:   make(map[string]*Action),
+		actionAliases: make(map[string]string),
+		runStore:      make(map[string]RunInfo),
+		dwFns:         withFns,
+		processors:    make(map[string]ValueProcessor),
 	}
 }
 
@@ -75,12 +79,22 @@ func (m *actionManagerMap) Add(a *Action) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 	m.actionStore[a.ID] = a
+
+	for _, alias := range a.ActionDef().Aliases {
+		m.actionAliases[alias] = a.ID
+	}
 }
 
 func (m *actionManagerMap) AllRef() map[string]*Action {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 	return copyMap(m.actionStore)
+}
+
+func (m *actionManagerMap) AllAliasRef() map[string]string {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+	return copyMap(m.actionAliases)
 }
 
 func (m *actionManagerMap) All() map[string]*Action {

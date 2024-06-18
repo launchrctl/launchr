@@ -13,6 +13,9 @@ Action configuration files are written in `yaml`, example declaration:
 action:
   title: Verb
   description: Handles some logic
+  alias:
+    - "alias1"
+    - "alias2"
   arguments:
     - name: myArg1
       title: Argument 1
