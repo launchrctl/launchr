@@ -29,6 +29,7 @@ type builderInput struct {
 	out     string
 	timeout string
 	version string
+	tags    []string
 	plugins []string
 	replace []string
 	debug   bool
@@ -53,6 +54,7 @@ func (p *Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
 	buildCmd.Flags().StringVarP(&flags.out, "output", "o", "", `Build output file, by default application name is used`)
 	buildCmd.Flags().StringVar(&flags.version, "build-version", "", `Arbitrary version of application`)
 	buildCmd.Flags().StringVarP(&flags.timeout, "timeout", "t", "120s", `Build timeout duration, example: 0, 100ms, 1h23m`)
+	buildCmd.Flags().StringSliceVarP(&flags.tags, "tag", "", nil, `Add build tags`)
 	buildCmd.Flags().StringSliceVarP(&flags.plugins, "plugin", "p", nil, `Include PLUGIN into the build with an optional version`)
 	buildCmd.Flags().StringSliceVarP(&flags.replace, "replace", "r", nil, `Replace go dependency, see "go mod edit -replace"`)
 	buildCmd.Flags().BoolVarP(&flags.debug, "debug", "d", false, `Include debug flags into the build to support go debugging with "delve". If not specified, debugging info is trimmed`)
@@ -96,6 +98,7 @@ func Execute(ctx context.Context, flags *builderInput) error {
 		PkgName:        flags.name,
 		ModReplace:     replace,
 		Plugins:        plugins,
+		Tags:           flags.tags,
 		BuildOutput:    flags.out,
 		Debug:          flags.debug,
 	}
