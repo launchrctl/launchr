@@ -60,6 +60,7 @@ type BuildOptions struct {
 	Plugins        []UsePluginInfo
 	BuildOutput    string
 	Debug          bool
+	Tags           []string
 }
 
 var validPkgNameRegex = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
@@ -212,6 +213,11 @@ func (b *Builder) goBuild(ctx context.Context) error {
 		args = append(args, "-trimpath")
 	}
 	args = append(args, "-ldflags", strings.Join(ldflags, " "))
+
+	if len(b.Tags) > 0 {
+		args = append(args, "-tags", strings.Join(b.Tags, " "))
+	}
+
 	// Run build.
 	cmd := b.env.NewCommand(ctx, b.env.Go(), args...)
 	err = b.env.RunCmd(ctx, cmd)
@@ -248,6 +254,11 @@ func (b *Builder) preBuild(ctx context.Context) error {
 	}
 
 	for pluginName, v := range pluginVersionMap {
+		if _, ok := b.BuildOptions.ModReplace[pluginName]; ok {
+			log.Debug("skipping prebuild script for replaced plugin %s", pluginName)
+			continue
+		}
+
 		packagePath, _ := getModulePath(pluginName, v)
 		if _, err = os.Stat(packagePath); os.IsNotExist(err) {
 			log.Debug("you don't have this module/version installed (%s)", packagePath)
