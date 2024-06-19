@@ -210,6 +210,10 @@ func (app *appImpl) init() error {
 					return err
 				}
 				for _, actConf := range actions {
+					if err = actConf.EnsureLoaded(); err != nil {
+						return err
+					}
+
 					if launchrConfig != nil && len(launchrConfig.ActionsNaming) > 0 {
 						actID := actConf.ID
 						for _, an := range launchrConfig.ActionsNaming {
@@ -247,6 +251,10 @@ func (app *appImpl) exec() error {
 	actions := app.actionMngr.AllRef()
 	// Check the requested command to see what actions we must actually load.
 	if app.reqCmd != "" {
+		aliases := app.actionMngr.AllAliasRef()
+		if alias, ok := aliases[app.reqCmd]; ok {
+			app.reqCmd = alias
+		}
 		a, ok := actions[app.reqCmd]
 		if ok {
 			// Use only the requested action.

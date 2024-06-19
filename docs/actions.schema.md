@@ -8,6 +8,9 @@ Basic action definition must have `image` and `command` to run the command in th
 action:
   title: Action name
   description: Long description
+  alias:
+    - "alias1"
+    - "alias2"
   image: alpine:latest
   command:
     - ls

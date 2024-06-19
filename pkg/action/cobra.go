@@ -28,7 +28,8 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 		Use: use,
 		// Using custom args validation in ValidateInput.
 		// @todo: maybe we need a long template for arguments description
-		Short: getDesc(actConf.Title, actConf.Description),
+		Short:   getDesc(actConf.Title, actConf.Description),
+		Aliases: actConf.Aliases,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Pass to the run environment its flags.
 			if env, ok := a.env.(RunEnvironmentFlags); ok {
