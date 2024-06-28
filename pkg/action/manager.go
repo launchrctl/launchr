@@ -38,9 +38,9 @@ type Manager interface {
 	DefaultRunEnvironment() RunEnvironment
 
 	// Run executes an action in foreground.
-	Run(ctx context.Context, a *Action) (RunInfo, error)
+	Run(ctx context.Context, a *Action, id string) (RunInfo, error)
 	// RunBackground executes an action in background.
-	RunBackground(ctx context.Context, a *Action) (RunInfo, chan error)
+	RunBackground(ctx context.Context, a *Action, id string) (RunInfo, chan error)
 	// RunInfoByAction returns all running actions by action id.
 	RunInfoByAction(aid string) []RunInfo
 	// RunInfoByID returns an action matching run id.
@@ -156,12 +156,14 @@ type RunInfo struct {
 	// @todo add more info for status like error message or exit code. Or have it in output.
 }
 
-func (m *actionManagerMap) registerRun(a *Action) RunInfo {
+func (m *actionManagerMap) registerRun(a *Action, id string) RunInfo {
 	// @todo rethink the implementation
 	m.mxRun.Lock()
 	defer m.mxRun.Unlock()
+	if id == "" {
+		id = strconv.FormatInt(time.Now().Unix(), 10) + "-" + a.ID
+	}
 	// @todo validate the action is actually running and the method was not just incorrectly requested
-	id := strconv.FormatInt(time.Now().Unix(), 10) + "-" + a.ID
 	ri := RunInfo{
 		ID:     id,
 		Action: a,
@@ -180,13 +182,13 @@ func (m *actionManagerMap) updateRunStatus(id string, st string) {
 	}
 }
 
-func (m *actionManagerMap) Run(ctx context.Context, a *Action) (RunInfo, error) {
+func (m *actionManagerMap) Run(ctx context.Context, a *Action, id string) (RunInfo, error) {
 	// @todo add the same status change info
-	return m.registerRun(a), a.Execute(ctx)
+	return m.registerRun(a, id), a.Execute(ctx)
 }
 
-func (m *actionManagerMap) RunBackground(ctx context.Context, a *Action) (RunInfo, chan error) {
-	ri := m.registerRun(a)
+func (m *actionManagerMap) RunBackground(ctx context.Context, a *Action, id string) (RunInfo, chan error) {
+	ri := m.registerRun(a, id)
 	chErr := make(chan error)
 	go func() {
 		m.updateRunStatus(ri.ID, "running")
