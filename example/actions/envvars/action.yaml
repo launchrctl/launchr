@@ -3,8 +3,8 @@ action:
   description: Test passing static or dynamic environment variables to container
   image: envvars:latest
   env:
-    ACTION_ENV: some_value # Static value
-    #ACTION_ENV: ${HOST_ENV} # Dynamic value comming from host env vars
+    ACTION_ENV1: value_from_action.yaml # Static value
+    ACTION_ENV2: ${USER} # Dynamic value comming from host env vars
   build:
     context: ./
   command:
