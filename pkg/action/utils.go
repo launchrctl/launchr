@@ -144,8 +144,21 @@ func getDefaultByType(o *Option) interface{} {
 }
 
 func defaultVal[T any](val interface{}, d T) T {
-	if val != nil {
-		return val.(T)
+	if val == nil {
+		return d
+	}
+
+	switch v := val.(type) {
+	case T:
+		return v
+	case []interface{}:
+		if _, ok := (interface{})(d).([]string); ok {
+			strSlice := make([]string, len(v))
+			for i, item := range v {
+				strSlice[i] = fmt.Sprintf("%v", item)
+			}
+			return (interface{})(strSlice).(T)
+		}
 	}
 	return d
 }
