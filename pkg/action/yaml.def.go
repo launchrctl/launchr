@@ -347,10 +347,21 @@ func unmarshalVarYaml(n *yaml.Node, v any, errStr []string) (err error) {
 	(*vraw)["type"] = *vtype
 	// @todo review hardcoded array elements types when array is properly implemented.
 	if *vtype == jsonschema.Array {
-		(*vraw)["items"] = map[string]interface{}{
-			"type": jsonschema.String,
+		items, ok := (*vraw)["items"].(map[string]interface{})
+		if !ok {
+			items = map[string]interface{}{}
 		}
+
+		items["type"] = jsonschema.String
+
+		// Override if enum is specified
+		if enum, ok := items["enum"]; ok {
+			items["enum"] = enum
+		}
+
+		(*vraw)["items"] = items
 	}
+
 	return nil
 }
 
