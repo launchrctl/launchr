@@ -1,0 +1,20 @@
+action:
+  title: arguments
+  description: Test passing options to executed command
+  options:
+    - name: firstoption
+      title: First option
+      type: string
+    - name: secondoption
+      title: Second option
+      description: Option to do something
+      type: boolean
+      default: false
+  image: envvars:latest
+  build:
+    context: ./
+  command:
+    - sh
+    - /action/main.sh
+    - "{{ .firstoption }}"
+    - "{{ .secondoption }}"
