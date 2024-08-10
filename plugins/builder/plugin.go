@@ -13,14 +13,14 @@ import (
 )
 
 func init() {
-	launchr.RegisterPlugin(&Plugin{})
+	launchr.RegisterPlugin(Plugin{})
 }
 
 // Plugin is a plugin to build launchr application.
 type Plugin struct{}
 
 // PluginInfo implements launchr.Plugin interface.
-func (p *Plugin) PluginInfo() launchr.PluginInfo {
+func (p Plugin) PluginInfo() launchr.PluginInfo {
 	return launchr.PluginInfo{}
 }
 
@@ -36,14 +36,14 @@ type builderInput struct {
 }
 
 // CobraAddCommands implements launchr.CobraPlugin interface to provide build functionality.
-func (p *Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
+func (p Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
 	// Flag options.
 	flags := builderInput{}
 
-	var buildCmd = &cobra.Command{
+	buildCmd := &cobra.Command{
 		Use:   "build",
 		Short: "Rebuilds application with specified configuration",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			// Don't show usage help on a runtime error.
 			cmd.SilenceUsage = true
 			return Execute(cmd.Context(), &flags)

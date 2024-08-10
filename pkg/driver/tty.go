@@ -63,7 +63,7 @@ func initTtySize(ctx context.Context, d ContainerRunner, cli cli.Streams, id str
 				}
 			}
 			if err != nil {
-				fmt.Fprintln(cli.Err(), "failed to resize tty, using default size")
+				_, _ = fmt.Fprintln(cli.Err(), "failed to resize tty, using default size")
 			}
 		}()
 	}

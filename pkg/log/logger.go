@@ -2,6 +2,8 @@
 // and provide logging functionality interface.
 package log
 
+import "time"
+
 // Level defines a log level.
 type Level int
 
@@ -20,7 +22,7 @@ type Config struct {
 	Verbosity Level
 }
 
-// Logger interface defines leveled logging functionality
+// Logger interface defines leveled logging functionality.
 type Logger interface {
 	Debug(format string, v ...any)
 	Info(format string, v ...any)
@@ -71,4 +73,17 @@ func Fatal(format string, v ...any) {
 // SetLevel runs Logger.SetLevel with a global logger.
 func SetLevel(lvl Level) {
 	l.SetLevel(lvl)
+}
+
+// DebugTimer returns a function that prints the name argument and
+// the elapsed time between the call to timer and the call to
+// the returned function. The returned function is intended to
+// be used in a defer statement:
+//
+// defer DebugTimer("sum")().
+func DebugTimer(name string) func() {
+	start := time.Now()
+	return func() {
+		Debug("%s took %v\n", name, time.Since(start).Round(time.Millisecond))
+	}
 }

@@ -29,10 +29,11 @@ type Action struct {
 
 	// wd is a working directory set from app level.
 	// Usually current working directory, but may be overridden by a plugin.
-	wd    string
-	fsdir string      // fsdir is a base directory where the action was discovered (for better ID naming).
-	fpath string      // fpath is a path to action definition file.
-	def   *Definition // def is an action definition. Loaded by Loader, may be nil when not initialized.
+	wd     string
+	fsdir  string      // fsdir is a base directory where the action was discovered (for better ID idp).
+	fpath  string      // fpath is a path to action definition file.
+	def    *Definition // def is an action definition. Loaded by Loader, may be nil when not initialized.
+	defRaw *Definition // defRaw is a raw action definition. Loaded by Loader, may be nil when not initialized.
 
 	env        RunEnvironment            // env is the run environment driver to execute the action.
 	input      Input                     // input is a container for env variables.
@@ -55,9 +56,10 @@ type (
 )
 
 // NewAction creates a new action.
-func NewAction(id, wd, fsdir, fpath string) *Action {
+func NewAction(wd, fsdir, fpath string) *Action {
+	// We don't define ID here because we use Action object for
+	// context creation to calculate ID later.
 	return &Action{
-		ID:    id,
 		wd:    wd,
 		fsdir: fsdir,
 		fpath: fpath,
@@ -107,7 +109,7 @@ func (a *Action) WorkDir() string {
 }
 
 // Filepath returns action file path.
-func (a *Action) Filepath() string { return a.fpath }
+func (a *Action) Filepath() string { return filepath.Join(a.fsdir, a.fpath) }
 
 // Dir returns an action file directory.
 func (a *Action) Dir() string { return filepath.Dir(a.Filepath()) }
@@ -117,6 +119,16 @@ func (a *Action) SetRunEnvironment(env RunEnvironment) { a.env = env }
 
 // DefinitionEncoded returns encoded action file content.
 func (a *Action) DefinitionEncoded() ([]byte, error) { return a.Loader.Content() }
+
+// Raw returns unprocessed action definition. It is faster and may produce fewer errors.
+// It may be helpful if needed to peek inside the action file to read header.
+func (a *Action) Raw() (*Definition, error) {
+	var err error
+	if a.defRaw == nil {
+		a.defRaw, err = a.Loader.LoadRaw()
+	}
+	return a.defRaw, err
+}
 
 // EnsureLoaded loads an action file with replaced arguments and options.
 func (a *Action) EnsureLoaded() (err error) {
@@ -166,7 +178,6 @@ func (a *Action) SetInput(input Input) (err error) {
 	return a.EnsureLoaded()
 }
 
-// validateJSONSchema validates arguments and options according to
 func (a *Action) processOptions(opts TypeOpts) error {
 	for _, optDef := range a.ActionDef().Options {
 		if _, ok := opts[optDef.Name]; !ok {
@@ -238,7 +249,7 @@ func (a *Action) processValue(value interface{}, valueType jsonschema.Type, toAp
 // validateJSONSchema validates arguments and options according to
 // a specified json schema in action definition.
 // @todo move to jsonschema
-func (a *Action) validateJSONSchema(inp Input) error {
+func (a *Action) validateJSONSchema(inp Input) error { //nolint:unused
 	jsch := a.JSONSchema()
 	// @todo cache jsonschema and resources.
 	b, err := json.Marshal(jsch)

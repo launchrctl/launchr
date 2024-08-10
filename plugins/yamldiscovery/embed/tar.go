@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"io"
 	"io/fs"
 	"os"
@@ -19,7 +20,7 @@ func createActionTar(cfs fs.FS, buildPath string) (string, []*action.Action, err
 	target := filepath.Join(buildPath, name)
 	// Discover actions.
 	ad := action.NewYamlDiscovery(action.NewDiscoveryFS(cfs, ""))
-	actions, err := ad.Discover()
+	actions, err := ad.Discover(context.Background())
 	if err != nil {
 		return name, nil, err
 	}

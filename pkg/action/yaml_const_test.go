@@ -14,6 +14,9 @@ working_directory: "{{ .current_working_dir }}"
 action:
   title: Title
   description: Description
+  alias:
+    - alias1
+    - alias2
   arguments:
     - name: arg1
       title: Argument 1
