@@ -60,6 +60,8 @@ type DiscoveryStrategy interface {
 }
 
 // IDProvider provides an ID for an action.
+// It is used to generate an ID from an action declaration.
+// DefaultIDProvider is the default implementation based on action filepath.
 type IDProvider interface {
 	GetID(a *Action) string
 }
@@ -206,6 +208,7 @@ func (ad *Discovery) SetActionIDProvider(idp IDProvider) {
 }
 
 // DefaultIDProvider is a default action id provider.
+// It generates action id by a filepath.
 type DefaultIDProvider struct{}
 
 // GetID implements IDProvider interface.

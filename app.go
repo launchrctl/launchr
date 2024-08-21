@@ -38,7 +38,7 @@ type appImpl struct {
 	workDir       string
 	cfgDir        string
 	services      map[ServiceInfo]Service
-	actionMngr    action.ManagerUnsafe
+	actionMngr    action.Manager
 	pluginMngr    PluginManager
 	config        Config
 	mFS           []ManagedFS
@@ -205,7 +205,7 @@ func (app *appImpl) init() error {
 		action.WithDefaultRunEnvironment,
 		action.WithContainerRunEnvironmentConfig(app.config, name+"_"),
 		action.WithValueProcessors(),
-	).(action.ManagerUnsafe) // Ensure we can use unsafe functionality.
+	)
 
 	// Register services for other modules.
 	app.AddService(app.actionMngr)
@@ -270,13 +270,12 @@ func (app *appImpl) exec() error {
 	if app.skipActions {
 		app.cmd.SetVersionTemplate(Version().Full())
 	}
-	// Convert actions to cobra commands.
-	actions := app.actionMngr.AllUnsafe()
 	// Check the requested command to see what actions we must actually load.
+	var actions map[string]*action.Action
 	if app.reqCmd != "" {
 		// Check if an alias was provided to find the real action.
 		app.reqCmd = app.actionMngr.GetIDFromAlias(app.reqCmd)
-		a, ok := actions[app.reqCmd]
+		a, ok := app.actionMngr.Get(app.reqCmd)
 		if ok {
 			// Use only the requested action.
 			actions = map[string]*action.Action{a.ID: a}
@@ -284,14 +283,17 @@ func (app *appImpl) exec() error {
 			// Action was not requested, no need to load them.
 			app.skipActions = true
 		}
+	} else {
+		// Load all.
+		actions = app.actionMngr.All()
 	}
+	// Convert actions to cobra commands.
 	// @todo consider cobra completion and caching between runs.
 	if !app.skipActions {
 		if len(actions) > 0 {
 			app.cmd.AddGroup(ActionsGroup)
 		}
 		for _, a := range actions {
-			a, _ = app.actionMngr.Get(a.ID)
 			cmd, err := action.CobraImpl(a, app.Streams())
 			if err != nil {
 				fmt.Fprintf(os.Stdout, "[WARNING] Action %q was skipped:\n%v\n", a.ID, err)

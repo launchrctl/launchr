@@ -16,8 +16,14 @@ type Manager interface {
 	launchr.Service
 	// All returns all actions copied and decorated.
 	All() map[string]*Action
+	// AllRef returns all original action values from the storage.
+	// Deprecated: use ManagerUnsafe.AllUnsafe instead.
+	AllRef() map[string]*Action
 	// Get returns a copy of an action from the manager with default decorators.
 	Get(id string) (*Action, bool)
+	// GetRef returns an original action value from the storage.
+	// Deprecated: use ManagerUnsafe.GetUnsafe instead.
+	GetRef(id string) (*Action, bool)
 	// Add saves an action in the manager.
 	Add(*Action)
 	// Delete deletes the action from the manager.
@@ -31,6 +37,7 @@ type Manager interface {
 	// GetActionIDProvider returns global application action id provider.
 	GetActionIDProvider() IDProvider
 	// SetActionIDProvider sets global application action id provider.
+	// This id provider will be used as default on Action discovery process.
 	SetActionIDProvider(p IDProvider)
 
 	// AddValueProcessor adds processor to list of available processors
@@ -50,16 +57,18 @@ type Manager interface {
 	RunInfoByID(id string) (RunInfo, bool)
 }
 
-// ManagerUnsafe is an extension of the Manager interface for unsafe access to actions.
-// Consider twice before using it!
+// ManagerUnsafe is an extension of the Manager interface that provides unsafe access to actions.
+// Warning: Use this with caution!
 type ManagerUnsafe interface {
 	Manager
 	// AllUnsafe returns all original action values from the storage.
-	// Use it only if you need to read-only actions without allocations.
-	// It is unsafe to operate the actions as they are the original and affect the whole app.
-	// If you need to run actions, use Get or All, it will provide configured for run Action.
+	// Use this method only if you need read-only access to the actions without allocating new memory.
+	// Warning: It is unsafe to manipulate these actions directly as they are the original instances
+	// affecting the entire application.
+	// Normally, for action execution you should use the Manager.Get or Manager.All methods,
+	// which provide actions configured for execution.
 	AllUnsafe() map[string]*Action
-	// GetUnsafe returns an original action value from the storage.
+	// GetUnsafe returns the original action value from the storage.
 	GetUnsafe(id string) (*Action, bool)
 }
 
@@ -118,6 +127,11 @@ func (m *actionManagerMap) AllUnsafe() map[string]*Action {
 	return copyMap(m.actionStore)
 }
 
+// Deprecated: use AllUnsafe instead.
+func (m *actionManagerMap) AllRef() map[string]*Action {
+	return m.AllUnsafe()
+}
+
 func (m *actionManagerMap) GetIDFromAlias(alias string) string {
 	if id, ok := m.actionAliases[alias]; ok {
 		return id
@@ -161,11 +175,15 @@ func (m *actionManagerMap) GetUnsafe(id string) (*Action, bool) {
 	return a, ok
 }
 
+// Deprecated: use GetUnsafe instead.
+func (m *actionManagerMap) GetRef(id string) (*Action, bool) {
+	return m.GetUnsafe(id)
+}
+
 func (m *actionManagerMap) AddValueProcessor(name string, vp ValueProcessor) {
 	if _, ok := m.processors[name]; ok {
 		panic(fmt.Sprintf("processor `%q` with the same name already exists", name))
 	}
-
 	m.processors[name] = vp
 }
 
