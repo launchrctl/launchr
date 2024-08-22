@@ -1,0 +1,10 @@
+action:
+  title: aliasaction
+  description: Test alias definition
+  image: buildargs:latest
+  alias:
+    - "alias1"
+    - "alias2"
+  command:
+    - sh
+    - /action/main.sh

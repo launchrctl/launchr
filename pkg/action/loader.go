@@ -79,7 +79,7 @@ func (p inputProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
 		return b, nil
 	}
 	a := ctx.Action
-	def, err := ctx.Action.Loader.LoadRaw()
+	def, err := ctx.Action.Raw()
 	if err != nil {
 		return nil, err
 	}

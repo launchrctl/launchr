@@ -26,6 +26,7 @@ const (
 	sErrInvalidActionArgName = "argument name %q is not valid"
 	sErrInvalidActionOptName = "option name %q is not valid"
 	sErrDupActionVarName     = "argument or option name %q is already defined, a variable name must be unique in the action definition"
+	sErrActionDefMissing     = "action definition is missing in the declaration"
 )
 
 type errUnsupportedActionVersion struct {
@@ -83,7 +84,7 @@ func CreateFromYamlTpl(b []byte) (*Definition, error) {
 	return CreateFromYaml(r)
 }
 
-// Definition is a representation of an action file
+// Definition is a representation of an action file.
 type Definition struct {
 	Version string     `yaml:"version"`
 	WD      string     `yaml:"working_directory"`
@@ -126,12 +127,15 @@ func (d *Definition) UnmarshalYAML(node *yaml.Node) (err error) {
 	return nil
 }
 
-func validateV1(_ *Definition) error {
+func validateV1(d *Definition) error {
 	// The schema is validated on parsing.
+	if d.Action == nil {
+		return errors.New(sErrActionDefMissing)
+	}
 	return nil
 }
 
-// DefAction holds action configuration
+// DefAction holds action configuration.
 type DefAction struct {
 	Title       string                 `yaml:"title"`
 	Description string                 `yaml:"description"`

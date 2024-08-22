@@ -3,23 +3,16 @@ run:
   deadline: 10s
   issues-exit-code: 1
   tests: true
-  skip-dirs:
-    - bin
-    - vendor
-    - var
-    - tmp
-  skip-files:
-    - \.pb\.go$
-    - \.pb\.goclay\.go$
 
 output:
-  format: colored-line-number
+  formats:
+    - format: colored-line-number
   print-issued-lines: true
   print-linter-name: true
 
 linters-settings:
   govet:
-    check-shadowing: true
+    shadow: true
   golint:
     min-confidence: 0
   dupl:
@@ -41,10 +34,20 @@ linters:
     - goconst
     - gosec
     - goimports
-    - megacheck # (staticcheck + gosimple + unused in one linter) - enable before push
+    - gosimple
+    - staticcheck
+    - unused
 
 issues:
   exclude-use-default: false
+  exclude-dirs:
+    - bin
+    - vendor
+    - var
+    - tmp
+  exclude-files:
+    - \.pb\.go$
+    - \.pb\.goclay\.go$
   exclude:
 #    # _ instead of err checks
 #    - G104

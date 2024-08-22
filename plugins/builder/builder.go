@@ -301,7 +301,7 @@ func (b *Builder) preBuild(ctx context.Context) error {
 
 		// move assets from tmp dir to assets folder.
 		log.Debug("moving assets from tmp to build folder")
-		err = cp.Copy(tmpPath, pluginAssetsPath, cp.Options{OnDirExists: func(src, dest string) cp.DirExistsAction {
+		err = cp.Copy(tmpPath, pluginAssetsPath, cp.Options{OnDirExists: func(_, _ string) cp.DirExistsAction {
 			return cp.Merge
 		}})
 		if err != nil {

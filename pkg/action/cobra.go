@@ -5,9 +5,8 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/spf13/pflag"
-
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
@@ -16,7 +15,11 @@ import (
 
 // CobraImpl returns cobra command implementation for an action command.
 func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
-	actConf := a.ActionDef()
+	def, err := a.Raw()
+	if err != nil {
+		return nil, err
+	}
+	actConf := def.Action
 	argsDef := actConf.Arguments
 	use := a.ID
 	for _, p := range argsDef {
@@ -28,13 +31,14 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 		Use: use,
 		// Using custom args validation in ValidateInput.
 		// @todo: maybe we need a long template for arguments description
+		// @todo: have aliases documented in help
 		Short:   getDesc(actConf.Title, actConf.Description),
 		Aliases: actConf.Aliases,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Pass to the run environment its flags.
 			if env, ok := a.env.(RunEnvironmentFlags); ok {
 				runOpts = filterFlags(cmd, runOpts)
-				err := env.UseFlags(derefOpts(runOpts))
+				err = env.UseFlags(derefOpts(runOpts))
 				if err != nil {
 					return err
 				}
@@ -48,14 +52,14 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 				ArgsRaw: args,
 			}
 			if runEnv, ok := a.env.(RunEnvironmentFlags); ok {
-				if err := runEnv.ValidateInput(a, input.Args); err != nil {
+				if err = runEnv.ValidateInput(a, input.Args); err != nil {
 					return err
 				}
 			}
 
 			cmd.SilenceUsage = true // Don't show usage help on a runtime error.
 
-			if err := a.SetInput(input); err != nil {
+			if err = a.SetInput(input); err != nil {
 				return err
 			}
 
@@ -65,7 +69,7 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 	}
 
 	// Collect action flags.
-	err := setCobraOptions(cmd, actConf.Options, options)
+	err = setCobraOptions(cmd, actConf.Options, options)
 	if err != nil {
 		return nil, err
 	}

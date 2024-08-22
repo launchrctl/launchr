@@ -1,6 +1,7 @@
 package launchr
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -21,23 +23,17 @@ import (
 
 var (
 	errTplAssetsNotFound = "assets not found for requested plugin %s"
+	errDiscoveryTimeout  = "action discovery timeout exceeded"
 )
 
-// ActionsGroup is a cobra command group definition
+// ActionsGroup is a cobra command group definition.
 var ActionsGroup = &cobra.Group{
 	ID:    "actions",
 	Title: "Actions:",
 }
 
-type launchrCfg struct {
-	ActionsNaming []struct {
-		Search  string `yaml:"search"`
-		Replace string `yaml:"replace"`
-	} `yaml:"actions_naming"`
-}
-
 type appImpl struct {
-	rootCmd       *cobra.Command
+	cmd           *cobra.Command
 	streams       cli.Streams
 	workDir       string
 	cfgDir        string
@@ -148,21 +144,62 @@ func (app *appImpl) GetPluginAssets(p Plugin) fs.FS {
 	return subFS
 }
 
+// earlyPeekFlags tries to parse flags early to allow change behavior before cobra has booted.
+func (app *appImpl) earlyPeekFlags(c *cobra.Command) {
+	args := os.Args[1:]
+	// Parse args with cobra.
+	// We can't guess cmd because nothing has been defined yet.
+	// We don't care about error because there won't be any on clean cmd.
+	_, flags, _ := c.Find(args)
+	// Quick parse arguments to see if a version or help was requested.
+	for i := 0; i < len(flags); i++ {
+		// Skip discover actions if we check version.
+		if flags[i] == "--version" {
+			app.skipActions = true
+		}
+
+		if app.reqCmd == "" && !strings.HasPrefix(flags[i], "-") {
+			app.reqCmd = args[i]
+		}
+	}
+}
+
 // init initializes application and plugins.
 func (app *appImpl) init() error {
 	var err error
+	// Set root cobra command.
+	app.cmd = &cobra.Command{
+		Use: name,
+		//Short: "", // @todo
+		//Long:  ``, // @todo
+		SilenceErrors: true, // Handled manually.
+		Version:       version,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return cmd.Help()
+		},
+	}
+	app.earlyPeekFlags(app.cmd)
+
+	// Set io streams.
+	app.streams = cli.StandardStreams()
+	app.cmd.SetIn(app.streams.In())
+	app.cmd.SetOut(app.streams.Out())
+	app.cmd.SetErr(app.streams.Err())
+
 	// Set working dir and config dir.
 	app.cfgDir = "." + name
 	app.workDir, err = filepath.Abs(".")
 	if err != nil {
 		return err
 	}
+	// Initialize managed FS for action discovery.
 	app.mFS = make([]ManagedFS, 0, 4)
 	app.RegisterFS(action.NewDiscoveryFS(os.DirFS(app.workDir), app.GetWD()))
+
 	// Prepare dependencies.
-	app.streams = cli.StandardStreams()
 	app.services = make(map[ServiceInfo]Service)
 	app.pluginMngr = launchr.NewPluginManagerWithRegistered()
+	// @todo consider home dir for global config.
 	app.config = launchr.ConfigFromFS(os.DirFS(app.cfgDir))
 	app.actionMngr = action.NewManager(
 		action.WithDefaultRunEnvironment,
@@ -182,80 +219,63 @@ func (app *appImpl) init() error {
 		}
 	}
 
-	// Quick parse arguments to see if a version or help was requested.
-	args := os.Args[1:]
-	for i := 0; i < len(args); i++ {
-		// Skip discover actions if we check version.
-		if args[i] == "--version" {
-			app.skipActions = true
-		}
-
-		if app.reqCmd == "" && !strings.HasPrefix(args[i], "-") {
-			app.reqCmd = args[i]
-		}
-	}
-
 	// Discover actions.
 	if !app.skipActions {
-		var launchrConfig *launchrCfg
-		err = app.config.Get("launchrctl", &launchrConfig)
-		if err != nil {
+		if err = app.discoverActions(); err != nil {
 			return err
-		}
-
-		for _, p := range getPluginByType[ActionDiscoveryPlugin](app) {
-			for _, fs := range app.GetRegisteredFS() {
-				actions, err := p.DiscoverActions(fs)
-				if err != nil {
-					return err
-				}
-				for _, actConf := range actions {
-					if err = actConf.EnsureLoaded(); err != nil {
-						return err
-					}
-
-					if launchrConfig != nil && len(launchrConfig.ActionsNaming) > 0 {
-						actID := actConf.ID
-						for _, an := range launchrConfig.ActionsNaming {
-							actID = strings.ReplaceAll(actID, an.Search, an.Replace)
-						}
-						actConf.ID = actID
-					}
-
-					app.actionMngr.Add(actConf)
-				}
-			}
 		}
 	}
 
 	return nil
 }
 
-func (app *appImpl) exec() error {
-	// Set root cobra command.
-	var rootCmd = &cobra.Command{
-		Use: name,
-		//Short: "", // @todo
-		//Long:  ``, // @todo
-		SilenceErrors: true, // Handled manually.
-		Version:       version,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return cmd.Help()
-		},
+func (app *appImpl) discoverActions() (err error) {
+	var discovered []*action.Action
+	idp := app.actionMngr.GetActionIDProvider()
+	// @todo configure from flags
+	// Define timeout for cases when we may traverse the whole FS, e.g. in / or home.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	for _, p := range getPluginByType[action.DiscoveryPlugin](app) {
+		for _, fs := range app.GetRegisteredFS() {
+			actions, errDis := p.DiscoverActions(ctx, fs, idp)
+			if errDis != nil {
+				return errDis
+			}
+			discovered = append(discovered, actions...)
+		}
+	}
+	// Failed to discover actions in reasonable time.
+	if errCtx := ctx.Err(); errCtx != nil {
+		return errors.New(errDiscoveryTimeout)
 	}
 
-	if app.skipActions {
-		rootCmd.SetVersionTemplate(Version().Full())
+	// Add discovered actions.
+	for _, a := range discovered {
+		app.actionMngr.Add(a)
 	}
-	// Convert actions to cobra commands.
-	actions := app.actionMngr.AllRef()
-	// Check the requested command to see what actions we must actually load.
-	if app.reqCmd != "" {
-		aliases := app.actionMngr.AllAliasRef()
-		if alias, ok := aliases[app.reqCmd]; ok {
-			app.reqCmd = alias
+
+	// Alter all registered actions.
+	for _, p := range getPluginByType[action.AlterActionsPlugin](app) {
+		err = p.AlterActions()
+		if err != nil {
+			return err
 		}
-		a, ok := actions[app.reqCmd]
+	}
+	// @todo maybe cache discovery result for performance.
+	return err
+}
+
+func (app *appImpl) exec() error {
+	if app.skipActions {
+		app.cmd.SetVersionTemplate(Version().Full())
+	}
+	// Check the requested command to see what actions we must actually load.
+	var actions map[string]*action.Action
+	if app.reqCmd != "" {
+		// Check if an alias was provided to find the real action.
+		app.reqCmd = app.actionMngr.GetIDFromAlias(app.reqCmd)
+		a, ok := app.actionMngr.Get(app.reqCmd)
 		if ok {
 			// Use only the requested action.
 			actions = map[string]*action.Action{a.ID: a}
@@ -263,41 +283,35 @@ func (app *appImpl) exec() error {
 			// Action was not requested, no need to load them.
 			app.skipActions = true
 		}
+	} else {
+		// Load all.
+		actions = app.actionMngr.All()
 	}
+	// Convert actions to cobra commands.
 	// @todo consider cobra completion and caching between runs.
 	if !app.skipActions {
 		if len(actions) > 0 {
-			rootCmd.AddGroup(ActionsGroup)
+			app.cmd.AddGroup(ActionsGroup)
 		}
 		for _, a := range actions {
-			a = app.actionMngr.Decorate(a)
-			if err := a.EnsureLoaded(); err != nil {
-				fmt.Fprintf(os.Stdout, "[WARNING] Action %q was skipped because it has an incorrect definition:\n%v\n", a.ID, err)
-				continue
-			}
 			cmd, err := action.CobraImpl(a, app.Streams())
 			if err != nil {
 				fmt.Fprintf(os.Stdout, "[WARNING] Action %q was skipped:\n%v\n", a.ID, err)
 				continue
 			}
 			cmd.GroupID = ActionsGroup.ID
-			rootCmd.AddCommand(cmd)
+			app.cmd.AddCommand(cmd)
 		}
 	}
 
 	// Add cobra commands from plugins.
 	for _, p := range getPluginByType[CobraPlugin](app) {
-		if err := p.CobraAddCommands(rootCmd); err != nil {
+		if err := p.CobraAddCommands(app.cmd); err != nil {
 			return err
 		}
 	}
 
-	// Set io streams.
-	app.rootCmd = rootCmd
-	rootCmd.SetIn(app.streams.In())
-	rootCmd.SetOut(app.streams.Out())
-	rootCmd.SetErr(app.streams.Err())
-	return app.rootCmd.Execute()
+	return app.cmd.Execute()
 }
 
 // Execute is a cobra entrypoint to the launchr app.

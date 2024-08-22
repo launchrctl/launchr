@@ -390,7 +390,7 @@ func Test_ContainerExec_containerWait(t *testing.T) {
 	tts := []testCase{
 		{
 			"condition removed",
-			func(resCh chan types.ContainerWaitResponse, errCh chan error) {
+			func(resCh chan types.ContainerWaitResponse, _ chan error) {
 				resCh <- types.ContainerWaitResponse{StatusCode: 0}
 			},
 			types.WaitConditionRemoved,
@@ -398,7 +398,7 @@ func Test_ContainerExec_containerWait(t *testing.T) {
 		},
 		{
 			"condition next exit",
-			func(resCh chan types.ContainerWaitResponse, errCh chan error) {
+			func(resCh chan types.ContainerWaitResponse, _ chan error) {
 				resCh <- types.ContainerWaitResponse{StatusCode: 0}
 			},
 			types.WaitConditionNextExit,
@@ -406,7 +406,7 @@ func Test_ContainerExec_containerWait(t *testing.T) {
 		},
 		{
 			"return exit code",
-			func(resCh chan types.ContainerWaitResponse, errCh chan error) {
+			func(resCh chan types.ContainerWaitResponse, _ chan error) {
 				resCh <- types.ContainerWaitResponse{StatusCode: 2}
 			},
 			types.WaitConditionRemoved,
@@ -414,7 +414,7 @@ func Test_ContainerExec_containerWait(t *testing.T) {
 		},
 		{
 			"fail on container run",
-			func(resCh chan types.ContainerWaitResponse, errCh chan error) {
+			func(resCh chan types.ContainerWaitResponse, _ chan error) {
 				resCh <- types.ContainerWaitResponse{StatusCode: 0, Error: errors.New("fail run")}
 			},
 			types.WaitConditionRemoved,
@@ -422,7 +422,7 @@ func Test_ContainerExec_containerWait(t *testing.T) {
 		},
 		{
 			"fail on wait",
-			func(resCh chan types.ContainerWaitResponse, errCh chan error) {
+			func(_ chan types.ContainerWaitResponse, errCh chan error) {
 				errCh <- errors.New("fail wait")
 			},
 			types.WaitConditionRemoved,
@@ -605,7 +605,7 @@ func Test_ContainerExec(t *testing.T) {
 	tts := []testCase{
 		{
 			"successful run",
-			func(resCh chan types.ContainerWaitResponse, errCh chan error) {
+			func(resCh chan types.ContainerWaitResponse, _ chan error) {
 				resCh <- types.ContainerWaitResponse{StatusCode: 0}
 			},
 			successSteps,
@@ -652,7 +652,7 @@ func Test_ContainerExec(t *testing.T) {
 		},
 		{
 			"error on container attach",
-			func(resCh chan types.ContainerWaitResponse, errCh chan error) {
+			func(resCh chan types.ContainerWaitResponse, _ chan error) {
 				resCh <- types.ContainerWaitResponse{StatusCode: 0}
 			},
 			append(
@@ -668,7 +668,7 @@ func Test_ContainerExec(t *testing.T) {
 		},
 		{
 			"error start container",
-			func(resCh chan types.ContainerWaitResponse, errCh chan error) {
+			func(resCh chan types.ContainerWaitResponse, _ chan error) {
 				resCh <- types.ContainerWaitResponse{StatusCode: 0}
 			},
 			append(
@@ -684,7 +684,7 @@ func Test_ContainerExec(t *testing.T) {
 		},
 		{
 			"container return error",
-			func(resCh chan types.ContainerWaitResponse, errCh chan error) {
+			func(resCh chan types.ContainerWaitResponse, _ chan error) {
 				resCh <- types.ContainerWaitResponse{StatusCode: 2}
 			},
 			append(
@@ -781,7 +781,6 @@ func callContainerDriverMockFn(d *mockdriver.MockContainerRunner, step mockCallI
 	case -1:
 		call.AnyTimes()
 	default:
-
 	}
 	if call != nil && prev != nil {
 		call.After(prev)
@@ -827,7 +826,6 @@ func Test_ConfigImageBuildInfo(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 const cfgYaml = `

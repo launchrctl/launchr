@@ -18,17 +18,18 @@ func init() {
 type Plugin struct{}
 
 // PluginInfo implements launchr.Plugin interface.
-func (p *Plugin) PluginInfo() launchr.PluginInfo {
+func (p Plugin) PluginInfo() launchr.PluginInfo {
 	return launchr.PluginInfo{}
 }
 
 // CobraAddCommands implements launchr.CobraPlugin interface to set app verbosity.
-func (p *Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
-	var verbosity = 0
-	var quiet = false
+func (p Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
+	verbosity := 0
+	quiet := false
 	rootCmd.PersistentFlags().CountVarP(&verbosity, "verbose", "v", "log verbosity level, use -vvv DEBUG, -vv WARN, -v INFO")
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "disable stdOut")
-	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+	rootCmd.PersistentPreRunE = func(_ *cobra.Command, _ []string) error {
+		// @todo logger is not set on preflight like "--help", but needed if fails to boot for debugging.
 		if quiet {
 			// @todo it doesn't really work for cli and docker output, only for logging.
 			return nil

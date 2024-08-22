@@ -2,12 +2,15 @@
 package action
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/log"
@@ -20,7 +23,13 @@ var actionsSubdir = strings.Join([]string{"", actionsDirname, ""}, string(filepa
 // DiscoveryPlugin is a launchr plugin to discover actions.
 type DiscoveryPlugin interface {
 	launchr.Plugin
-	DiscoverActions(fs launchr.ManagedFS) ([]*Action, error)
+	DiscoverActions(ctx context.Context, fs launchr.ManagedFS, idp IDProvider) ([]*Action, error)
+}
+
+// AlterActionsPlugin is a launchr plugin to alter registered actions.
+type AlterActionsPlugin interface {
+	launchr.Plugin
+	AlterActions() error
 }
 
 // DiscoveryFS is a file system to discover actions.
@@ -50,44 +59,83 @@ type DiscoveryStrategy interface {
 	Loader(l FileLoadFn, p ...LoadProcessor) Loader
 }
 
+// IDProvider provides an ID for an action.
+// It is used to generate an ID from an action declaration.
+// DefaultIDProvider is the default implementation based on action filepath.
+type IDProvider interface {
+	GetID(a *Action) string
+}
+
 // Discovery defines a common functionality for discovering action files.
 type Discovery struct {
 	fs    DiscoveryFS
 	fsDir string
-	s     DiscoveryStrategy
+	ds    DiscoveryStrategy
+	idp   IDProvider
 }
 
 // NewDiscovery creates an instance of action discovery.
 func NewDiscovery(fs DiscoveryFS, ds DiscoveryStrategy) *Discovery {
 	fsDir := launchr.GetFsAbsPath(fs.fs)
-	return &Discovery{fs, fsDir, ds}
+	return &Discovery{
+		fs:    fs,
+		fsDir: fsDir,
+		ds:    ds,
+		idp:   DefaultIDProvider{},
+	}
 }
 
 func (ad *Discovery) isValid(path string, d fs.DirEntry) bool {
 	i := strings.LastIndex(path, actionsSubdir)
 
-	if d.IsDir() || i == -1 || isHidden(path) {
+	// Invalid paths for action definition file.
+	if d.IsDir() ||
+		// No "actions" directory in the path.
+		i == -1 ||
+		// Must not be hidden itself.
+		isHiddenPath(path) ||
+		// Count depth of directories inside actions, must be only 1, not deeper.
+		// Nested actions are not allowed.
+		// dir/actions/1/action.yaml - OK, dir/actions/1/2/action.yaml - NOK.
+		strings.Count(path[i+len(actionsSubdir):], string(filepath.Separator)) > 1 {
 		return false
 	}
 
-	return strings.Count(path[i+len(actionsSubdir):], string(filepath.Separator)) == 1 && // Nested actions are not allowed.
-		ad.s.IsValid(d.Name())
+	return ad.ds.IsValid(d.Name())
 }
 
 // findFiles searches for a filename in a given dir.
 // Returns an array of relative file paths.
-func (ad *Discovery) findFiles() chan string {
+func (ad *Discovery) findFiles(ctx context.Context) chan string {
 	ch := make(chan string, 10)
 	go func() {
+		longOpTimeout := time.After(5 * time.Second)
 		err := fs.WalkDir(ad.fs, ".", func(path string, d fs.DirEntry, err error) error {
+			select {
+			// Show feedback on a long-running walk.
+			case <-longOpTimeout:
+				log.Warn("It takes more time than expected to discover actions.\nProbably you are running outside a project directory.")
+			// Stop walking if the context has expired.
+			case <-ctx.Done():
+				return fs.SkipAll
+			default:
+				// Continue to scan.
+			}
+			// Skip OS specific directories to prevent going too deep.
+			// Skip hidden directories.
+			if d != nil && d.IsDir() && (isHiddenPath(path) || skipSystemDirs(ad.fsDir, path)) {
+				return fs.SkipDir
+			}
 			if err != nil {
+				// Skip dir on access denied.
+				if os.IsPermission(err) && d.IsDir() {
+					return fs.SkipDir
+				}
+				// Stop walking on unknown error.
 				return err
 			}
 
-			if d.IsDir() && isHidden(path) {
-				return fs.SkipDir
-			}
-
+			// Check if the file is a candidate to be an action file.
 			if ad.isValid(path, d) {
 				ch <- path
 			}
@@ -109,12 +157,14 @@ func (ad *Discovery) findFiles() chan string {
 // Discover traverses the file structure for a given discovery path.
 // Returns array of Action.
 // If an action is invalid, it's ignored.
-func (ad *Discovery) Discover() ([]*Action, error) {
+func (ad *Discovery) Discover(ctx context.Context) ([]*Action, error) {
+	defer log.DebugTimer("Action discovering")()
 	wg := sync.WaitGroup{}
 	mx := sync.Mutex{}
 	actions := make([]*Action, 0, 32)
 
-	for f := range ad.findFiles() {
+	// Traverse the FS.
+	for f := range ad.findFiles(ctx) {
 		wg.Add(1)
 		go func(f string) {
 			defer wg.Done()
@@ -137,22 +187,35 @@ func (ad *Discovery) Discover() ([]*Action, error) {
 
 // parseFile parses file f and returns an action.
 func (ad *Discovery) parseFile(f string) *Action {
-	id := getActionID(f)
-	if id == "" {
-		panic(fmt.Errorf("action id cannot be empty, file %q", f))
-	}
-	a := NewAction(id, absPath(ad.fs.wd), ad.fsDir, filepath.Join(ad.fsDir, f))
-	a.Loader = ad.s.Loader(
+	a := NewAction(absPath(ad.fs.wd), ad.fsDir, f)
+	a.Loader = ad.ds.Loader(
 		func() (fs.File, error) { return ad.fs.Open(f) },
 		envProcessor{},
 		inputProcessor{},
 	)
+	// Assign ID to an action.
+	a.ID = ad.idp.GetID(a)
+	if a.ID == "" {
+		panic(fmt.Errorf("action id cannot be empty, file %q", f))
+	}
+
 	return a
 }
 
-// getActionID parses filename and returns CLI command name.
+// SetActionIDProvider sets discovery specific action id provider.
+func (ad *Discovery) SetActionIDProvider(idp IDProvider) {
+	ad.idp = idp
+}
+
+// DefaultIDProvider is a default action id provider.
+// It generates action id by a filepath.
+type DefaultIDProvider struct{}
+
+// GetID implements IDProvider interface.
+// It parses action filename and returns CLI command name.
 // Empty string if the command name can't be generated.
-func getActionID(f string) string {
+func (idp DefaultIDProvider) GetID(a *Action) string {
+	f := a.fpath
 	s := filepath.Dir(f)
 	i := strings.LastIndex(s, actionsSubdir)
 	if i == -1 {

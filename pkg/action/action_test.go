@@ -1,6 +1,7 @@
 package action
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,9 +13,10 @@ import (
 func Test_Action(t *testing.T) {
 	assert := assert.New(t)
 	// Prepare an action.
-	fs := _getFsMapActions(1, validFullYaml, true)
+	fs := _getFsMapActions(1, validFullYaml, genPathTypeValid)
 	ad := NewYamlDiscovery(NewDiscoveryFS(fs, ""))
-	actions, err := ad.Discover()
+	ctx := context.Background()
+	actions, err := ad.Discover(ctx)
 	assert.NoError(err)
 	assert.NotEmpty(actions)
 	act := actions[0]

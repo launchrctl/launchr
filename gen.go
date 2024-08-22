@@ -21,6 +21,9 @@ func (app *appImpl) gen(buildPath string, wordDir string) error {
 	}
 	// Clean build path before generating.
 	err = filepath.WalkDir(buildPath, func(path string, dir fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
 		if path == buildPath {
 			return nil
 		}
@@ -54,7 +57,7 @@ func (app *appImpl) gen(buildPath string, wordDir string) error {
 		}
 	}
 	if len(initSet) > 0 {
-		var tplName = "init.gen"
+		tplName := "init.gen"
 		tpl, err := template.New(tplName).Parse(initGenTemplate)
 		if err != nil {
 			return err
