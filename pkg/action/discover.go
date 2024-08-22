@@ -123,7 +123,7 @@ func (ad *Discovery) findFiles(ctx context.Context) chan string {
 			}
 			// Skip OS specific directories to prevent going too deep.
 			// Skip hidden directories.
-			if d.IsDir() && (isHiddenPath(path) || skipSystemDirs(ad.fsDir, path)) {
+			if d != nil && d.IsDir() && (isHiddenPath(path) || skipSystemDirs(ad.fsDir, path)) {
 				return fs.SkipDir
 			}
 			if err != nil {
