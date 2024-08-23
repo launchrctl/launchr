@@ -35,6 +35,10 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 		Short:   getDesc(actConf.Title, actConf.Description),
 		Aliases: actConf.Aliases,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			err = a.EnsureLoaded()
+			if err != nil {
+				return err
+			}
 			// Pass to the run environment its flags.
 			if env, ok := a.env.(RunEnvironmentFlags); ok {
 				runOpts = filterFlags(cmd, runOpts)
