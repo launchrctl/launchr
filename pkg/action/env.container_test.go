@@ -707,7 +707,7 @@ func Test_ContainerExec(t *testing.T) {
 			resCh, errCh := make(chan types.ContainerWaitResponse, 1), make(chan error, 1)
 			assert, ctrl, d, r := prepareContainerTestSuite(t)
 			a := act.Clone()
-			err := a.SetInput(Input{nil, nil, cli.NoopStreams(), nil})
+			err := a.SetInput(Input{nil, nil, cli.NoopStreams(), nil, nil})
 			assert.NoError(err)
 			defer ctrl.Finish()
 			defer r.Close()
@@ -850,7 +850,6 @@ images:
     args:
       arg1: val1
       arg2: val2
-  my/image3:version: ./
 `
 
 const invalidImgsYaml = `

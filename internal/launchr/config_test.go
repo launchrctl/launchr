@@ -46,7 +46,7 @@ func Test_ConfigFromFS(t *testing.T) {
 	}
 	var expEmpty expValType
 	expInvalid := expValType{
-		struErr: "yaml: unmarshal errors",
+		struErr: "error(s) decoding",
 	}
 	var errCheck = func(err error, errStr string) {
 		if errStr == "" {

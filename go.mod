@@ -5,6 +5,7 @@ go 1.21
 require (
 	github.com/a8m/envsubst v1.4.2
 	github.com/docker/docker v25.0.3+incompatible
+	github.com/knadh/koanf v1.5.0
 	github.com/moby/moby v25.0.3+incompatible
 	github.com/moby/sys/signal v0.7.0
 	github.com/moby/term v0.5.0
@@ -35,6 +36,9 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/compress v1.17.6 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
+	github.com/mitchellh/copystructure v1.2.0 // indirect
+	github.com/mitchellh/mapstructure v1.5.0 // indirect
+	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/patternmatcher v0.6.0 // indirect
 	github.com/moby/sys/sequential v0.5.0 // indirect
 	github.com/moby/sys/user v0.1.0 // indirect

@@ -50,10 +50,11 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 
 			// Set action input.
 			input := Input{
-				Args:    argsToMap(args, argsDef),
-				Opts:    derefOpts(options),
-				IO:      streams,
-				ArgsRaw: args,
+				Args:     argsToMap(args, argsDef),
+				Opts:     derefOpts(options),
+				IO:       streams,
+				ArgsRaw:  args,
+				UserOpts: filterFlags(cmd, options),
 			}
 			if runEnv, ok := a.env.(RunEnvironmentFlags); ok {
 				if err = runEnv.ValidateInput(a, input.Args); err != nil {
