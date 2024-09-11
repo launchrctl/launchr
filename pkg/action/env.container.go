@@ -160,7 +160,7 @@ func (c *containerEnv) AddImageBuildResolver(r ImageBuildResolver)            { 
 func (c *containerEnv) SetImageBuildCacheResolver(s *ImageBuildCacheResolver) { c.imgccres = s }
 func (c *containerEnv) SetContainerNameProvider(p ContainerNameProvider)      { c.nameprv = p }
 
-func (c *containerEnv) Init() (err error) {
+func (c *containerEnv) Init(_ context.Context) (err error) {
 	c.logWith = nil
 	if c.driver == nil {
 		c.driver, err = driver.New(c.dtype)
@@ -178,7 +178,7 @@ func (c *containerEnv) log(attrs ...any) *launchr.Slog {
 func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	ctx, cancelFn := context.WithCancel(ctx)
 	defer cancelFn()
-	if err = c.Init(); err != nil {
+	if err = c.Init(ctx); err != nil {
 		return err
 	}
 	streams := a.GetInput().IO
@@ -514,9 +514,21 @@ func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *typ
 			containerActionMount: {},
 		}
 	} else {
+		flags := ""
+		// Check SELinux settings to allow reading the FS inside a container.
+		if c.isSELinuxEnabled(ctx) {
+			// Use the lowercase z flag to allow concurrent actions access to the FS.
+			flags += ":z"
+			launchr.Term().Warning().Printfln(
+				"SELinux is detected. The volumes will be mounted with the %q flags, which will relabel your files.\n"+
+					"This process may take time or potentially break existing permissions.",
+				flags,
+			)
+			c.log().Warn("using selinux flags", "flags", flags)
+		}
 		createOpts.Binds = []string{
-			absPath(a.WorkDir()) + ":" + containerHostMount,
-			absPath(a.Dir()) + ":" + containerActionMount,
+			absPath(a.WorkDir()) + ":" + containerHostMount + flags,
+			absPath(a.Dir()) + ":" + containerActionMount + flags,
 		}
 	}
 	cid, err := c.driver.ContainerCreate(ctx, createOpts)
@@ -659,4 +671,12 @@ func (c *containerEnv) attachContainer(ctx context.Context, streams launchr.Stre
 		errCh <- driver.ContainerIOStream(ctx, streams, cio, opts)
 	}()
 	return cio, errCh, nil
+}
+
+func (c *containerEnv) isSELinuxEnabled(ctx context.Context) bool {
+	// First, we check if it's enabled at the OS level, then if it's enabled in the container runner.
+	// If the feature is not enabled in the runner environment,
+	// containers will bypass SELinux and will function as if SELinux is disabled in the OS.
+	d, ok := c.driver.(driver.ContainerRunnerSELinux)
+	return ok && launchr.IsSELinuxEnabled() && d.IsSELinuxSupported(ctx)
 }

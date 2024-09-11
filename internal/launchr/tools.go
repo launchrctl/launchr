@@ -65,3 +65,13 @@ func EstimateTime(fn func(diff time.Duration)) func() {
 		fn(time.Since(start))
 	}
 }
+
+// IsSELinuxEnabled checks if selinux is enabled on the system.
+func IsSELinuxEnabled() bool {
+	// @todo it won't actually work with a remote environment.
+	data, err := os.ReadFile("/sys/fs/selinux/enforce")
+	if err != nil {
+		return false
+	}
+	return string(data) == "1"
+}

@@ -78,6 +78,21 @@ const (
 	ImageRemoved                            // ImageRemoved - image was removed
 )
 
+// SystemInfo holds information about the container runner environment.
+type SystemInfo struct {
+	ID              string
+	Name            string
+	ServerVersion   string
+	KernelVersion   string
+	OperatingSystem string
+	OSVersion       string
+	OSType          string
+	Architecture    string
+	NCPU            int
+	MemTotal        int64
+	SecurityOptions []string
+}
+
 // ContainerListOptions stores options to request container list.
 type ContainerListOptions struct {
 	SearchName string

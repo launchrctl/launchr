@@ -12,6 +12,7 @@ import (
 
 // ContainerRunner defines common interface for container environments.
 type ContainerRunner interface {
+	Info(ctx context.Context) (types.SystemInfo, error)
 	ImageEnsure(ctx context.Context, opts types.ImageOptions) (*types.ImageStatusResponse, error)
 	ImageRemove(ctx context.Context, image string, opts types.ImageRemoveOptions) (*types.ImageRemoveResponse, error)
 	CopyToContainer(ctx context.Context, cid string, path string, content io.Reader, opts types.CopyToContainerOptions) error
@@ -28,4 +29,9 @@ type ContainerRunner interface {
 	ContainerResize(ctx context.Context, cid string, opts types.ResizeOptions) error
 	ContainerExecResize(ctx context.Context, cid string, opts types.ResizeOptions) error
 	Close() error
+}
+
+// ContainerRunnerSELinux defines a container runner with SELinux support.
+type ContainerRunnerSELinux interface {
+	IsSELinuxSupported(ctx context.Context) bool
 }

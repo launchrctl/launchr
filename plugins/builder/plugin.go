@@ -105,7 +105,7 @@ func (p *Plugin) Generate(buildPath string, _ string) error {
 // Deprecated: remove when the new version is deployed.
 func extractGenImports(genpath string) ([]UsePluginInfo, error) {
 	// Open the file
-	file, err := os.Open(genpath)
+	file, err := os.Open(genpath) //nolint
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,6 @@ func extractGenImports(genpath string) ([]UsePluginInfo, error) {
 			continue
 		}
 		if line == ")" {
-			readingImports = false
 			break
 		}
 		// If we are in the imports section, collect the import paths
