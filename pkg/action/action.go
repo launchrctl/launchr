@@ -42,10 +42,11 @@ type Action struct {
 
 // Input is a container for action input arguments and options.
 type Input struct {
-	Args    TypeArgs
-	Opts    TypeOpts
-	IO      cli.Streams // @todo should it be in Input?
-	ArgsRaw []string
+	Args     TypeArgs
+	Opts     TypeOpts
+	IO       cli.Streams // @todo should it be in Input?
+	ArgsRaw  []string
+	UserOpts TypeOpts
 }
 
 type (
@@ -167,7 +168,7 @@ func (a *Action) SetInput(input Input) (err error) {
 		return err
 	}
 
-	err = a.processOptions(input.Opts)
+	err = a.processOptions(input.Opts, input.UserOpts)
 	if err != nil {
 		return err
 	}
@@ -178,13 +179,13 @@ func (a *Action) SetInput(input Input) (err error) {
 	return a.EnsureLoaded()
 }
 
-func (a *Action) processOptions(opts TypeOpts) error {
+func (a *Action) processOptions(opts, userOpts TypeOpts) error {
 	for _, optDef := range a.ActionDef().Options {
 		if _, ok := opts[optDef.Name]; !ok {
 			continue
 		}
 
-		value := opts[optDef.Name]
+		value := userOpts[optDef.Name]
 		toApply := optDef.Process
 
 		value, err := a.processValue(value, optDef.Type, toApply)
@@ -192,7 +193,9 @@ func (a *Action) processOptions(opts TypeOpts) error {
 			return err
 		}
 
-		opts[optDef.Name] = value
+		if value != nil {
+			opts[optDef.Name] = value
+		}
 	}
 
 	return nil

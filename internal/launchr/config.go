@@ -2,18 +2,18 @@ package launchr
 
 import (
 	"errors"
-	"io"
 	"io/fs"
 	"path/filepath"
 	"reflect"
 	"regexp"
 	"sync"
 
-	"gopkg.in/yaml.v3"
+	"github.com/knadh/koanf"
+	yamlparser "github.com/knadh/koanf/parsers/yaml"
+	fsprovider "github.com/knadh/koanf/providers/fs"
 )
 
 var configRegex = regexp.MustCompile(`^config\.(yaml|yml)$`)
-
 var (
 	ErrNoConfigFile = errors.New("config file is not found") // ErrNoConfigFile when config file doesn't exist in FS.
 )
@@ -27,6 +27,9 @@ type Config interface {
 	Path(parts ...string) string
 	// EnsurePath creates all directories in the path.
 	EnsurePath(parts ...string) error
+	// Exists checks if key exists in config. Key level delimiter is dot.
+	// For example - `path.to.something`.
+	Exists(key string) bool
 	// Get returns a value by key to a parameter v. Parameter v must be a pointer to a value.
 	// Error may be returned on decode.
 	Get(key string, v interface{}) error
@@ -45,7 +48,7 @@ type config struct {
 	fname    fs.DirEntry
 	rootPath string
 	cached   cachedProps
-	yaml     map[string]yaml.Node
+	koanf    *koanf.Koanf
 }
 
 func findConfigFile(root fs.FS) fs.DirEntry {
@@ -79,6 +82,10 @@ func (cfg *config) DirPath() string {
 	return cfg.rootPath
 }
 
+func (cfg *config) Exists(path string) bool {
+	return cfg.koanf != nil && cfg.koanf.Exists(path)
+}
+
 func (cfg *config) Get(key string, v interface{}) error {
 	cfg.mx.Lock()
 	defer cfg.mx.Unlock()
@@ -93,12 +100,13 @@ func (cfg *config) Get(key string, v interface{}) error {
 		return nil
 	}
 
-	if cfg.fname != nil && cfg.yaml == nil {
+	if cfg.fname != nil && cfg.koanf == nil {
 		if err = cfg.parse(); err != nil {
 			return err
 		}
 	}
-	y, ok := cfg.yaml[key]
+
+	ok = cfg.Exists(key)
 	if !ok {
 		// Return default value.
 		return nil
@@ -110,7 +118,9 @@ func (cfg *config) Get(key string, v interface{}) error {
 		}
 	}()
 	vcopy := reflect.New(reflect.TypeOf(v).Elem()).Elem()
-	if err = y.Decode(v); err != nil {
+
+	err = cfg.koanf.Unmarshal(key, v)
+	if err != nil {
 		// Set value to empty struct not to leak partial parsing to ensure consistent results.
 		reflect.ValueOf(v).Elem().Set(vcopy)
 		return err
@@ -123,17 +133,13 @@ func (cfg *config) parse() error {
 	if cfg.fname == nil {
 		return ErrNoConfigFile
 	}
-	r, err := cfg.root.Open(cfg.fname.Name())
+
+	cfg.koanf = koanf.New(".")
+	err := cfg.koanf.Load(fsprovider.Provider(cfg.root, cfg.fname.Name()), yamlparser.Parser())
 	if err != nil {
 		return err
 	}
-	defer r.Close()
 
-	d := yaml.NewDecoder(r)
-	err = d.Decode(&cfg.yaml)
-	if err != nil && err != io.EOF {
-		return err
-	}
 	return nil
 }
 
