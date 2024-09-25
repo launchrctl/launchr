@@ -14,6 +14,7 @@ import (
 )
 
 var configRegex = regexp.MustCompile(`^config\.(yaml|yml)$`)
+
 var (
 	ErrNoConfigFile = errors.New("config file is not found") // ErrNoConfigFile when config file doesn't exist in FS.
 )
@@ -32,7 +33,7 @@ type Config interface {
 	Exists(key string) bool
 	// Get returns a value by key to a parameter v. Parameter v must be a pointer to a value.
 	// Error may be returned on decode.
-	Get(key string, v interface{}) error
+	Get(key string, v any) error
 }
 
 // ConfigAware provides an interface for structs to support launchr configuration setting.
@@ -86,7 +87,7 @@ func (cfg *config) Exists(path string) bool {
 	return cfg.koanf != nil && cfg.koanf.Exists(path)
 }
 
-func (cfg *config) Get(key string, v interface{}) error {
+func (cfg *config) Get(key string, v any) error {
 	cfg.mx.Lock()
 	defer cfg.mx.Unlock()
 	var err error

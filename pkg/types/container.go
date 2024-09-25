@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/moby/moby/api/types"
 	typescontainer "github.com/moby/moby/api/types/container"
+	typesimage "github.com/moby/moby/api/types/image"
 	"gopkg.in/yaml.v3"
 )
 
@@ -39,7 +39,7 @@ func (b *BuildDefinition) ImageBuildInfo(name string, cwd string) *BuildDefiniti
 
 type yamlBuildOptions BuildDefinition
 
-// UnmarshalYAML implements yaml.Unmarshaler to parse build options from a string or a struct.
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse build options from a string or a struct.
 func (b *BuildDefinition) UnmarshalYAML(n *yaml.Node) (err error) {
 	if n.Kind == yaml.ScalarNode {
 		var s string
@@ -65,7 +65,7 @@ type ImageOptions struct {
 }
 
 // ImageRemoveOptions stores options for removing an image.
-type ImageRemoveOptions = types.ImageRemoveOptions
+type ImageRemoveOptions = typesimage.RemoveOptions
 
 // ImageStatus defines image status on local machine.
 type ImageStatus int64
@@ -102,10 +102,10 @@ type ImageRemoveResponse struct {
 }
 
 // ContainerPathStat is a type alias for container path stat result.
-type ContainerPathStat = types.ContainerPathStat
+type ContainerPathStat = typescontainer.PathStat
 
 // CopyToContainerOptions is a type alias for container copy to container options.
-type CopyToContainerOptions = types.CopyToContainerOptions
+type CopyToContainerOptions = typescontainer.CopyToContainerOptions
 
 // NetworkMode is a type alias for container Network mode.
 type NetworkMode = typescontainer.NetworkMode

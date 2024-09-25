@@ -2,7 +2,6 @@ package launchr
 
 import (
 	"bytes"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -89,11 +88,11 @@ func (app *appImpl) Generate() int {
 	}
 	var err error
 	if err = app.init(); err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
+		Term().Error().Println(err)
 		return 125
 	}
 	if err = app.gen(buildPath, wd); err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
+		Term().Error().Println(err)
 		return 125
 	}
 	return 0

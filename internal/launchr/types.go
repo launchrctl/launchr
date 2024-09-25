@@ -5,12 +5,17 @@ import (
 	"io/fs"
 
 	"github.com/spf13/cobra"
-
-	"github.com/launchrctl/launchr/pkg/cli"
 )
 
 // PkgPath is a main module path.
 const PkgPath = "github.com/launchrctl/launchr"
+
+// Command is a type alias for [cobra.Command].
+// to reduce direct dependency on cobra in packages.
+type Command = cobra.Command
+
+// CommandGroup is a type alias for [cobra.Group].
+type CommandGroup = cobra.Group
 
 // App stores global application state.
 type App interface {
@@ -19,20 +24,30 @@ type App interface {
 	// GetWD provides app's working dir.
 	GetWD() string
 	// Streams returns application cli.
-	Streams() cli.Streams
+	Streams() Streams
+	// SetStreams sets application streams.
+	SetStreams(s Streams)
 	// AddService registers a service in the app.
 	// Panics if a service is not unique.
 	AddService(s Service)
-	// GetService retrieves a service of type v and assigns it to v.
+	// GetService retrieves a service of type [v] and assigns it to [v].
 	// Panics if a service is not found.
-	GetService(v interface{})
+	GetService(v any)
 
 	GetPluginAssets(p Plugin) fs.FS
 	// RegisterFS registers a File System in launchr.
-	// It may be a FS for action discovery, see action.DiscoveryFS.
+	// It may be a FS for action discovery, see [action.DiscoveryFS].
 	RegisterFS(fs ManagedFS)
 	// GetRegisteredFS returns an array of registered File Systems.
 	GetRegisteredFS() []ManagedFS
+}
+
+// AppInternal is an extension to access cobra related functionality of the app.
+// It is intended for internal use only to prevent coupling on volatile functionality.
+type AppInternal interface {
+	App
+	GetRootCmd() *Command
+	EarlyParsedFlags() []string
 }
 
 // AppVersion stores application version.
@@ -47,7 +62,7 @@ type AppVersion struct {
 	Plugins     []string
 }
 
-// PluginInfo provides information about the plugin and is used as a unique data to indentify a plugin.
+// PluginInfo provides information about the plugin and is used as a unique data to identify a plugin.
 type PluginInfo struct {
 	// Weight defines the order of plugins calling. @todo rework to a real dependency resolving.
 	Weight   int
@@ -59,7 +74,7 @@ func (p PluginInfo) String() string {
 	return p.pkgPath + "." + p.typeName
 }
 
-// GetPackagePath returns the package path of the PluginInfo.
+// GetPackagePath returns the package path of the [PluginInfo].
 func (p PluginInfo) GetPackagePath() string {
 	return p.pkgPath
 }
@@ -125,7 +140,7 @@ type PluginManager interface {
 	All() PluginsMap
 }
 
-// NewPluginManagerWithRegistered creates PluginManager with registered plugins.
+// NewPluginManagerWithRegistered creates [PluginManager] with registered plugins.
 func NewPluginManagerWithRegistered() PluginManager {
 	return pluginManagerMap(registeredPlugins)
 }

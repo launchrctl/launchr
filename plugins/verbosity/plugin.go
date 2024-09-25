@@ -2,44 +2,128 @@
 package verbosity
 
 import (
-	"os"
-
-	"github.com/spf13/cobra"
+	"errors"
+	"math"
 
 	"github.com/launchrctl/launchr/internal/launchr"
-	"github.com/launchrctl/launchr/pkg/log"
 )
 
 func init() {
 	launchr.RegisterPlugin(&Plugin{})
 }
 
-// Plugin is launchr plugin to set verbosity of the application.
+// Plugin is [launchr.Plugin] to set verbosity of the application.
 type Plugin struct{}
 
-// PluginInfo implements launchr.Plugin interface.
+// PluginInfo implements [launchr.Plugin] interface.
 func (p Plugin) PluginInfo() launchr.PluginInfo {
-	return launchr.PluginInfo{}
+	return launchr.PluginInfo{
+		Weight: math.MinInt, // Ensure to be run first.
+	}
 }
 
-// CobraAddCommands implements launchr.CobraPlugin interface to set app verbosity.
-func (p Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
+// LogFormat is a enum type for log output format.
+type LogFormat string
+
+const (
+	LogFormatPlain LogFormat = "plain" // LogFormatPlain is a default logger output format.
+	LogFormatJSON  LogFormat = "json"  // LogFormatJSON is a json logger output format.
+)
+
+// Set implements [fmt.Stringer] interface.
+func (e *LogFormat) String() string {
+	return string(*e)
+}
+
+// Set implements [cobra.Value] interface.
+func (e *LogFormat) Set(v string) error {
+	switch v {
+	case string(LogFormatPlain), string(LogFormatJSON):
+		*e = LogFormat(v)
+		return nil
+	default:
+		return errors.New(`must be one of "plain" or "json"`)
+	}
+}
+
+// Type implements [cobra.Value] interface.
+func (e *LogFormat) Type() string {
+	return "LogFormat"
+}
+
+// OnAppInit implements [launchr.OnAppInitPlugin] interface.
+func (p Plugin) OnAppInit(app launchr.App) error {
 	verbosity := 0
 	quiet := false
-	rootCmd.PersistentFlags().CountVarP(&verbosity, "verbose", "v", "log verbosity level, use -vvv DEBUG, -vv WARN, -v INFO")
-	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "disable stdOut")
-	rootCmd.PersistentPreRunE = func(_ *cobra.Command, _ []string) error {
-		// @todo logger is not set on preflight like "--help", but needed if fails to boot for debugging.
-		if quiet {
-			// @todo it doesn't really work for cli and docker output, only for logging.
-			return nil
-		}
-		log.SetGlobalLogger(log.NewPlainLogger(os.Stdout, os.Stderr, nil))
-		if verbosity > int(log.ErrLvl) {
-			verbosity = int(log.ErrLvl)
-		}
-		log.SetLevel(log.Level(int(log.ErrLvl) - verbosity))
+	var logFormat LogFormat
+
+	// Assert we are able to access internal functionality.
+	appInternal, ok := app.(launchr.AppInternal)
+	if !ok {
 		return nil
 	}
+	// Define verbosity flags.
+	cmd := appInternal.GetRootCmd()
+	pflags := cmd.PersistentFlags()
+	// Make sure not to fail on unknown flags because we are parsing early.
+	unkFlagsBkp := pflags.ParseErrorsWhitelist.UnknownFlags
+	pflags.ParseErrorsWhitelist.UnknownFlags = true
+	pflags.CountVarP(&verbosity, "verbose", "v", "log verbosity level, use -vvvv DEBUG, -vvv INFO, -vv WARN, -v ERROR")
+	pflags.VarP(&logFormat, "log-format", "", "log format, may be plain or json")
+	pflags.BoolVarP(&quiet, "quiet", "q", false, "disable output to the console")
+
+	// Parse available flags.
+	err := pflags.Parse(appInternal.EarlyParsedFlags())
+	if launchr.IsCommandErrHelp(err) {
+		return nil
+	}
+	if err != nil {
+		// It shouldn't happen here.
+		panic(err)
+	}
+	pflags.ParseErrorsWhitelist.UnknownFlags = unkFlagsBkp
+	launchr.Term().EnableOutput()
+	if quiet {
+		launchr.Term().DisableOutput()
+		app.SetStreams(launchr.NoopStreams())
+	}
+
+	streams := app.Streams()
+	out := streams.Out()
+	// Set terminal output.
+	launchr.Term().SetOutput(out)
+	// Enable logger.
+	if verbosity > 0 {
+		var logger *launchr.Logger
+		switch logFormat {
+		case LogFormatPlain:
+			logger = launchr.NewJSONHandlerLogger(out)
+		case LogFormatJSON:
+			logger = launchr.NewTextHandlerLogger(out)
+		default:
+			logger = launchr.NewConsoleLogger(out)
+		}
+		launchr.SetLogger(logger)
+	}
+	launchr.Log().SetLevel(logLevelFlagInt(verbosity))
+	cmd.SetOut(out)
+	cmd.SetErr(streams.Err())
 	return nil
+}
+
+func logLevelFlagInt(v int) launchr.LogLevel {
+	switch v {
+	case 0:
+		return launchr.LogLevelDisabled
+	case 1:
+		return launchr.LogLevelError
+	case 2:
+		return launchr.LogLevelWarn
+	case 3:
+		return launchr.LogLevelInfo
+	case 4:
+		return launchr.LogLevelDebug
+	default:
+		return launchr.LogLevelDisabled
+	}
 }

@@ -125,7 +125,7 @@ func reflectValRef(v any, n string) any {
 	return reflect.ValueOf(v).Elem().FieldByName(n).Addr().Interface()
 }
 
-func getDefaultByType(o *Option) interface{} {
+func getDefaultByType(o *Option) any {
 	// @todo rethink default if it's not actually defined, do not set anything.
 	switch o.Type {
 	case jsonschema.String:
@@ -143,7 +143,7 @@ func getDefaultByType(o *Option) interface{} {
 	}
 }
 
-func defaultVal[T any](val interface{}, d T) T {
+func defaultVal[T any](val any, d T) T {
 	if val == nil {
 		return d
 	}
@@ -151,13 +151,13 @@ func defaultVal[T any](val interface{}, d T) T {
 	switch v := val.(type) {
 	case T:
 		return v
-	case []interface{}:
-		if _, ok := (interface{})(d).([]string); ok {
+	case []any:
+		if _, ok := (any)(d).([]string); ok {
 			strSlice := make([]string, len(v))
 			for i, item := range v {
 				strSlice[i] = fmt.Sprintf("%v", item)
 			}
-			return (interface{})(strSlice).(T)
+			return (any)(strSlice).(T)
 		}
 	}
 	return d

@@ -1,11 +1,11 @@
-//go:build darwin || dragonfly || freebsd || illumos || linux || netbsd || openbsd
+//go:build unix
 
 package action
 
 import (
 	"syscall"
 
-	"github.com/launchrctl/launchr/pkg/log"
+	"github.com/launchrctl/launchr/internal/launchr"
 )
 
 func (f *lockedFile) lock(waitToAcquire bool) (err error) {
@@ -32,7 +32,7 @@ func (f *lockedFile) unlock() {
 		return
 	}
 	if err := syscall.Flock(int(f.file.Fd()), syscall.LOCK_UN); err != nil {
-		log.Debug("unlock is called on a not locked file: %s", err)
+		launchr.Log().Warn("unlock is called on a not locked file", "error", err)
 	}
 	f.locked = false
 }

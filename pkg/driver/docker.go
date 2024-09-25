@@ -8,6 +8,7 @@ import (
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/image"
 	"github.com/moby/moby/client"
 	"github.com/moby/moby/errdefs"
 	"github.com/moby/moby/pkg/archive"
@@ -51,29 +52,29 @@ func (d *dockerDriver) ContainerList(ctx context.Context, opts types.ContainerLi
 	return lp
 }
 
-func (d *dockerDriver) ImageEnsure(ctx context.Context, image types.ImageOptions) (*types.ImageStatusResponse, error) {
+func (d *dockerDriver) ImageEnsure(ctx context.Context, imgOpts types.ImageOptions) (*types.ImageStatusResponse, error) {
 	// Check if the image already exists.
-	insp, _, err := d.cli.ImageInspectWithRaw(ctx, image.Name)
+	insp, _, err := d.cli.ImageInspectWithRaw(ctx, imgOpts.Name)
 	if err != nil {
 		if !errdefs.IsNotFound(err) {
 			return nil, err
 		}
 	}
 
-	if insp.ID != "" && !image.ForceRebuild && !image.NoCache {
+	if insp.ID != "" && !imgOpts.ForceRebuild && !imgOpts.NoCache {
 		return &types.ImageStatusResponse{Status: types.ImageExists}, nil
 	}
 	// Build the image if it doesn't exist.
-	if image.Build != nil {
-		buildContext, errTar := archive.TarWithOptions(image.Build.Context, &archive.TarOptions{})
+	if imgOpts.Build != nil {
+		buildContext, errTar := archive.TarWithOptions(imgOpts.Build.Context, &archive.TarOptions{})
 		if errTar != nil {
 			return nil, errTar
 		}
 		resp, errBuild := d.cli.ImageBuild(ctx, buildContext, dockertypes.ImageBuildOptions{
-			Tags:       []string{image.Name},
-			BuildArgs:  image.Build.Args,
-			Dockerfile: image.Build.Buildfile,
-			NoCache:    image.NoCache,
+			Tags:       []string{imgOpts.Name},
+			BuildArgs:  imgOpts.Build.Args,
+			Dockerfile: imgOpts.Build.Buildfile,
+			NoCache:    imgOpts.NoCache,
 		})
 		if errBuild != nil {
 			return nil, errBuild
@@ -81,15 +82,15 @@ func (d *dockerDriver) ImageEnsure(ctx context.Context, image types.ImageOptions
 		return &types.ImageStatusResponse{Status: types.ImageBuild, Progress: resp.Body}, nil
 	}
 	// Pull the specified image.
-	reader, err := d.cli.ImagePull(ctx, image.Name, dockertypes.ImagePullOptions{})
+	reader, err := d.cli.ImagePull(ctx, imgOpts.Name, image.PullOptions{})
 	if err != nil {
 		return &types.ImageStatusResponse{Status: types.ImageUnexpectedError}, err
 	}
 	return &types.ImageStatusResponse{Status: types.ImagePull, Progress: reader}, nil
 }
 
-func (d *dockerDriver) ImageRemove(ctx context.Context, image string, options types.ImageRemoveOptions) (*types.ImageRemoveResponse, error) {
-	_, err := d.cli.ImageRemove(ctx, image, dockertypes.ImageRemoveOptions(options))
+func (d *dockerDriver) ImageRemove(ctx context.Context, img string, options types.ImageRemoveOptions) (*types.ImageRemoveResponse, error) {
+	_, err := d.cli.ImageRemove(ctx, img, image.RemoveOptions(options))
 
 	if err != nil {
 		return nil, err
@@ -99,7 +100,7 @@ func (d *dockerDriver) ImageRemove(ctx context.Context, image string, options ty
 }
 
 func (d *dockerDriver) CopyToContainer(ctx context.Context, cid string, path string, content io.Reader, opts types.CopyToContainerOptions) error {
-	return d.cli.CopyToContainer(ctx, cid, path, content, dockertypes.CopyToContainerOptions(opts))
+	return d.cli.CopyToContainer(ctx, cid, path, content, container.CopyToContainerOptions(opts))
 }
 
 func (d *dockerDriver) CopyFromContainer(ctx context.Context, cid, srcPath string) (io.ReadCloser, types.ContainerPathStat, error) {

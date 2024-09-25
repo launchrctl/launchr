@@ -7,7 +7,6 @@ import (
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/action"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
-	"github.com/launchrctl/launchr/pkg/log"
 )
 
 const (
@@ -53,7 +52,8 @@ func addValueProcessors(m action.Manager, cfg launchr.Config) {
 
 func getByKeyProcessor(value interface{}, options map[string]interface{}, cfg launchr.Config) (interface{}, error) {
 	if value != nil {
-		log.Debug("skipping %s processor, value is not empty. Value remains unchanged", getConfigValue)
+		launchr.Term().Warning().Println("Skipping processor %q, value is not empty. Value will remain unchanged", getConfigValue)
+		launchr.Log().Warn("skipping processor, value is not empty", "processor", getConfigValue)
 		return value, nil
 	}
 

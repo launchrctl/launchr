@@ -2,13 +2,17 @@
 package launchr
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
+	"time"
+
+	flag "github.com/spf13/pflag"
 )
 
-// GetFsAbsPath returns absolute path for a FS struct.
+// GetFsAbsPath returns absolute path for a [fs.FS] struct.
 func GetFsAbsPath(fs fs.FS) string {
 	cwd := ""
 	rval := reflect.ValueOf(fs)
@@ -36,10 +40,28 @@ func EnsurePath(parts ...string) error {
 }
 
 // GetTypePkgPathName returns type package path and name for internal usage.
-func GetTypePkgPathName(v interface{}) (string, string) {
+func GetTypePkgPathName(v any) (string, string) {
 	t := reflect.TypeOf(v)
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	return t.PkgPath(), t.Name()
+}
+
+// IsCommandErrHelp checks if an error is a flag help err used for intercommunication.
+func IsCommandErrHelp(err error) bool {
+	return errors.Is(err, flag.ErrHelp)
+}
+
+// EstimateTime returns a function that runs callback with
+// the elapsed time between the call to timer and the call to
+// the returned function. The returned function is intended to
+// be used in a defer statement:
+//
+// defer EstimateTime("sum", func (diff time.Duration) { ... })().
+func EstimateTime(fn func(diff time.Duration)) func() {
+	start := time.Now()
+	return func() {
+		fn(time.Since(start))
+	}
 }

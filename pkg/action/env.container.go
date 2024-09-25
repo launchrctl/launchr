@@ -16,10 +16,9 @@ import (
 	"github.com/moby/sys/signal"
 	"github.com/moby/term"
 
-	"github.com/launchrctl/launchr/pkg/cli"
+	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/driver"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
-	"github.com/launchrctl/launchr/pkg/log"
 	"github.com/launchrctl/launchr/pkg/types"
 )
 
@@ -37,8 +36,9 @@ const (
 )
 
 type containerEnv struct {
-	driver driver.ContainerRunner
-	dtype  driver.Type
+	driver  driver.ContainerRunner
+	dtype   driver.Type
+	logWith []any
 
 	// Container related functionality extenders
 	imgres   ChainImageBuildResolver
@@ -78,7 +78,10 @@ func NewDockerEnvironment() RunEnvironment {
 
 // NewContainerEnvironment creates a new action container run environment.
 func NewContainerEnvironment(t driver.Type) RunEnvironment {
-	return &containerEnv{dtype: t, nameprv: ContainerNameProvider{Prefix: "launchr_", RandomSuffix: true}}
+	return &containerEnv{
+		dtype:   t,
+		nameprv: ContainerNameProvider{Prefix: "launchr_", RandomSuffix: true},
+	}
 }
 
 func (c *containerEnv) FlagsDefinition() OptionsList {
@@ -158,10 +161,18 @@ func (c *containerEnv) SetImageBuildCacheResolver(s *ImageBuildCacheResolver) { 
 func (c *containerEnv) SetContainerNameProvider(p ContainerNameProvider)      { c.nameprv = p }
 
 func (c *containerEnv) Init() (err error) {
+	c.logWith = nil
 	if c.driver == nil {
 		c.driver, err = driver.New(c.dtype)
 	}
 	return err
+}
+
+func (c *containerEnv) log(attrs ...any) *launchr.Slog {
+	if attrs != nil {
+		c.logWith = append(c.logWith, attrs...)
+	}
+	return launchr.Log().With(c.logWith...)
 }
 
 func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
@@ -172,7 +183,8 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	}
 	streams := a.GetInput().IO
 	actConf := a.ActionDef()
-	log.Debug("Starting execution of the action %q in %q environment, command %v", a.ID, c.dtype, actConf.Command)
+	log := c.log("run_env", c.dtype, "action_id", a.ID, "image", actConf.Image, "command", actConf.Command)
+	log.Debug("starting execution of the action")
 	// @todo consider reusing the same container and run exec
 	name := c.nameprv.Get(a.ID)
 	existing := c.driver.ContainerList(ctx, types.ContainerListOptions{SearchName: name})
@@ -207,7 +219,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		User:          getCurrentUser(),
 		Entrypoint:    entrypoint,
 	}
-	log.Debug("Creating a container for action %q", a.ID)
+	log.Debug("creating a container for an action")
 	cid, err := c.containerCreate(ctx, a, runConfig)
 	if err != nil {
 		return err
@@ -216,11 +228,12 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		return errors.New("error on creating a container")
 	}
 
-	log.Debug("Successfully created container %q for action %q", cid, a.ID)
+	log = c.log("container_id", cid)
+	log.Debug("successfully created a container for an action")
 	// Copy working dirs to the container.
 	if c.useVolWD {
 		// @todo test somehow.
-		cli.Println(`Flag "--%s" is set. Copying the working directory inside the container.`, containerFlagUseVolumeWD)
+		launchr.Term().Info().Printfln(`Flag "--%s" is set. Copying the working directory inside the container.`, containerFlagUseVolumeWD)
 		err = c.copyDirToContainer(ctx, cid, a.WorkDir(), containerHostMount)
 		if err != nil {
 			return err
@@ -237,14 +250,14 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	}
 
 	if !runConfig.Tty {
-		log.Debug("Start watching signals %q, action %q", cid, a.ID)
+		log.Debug("watching container signals")
 		sigc := notifyAllSignals()
 		go ForwardAllSignals(ctx, c.driver, cid, sigc)
 		defer signal.StopCatch(sigc)
 	}
 
 	// Attach streams to the terminal.
-	log.Debug("Attaching streams of %q, action %q", cid, a.ID)
+	log.Debug("attaching container streams")
 	cio, errCh, err := c.attachContainer(ctx, streams, cid, runConfig)
 	if err != nil {
 		return err
@@ -252,13 +265,13 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	defer func() {
 		_ = cio.Close()
 	}()
-	log.Debug("Watching status of %q, action %q", cid, a.ID)
+	log.Debug("watching run status of container")
 	statusCh := c.containerWait(ctx, cid, runConfig)
 
 	// Start the container
-	log.Debug("Starting container %q, action %q", cid, a.ID)
+	log.Debug("starting container")
 	if err = c.driver.ContainerStart(ctx, cid, types.ContainerStartOptions{}); err != nil {
-		log.Debug("Failed starting the container %q, action %q", cid, a.ID)
+		log.Debug("failed starting the container")
 		cancelFn()
 		<-errCh
 		if runConfig.AutoRemove {
@@ -269,13 +282,13 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 
 	// Resize TTY on window resize.
 	if runConfig.Tty {
-		log.Debug("Watching TTY resize %q, action %q", cid, a.ID)
+		log.Debug("watching TTY resize")
 		if err = driver.MonitorTtySize(ctx, c.driver, streams, cid, false); err != nil {
-			log.Err("Error monitoring TTY size:", err)
+			log.Error("error monitoring tty size", "error", err)
 		}
 	}
 
-	log.Debug("Waiting execution of %q, action %q", cid, a.ID)
+	log.Debug("waiting execution of the container")
 	if errCh != nil {
 		if err = <-errCh; err != nil {
 			if _, ok := err.(term.EscapeError); ok {
@@ -283,29 +296,28 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 				return nil
 			}
 
-			log.Debug("Error hijack: %s", err)
+			log.Debug("error hijack", "error", err)
 			return err
 		}
 	}
 
 	status := <-statusCh
 	// @todo maybe we should note that SIG was sent to the container. Code 130 is sent on Ctlr+C.
-	msg := fmt.Sprintf("action %q finished with the exit code %d", a.ID, status)
-	log.Info(msg)
+	log.Info("action finished with the exit code", "exit_code", status)
 	if status != 0 {
-		err = RunStatusError{code: status, msg: msg}
+		err = RunStatusError{code: status, actionID: a.ID}
 	}
 
 	// Copy back the result from the volume.
 	// @todo it's a bad implementation considering consequential runs, need to find a better way to sync with remote.
 	if c.useVolWD {
 		path := a.WorkDir()
-		cli.Println(`Flag "--%s" is set. Copying back the result of the action run.`, containerFlagUseVolumeWD)
+		launchr.Term().Info().Printfln(`Flag "--%s" is set. Copying back the result of the action run.`, containerFlagUseVolumeWD)
 		err = c.copyFromContainer(ctx, cid, containerHostMount, filepath.Dir(path), filepath.Base(path))
 		defer func() {
 			err = c.driver.ContainerRemove(ctx, cid, types.ContainerRemoveOptions{})
 			if err != nil {
-				log.Err("Error on cleaning the running environment: %v", err)
+				log.Error("error on cleaning the running environment", "error", err)
 			}
 		}()
 		if err != nil {
@@ -317,12 +329,12 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		if !c.removeImg {
 			return
 		}
-		log.Debug("Removing container %q, action %q", cid, a.ID)
+		log.Debug("removing container image after run")
 		errImg := c.imageRemove(ctx, a)
 		if errImg != nil {
-			log.Err("Image remove returned an error: %v", errImg)
+			log.Error("failed to remove image", "error", errImg)
 		} else {
-			cli.Println("Image %q was successfully removed", a.ActionDef().Image)
+			log.Debug("image was successfully removed")
 		}
 	}()
 
@@ -382,7 +394,7 @@ func (c *containerEnv) isRebuildRequired(bi *types.BuildDefinition) (bool, error
 	}
 
 	if errCache := c.imgccres.Save(); errCache != nil {
-		log.Warn("Failed to update actions.sum file: %v", errCache)
+		c.log().Warn("failed to update actions.sum file", "error", errCache)
 	}
 
 	return doRebuild, nil
@@ -409,11 +421,11 @@ func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
 	if err != nil {
 		return err
 	}
+
+	log := c.log()
 	switch status.Status {
 	case types.ImageExists:
-		msg := fmt.Sprintf("Image %q exists locally", image)
-		cli.Println(msg)
-		log.Info(msg)
+		log.Debug("image exists locally")
 	case types.ImagePull:
 		if status.Progress == nil {
 			break
@@ -421,13 +433,13 @@ func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
 		defer func() {
 			_ = status.Progress.Close()
 		}()
-		msg := fmt.Sprintf("Image %q doesn't exist locally, pulling from the registry", image)
-		cli.Println(msg)
-		log.Info(msg)
+		launchr.Term().Printfln("Image %q doesn't exist locally, pulling from the registry...", image)
+		log.Info("image doesn't exist locally, pulling from the registry")
 		// Output docker status only in Debug.
 		err = displayJSONMessages(status.Progress, streams)
 		if err != nil {
-			cli.Println("There was an error while pulling the image")
+			launchr.Term().Error().Println("Error occurred while pulling the image")
+			log.Error("error while pulling the image", "error", err)
 		}
 	case types.ImageBuild:
 		if status.Progress == nil {
@@ -436,20 +448,20 @@ func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
 		defer func() {
 			_ = status.Progress.Close()
 		}()
-		msg := fmt.Sprintf("Image %q doesn't exist locally, building...", image)
-		cli.Println(msg)
-		log.Info(msg)
+		launchr.Term().Printfln("Image %q doesn't exist locally, building...", image)
+		log.Info("image doesn't exist locally, building the image")
 		// Output docker status only in Debug.
 		err = displayJSONMessages(status.Progress, streams)
 		if err != nil {
-			cli.Println("There was an error while building the image")
+			launchr.Term().Error().Println("Error occurred while building the image")
+			log.Error("error while building the image", "error", err)
 		}
 	}
 
 	return err
 }
 
-func displayJSONMessages(in io.Reader, streams cli.Streams) error {
+func displayJSONMessages(in io.Reader, streams launchr.Streams) error {
 	err := jsonmessage.DisplayJSONMessagesToStream(in, streams.Out(), nil)
 	if err != nil {
 		if jerr, ok := err.(*jsonmessage.JSONError); ok {
@@ -601,6 +613,7 @@ func (c *containerEnv) copyFromContainer(ctx context.Context, cid, srcPath, dstP
 }
 
 func (c *containerEnv) containerWait(ctx context.Context, cid string, opts *types.ContainerCreateOptions) <-chan int {
+	log := c.log()
 	// Wait for the container to stop or catch error.
 	waitCond := types.WaitConditionNextExit
 	if opts.AutoRemove {
@@ -611,17 +624,18 @@ func (c *containerEnv) containerWait(ctx context.Context, cid string, opts *type
 	go func() {
 		select {
 		case err := <-errCh:
-			log.Err("error waiting for container: %v", err)
+			log.Error("error waiting for container", "error", err)
 			statusC <- 125
 		case res := <-resCh:
 			if res.Error != nil {
-				log.Err("error waiting for container: %v", res.Error)
+				log.Error("error in container run", "error", res.Error)
 				statusC <- 125
 			} else {
+				log.Debug("received run status code", "exit_code", res.StatusCode)
 				statusC <- res.StatusCode
 			}
 		case <-ctx.Done():
-			log.Info("stopping waiting for container on context finish")
+			log.Debug("stop waiting for container on context finish")
 			statusC <- 125
 		}
 	}()
@@ -629,7 +643,7 @@ func (c *containerEnv) containerWait(ctx context.Context, cid string, opts *type
 	return statusC
 }
 
-func (c *containerEnv) attachContainer(ctx context.Context, streams cli.Streams, cid string, opts *types.ContainerCreateOptions) (io.Closer, <-chan error, error) {
+func (c *containerEnv) attachContainer(ctx context.Context, streams launchr.Streams, cid string, opts *types.ContainerCreateOptions) (io.Closer, <-chan error, error) {
 	cio, errAttach := c.driver.ContainerAttach(ctx, cid, types.ContainerAttachOptions{
 		Stream: true,
 		Stdin:  opts.AttachStdin,

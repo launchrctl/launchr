@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/launchrctl/launchr/internal/launchr"
-	"github.com/launchrctl/launchr/pkg/log"
 )
 
 const actionsDirname = "actions"
@@ -38,7 +37,7 @@ type DiscoveryFS struct {
 	wd string
 }
 
-// NewDiscoveryFS creates a DiscoveryFS given fs - a filesystem to discover
+// NewDiscoveryFS creates a [DiscoveryFS] given fs - a filesystem to discover
 // and wd - working directory for an action, leave empty for current path.
 func NewDiscoveryFS(fs fs.FS, wd string) DiscoveryFS { return DiscoveryFS{fs, wd} }
 
@@ -61,7 +60,7 @@ type DiscoveryStrategy interface {
 
 // IDProvider provides an ID for an action.
 // It is used to generate an ID from an action declaration.
-// DefaultIDProvider is the default implementation based on action filepath.
+// [DefaultIDProvider] is the default implementation based on action filepath.
 type IDProvider interface {
 	GetID(a *Action) string
 }
@@ -114,7 +113,8 @@ func (ad *Discovery) findFiles(ctx context.Context) chan string {
 			select {
 			// Show feedback on a long-running walk.
 			case <-longOpTimeout:
-				log.Warn("It takes more time than expected to discover actions.\nProbably you are running outside a project directory.")
+				launchr.Term().Warning().
+					Printfln("It takes more time than expected to discover actions.\nProbably you are running outside a project directory.")
 			// Stop walking if the context has expired.
 			case <-ctx.Done():
 				return fs.SkipAll
@@ -145,7 +145,7 @@ func (ad *Discovery) findFiles(ctx context.Context) chan string {
 
 		if err != nil {
 			// @todo we shouldn't log here
-			log.Err("%v", err)
+			launchr.Log().Error("Error while discovering actions", "error", err)
 		}
 
 		close(ch)
@@ -155,10 +155,12 @@ func (ad *Discovery) findFiles(ctx context.Context) chan string {
 }
 
 // Discover traverses the file structure for a given discovery path.
-// Returns array of Action.
+// Returns array of [Action].
 // If an action is invalid, it's ignored.
 func (ad *Discovery) Discover(ctx context.Context) ([]*Action, error) {
-	defer log.DebugTimer("Action discovering")()
+	defer launchr.EstimateTime(func(diff time.Duration) {
+		launchr.Log().Debug("action discovering estimated time", "time", diff.Round(time.Millisecond))
+	})
 	wg := sync.WaitGroup{}
 	mx := sync.Mutex{}
 	actions := make([]*Action, 0, 32)
@@ -211,7 +213,7 @@ func (ad *Discovery) SetActionIDProvider(idp IDProvider) {
 // It generates action id by a filepath.
 type DefaultIDProvider struct{}
 
-// GetID implements IDProvider interface.
+// GetID implements [IDProvider] interface.
 // It parses action filename and returns CLI command name.
 // Empty string if the command name can't be generated.
 func (idp DefaultIDProvider) GetID(a *Action) string {

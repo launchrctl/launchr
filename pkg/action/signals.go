@@ -7,8 +7,8 @@ import (
 
 	"github.com/moby/sys/signal"
 
+	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/driver"
-	"github.com/launchrctl/launchr/pkg/log"
 )
 
 // ForwardAllSignals forwards signals to the container
@@ -50,7 +50,7 @@ func ForwardAllSignals(ctx context.Context, cli driver.ContainerRunner, cid stri
 		}
 
 		if err := cli.ContainerKill(ctx, cid, sig); err != nil {
-			log.Debug("Error sending signal: %s", err)
+			launchr.Log().Debug("error sending signal", "cid", cid, "error", err)
 		}
 	}
 }

@@ -5,16 +5,14 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/launchrctl/launchr/pkg/cli"
+	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
-	"github.com/launchrctl/launchr/pkg/log"
 )
 
 // CobraImpl returns cobra command implementation for an action command.
-func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
+func CobraImpl(a *Action, streams launchr.Streams) (*launchr.Command, error) {
 	def, err := a.Raw()
 	if err != nil {
 		return nil, err
@@ -27,14 +25,14 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 	}
 	options := make(TypeOpts)
 	runOpts := make(TypeOpts)
-	cmd := &cobra.Command{
+	cmd := &launchr.Command{
 		Use: use,
-		// Using custom args validation in ValidateInput.
+		// Using custom args validation in [action.ValidateInput].
 		// @todo: maybe we need a long template for arguments description
 		// @todo: have aliases documented in help
 		Short:   getDesc(actConf.Title, actConf.Description),
 		Aliases: actConf.Aliases,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *launchr.Command, args []string) error {
 			err = a.EnsureLoaded()
 			if err != nil {
 				return err
@@ -74,7 +72,7 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 	}
 
 	// Collect action flags.
-	err = setCobraOptions(cmd, actConf.Options, options)
+	err = setCommandOptions(cmd, actConf.Options, options)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +80,7 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 	globalFlags := []string{"help"}
 
 	if env, ok := a.env.(RunEnvironmentFlags); ok {
-		err = setCobraOptions(cmd, env.FlagsDefinition(), runOpts)
+		err = setCommandOptions(cmd, env.FlagsDefinition(), runOpts)
 		if err != nil {
 			return nil, err
 		}
@@ -98,7 +96,7 @@ func CobraImpl(a *Action, streams cli.Streams) (*cobra.Command, error) {
 	return cmd, nil
 }
 
-func updateUsageTemplate(cmd *cobra.Command, globalOpts []string) {
+func updateUsageTemplate(cmd *launchr.Command, globalOpts []string) {
 	cmd.InitDefaultHelpFlag()
 	originalFlags := cmd.LocalFlags()
 	if !originalFlags.HasAvailableFlags() {
@@ -164,7 +162,7 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 `
 }
 
-func filterFlags(cmd *cobra.Command, opts TypeOpts) TypeOpts {
+func filterFlags(cmd *launchr.Command, opts TypeOpts) TypeOpts {
 	filtered := make(TypeOpts)
 	for name, flag := range opts {
 		// Filter options not set.
@@ -175,7 +173,7 @@ func filterFlags(cmd *cobra.Command, opts TypeOpts) TypeOpts {
 	return filtered
 }
 
-func setCobraOptions(cmd *cobra.Command, defs OptionsList, opts TypeOpts) error {
+func setCommandOptions(cmd *launchr.Command, defs OptionsList, opts TypeOpts) error {
 	for _, opt := range defs {
 		v, err := setFlag(cmd, opt)
 		if err != nil {
@@ -207,8 +205,8 @@ func getDesc(title string, desc string) string {
 	return strings.Join(parts, ": ")
 }
 
-func setFlag(cmd *cobra.Command, opt *Option) (interface{}, error) {
-	var val interface{}
+func setFlag(cmd *launchr.Command, opt *Option) (any, error) {
+	var val any
 	desc := getDesc(opt.Title, opt.Description)
 	switch opt.Type {
 	case jsonschema.String:
@@ -239,7 +237,7 @@ func derefOpts(opts TypeOpts) TypeOpts {
 	return der
 }
 
-func derefOpt(v interface{}) interface{} {
+func derefOpt(v any) any {
 	switch v := v.(type) {
 	case *string:
 		return *v
@@ -251,7 +249,7 @@ func derefOpt(v interface{}) interface{} {
 		return *v
 	case *[]string:
 		// Cast to a slice of interface because jsonschema validator supports only such arrays.
-		toAny := make([]interface{}, len(*v))
+		toAny := make([]any, len(*v))
 		for i := 0; i < len(*v); i++ {
 			toAny[i] = (*v)[i]
 		}
@@ -259,7 +257,7 @@ func derefOpt(v interface{}) interface{} {
 	default:
 		// @todo recheck
 		if reflect.ValueOf(v).Kind() == reflect.Ptr {
-			log.Panic("error on a value dereferencing: unsupported %T", v)
+			panic(fmt.Sprintf("error on a value dereferencing: unsupported %T", v))
 		}
 		return v
 	}

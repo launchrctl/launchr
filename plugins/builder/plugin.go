@@ -4,24 +4,27 @@ package builder
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"time"
-
-	"github.com/spf13/cobra"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 )
 
 func init() {
-	launchr.RegisterPlugin(Plugin{})
+	launchr.RegisterPlugin(&Plugin{})
 }
 
-// Plugin is a plugin to build launchr application.
-type Plugin struct{}
+// Plugin is a [launchr.Plugin] to build launchr application.
+type Plugin struct {
+	app launchr.App
+}
 
-// PluginInfo implements launchr.Plugin interface.
-func (p Plugin) PluginInfo() launchr.PluginInfo {
-	return launchr.PluginInfo{}
+// PluginInfo implements [launchr.Plugin] interface.
+func (p *Plugin) PluginInfo() launchr.PluginInfo {
+	return launchr.PluginInfo{
+		Weight: math.MinInt,
+	}
 }
 
 type builderInput struct {
@@ -35,22 +38,28 @@ type builderInput struct {
 	debug   bool
 }
 
-// CobraAddCommands implements launchr.CobraPlugin interface to provide build functionality.
-func (p Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
+// OnAppInit implements [launchr.OnAppInitPlugin] interface.
+func (p *Plugin) OnAppInit(app launchr.App) error {
+	p.app = app
+	return nil
+}
+
+// CobraAddCommands implements [launchr.CobraPlugin] interface to provide build functionality.
+func (p *Plugin) CobraAddCommands(rootCmd *launchr.Command) error {
 	// Flag options.
 	flags := builderInput{}
 
-	buildCmd := &cobra.Command{
+	buildCmd := &launchr.Command{
 		Use:   "build",
-		Short: "Rebuilds application with specified configuration",
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		Short: "Builds application with specified configuration",
+		RunE: func(cmd *launchr.Command, _ []string) error {
 			// Don't show usage help on a runtime error.
 			cmd.SilenceUsage = true
-			return Execute(cmd.Context(), &flags)
+			return Execute(cmd.Context(), p.app.Streams(), &flags)
 		},
 	}
 	// Command flags.
-	buildCmd.Flags().StringVarP(&flags.name, "name", "n", "launchr", `Result application name`)
+	buildCmd.Flags().StringVarP(&flags.name, "name", "n", p.app.Name(), `Result application name`)
 	buildCmd.Flags().StringVarP(&flags.out, "output", "o", "", `Build output file, by default application name is used`)
 	buildCmd.Flags().StringVar(&flags.version, "build-version", "", `Arbitrary version of application`)
 	buildCmd.Flags().StringVarP(&flags.timeout, "timeout", "t", "120s", `Build timeout duration, example: 0, 100ms, 1h23m`)
@@ -63,7 +72,7 @@ func (p Plugin) CobraAddCommands(rootCmd *cobra.Command) error {
 }
 
 // Execute runs launchr and executes build of launchr.
-func Execute(ctx context.Context, flags *builderInput) error {
+func Execute(ctx context.Context, streams launchr.Streams, flags *builderInput) error {
 	// Set build timeout.
 	timeout, err := time.ParseDuration(flags.timeout)
 	if err != nil {
@@ -112,7 +121,7 @@ func Execute(ctx context.Context, flags *builderInput) error {
 		return err
 	}
 	defer builder.Close()
-	return builder.Build(ctx)
+	return builder.Build(ctx, streams)
 }
 
 func parsePlugins(plugins []string) ([]UsePluginInfo, error) {

@@ -16,8 +16,6 @@ import (
 	"golang.org/x/mod/module"
 
 	"github.com/launchrctl/launchr/internal/launchr"
-	"github.com/launchrctl/launchr/pkg/cli"
-	"github.com/launchrctl/launchr/pkg/log"
 )
 
 // Builder is the orchestrator to fetch dependencies and build launchr.
@@ -75,7 +73,7 @@ func (opts *BuildOptions) Validate() error {
 
 type genGoFile struct {
 	TmplName string
-	Vars     interface{}
+	Vars     any
 	Filename string
 }
 
@@ -103,11 +101,11 @@ func NewBuilder(opts *BuildOptions) (*Builder, error) {
 }
 
 // Build prepares build environment, generates go files and build the binary.
-func (b *Builder) Build(ctx context.Context) error {
-	cli.Println("Starting building %s", b.PkgName)
+func (b *Builder) Build(ctx context.Context, streams launchr.Streams) error {
+	launchr.Term().Info().Printfln("Starting to build %s", b.PkgName)
 	// Prepare build environment dir and go executable.
 	var err error
-	b.env, err = newBuildEnvironment()
+	b.env, err = newBuildEnvironment(streams)
 	if err != nil {
 		return err
 	}
@@ -118,10 +116,10 @@ func (b *Builder) Build(ctx context.Context) error {
 			_ = b.Close()
 		}
 	}()
-	log.Debug("Temporary folder: %s", b.env.wd)
+	launchr.Log().Debug("creating build environment", "temp_dir", b.env.wd, "env", b.env.env)
 
 	// Write files to dir and generate go mod.
-	cli.Println("Creating project files and fetching dependencies")
+	launchr.Term().Info().Println("Creating project files and fetching dependencies")
 	b.env.SetEnv("CGO_ENABLED", "0")
 	err = b.env.CreateModFile(ctx, b.BuildOptions)
 	if err != nil {
@@ -159,27 +157,27 @@ func (b *Builder) Build(ctx context.Context) error {
 	}
 
 	// prebuild
-	cli.Println("Executing prebuild scripts")
+	launchr.Term().Info().Println("Executing prebuild scripts")
 	err = b.preBuild(ctx)
 	if err != nil {
 		return err
 	}
 
 	// Build the main go package.
-	cli.Println("Building %s", b.PkgName)
+	launchr.Term().Info().Printfln("Building %s", b.PkgName)
 	err = b.goBuild(ctx)
 	if err != nil {
 		return err
 	}
 
-	cli.Println("Build complete: %s", b.BuildOutput)
+	launchr.Term().Success().Printfln("Build complete: %s", b.BuildOutput)
 	return nil
 }
 
 // Close does cleanup after build.
 func (b *Builder) Close() error {
 	if b.env != nil && !b.Debug {
-		log.Debug("Cleaning build environment: %s", b.env.wd)
+		launchr.Log().Debug("cleaning build environment directory", "dir", b.env.wd)
 		return b.env.Close()
 	}
 	return nil
@@ -255,20 +253,20 @@ func (b *Builder) preBuild(ctx context.Context) error {
 
 	for pluginName, v := range pluginVersionMap {
 		if _, ok := b.BuildOptions.ModReplace[pluginName]; ok {
-			log.Debug("skipping prebuild script for replaced plugin %s", pluginName)
+			launchr.Log().Debug("skipping prebuild script for replaced plugin", "plugin", pluginName)
 			continue
 		}
 
 		packagePath, _ := getModulePath(pluginName, v)
 		if _, err = os.Stat(packagePath); os.IsNotExist(err) {
-			log.Debug("you don't have this module/version installed (%s)", packagePath)
+			launchr.Log().Debug("module/version in not installed", "package", packagePath)
 			continue
 		}
 
 		// check if prebuild script exists.
 		prebuildScriptPath := filepath.Join(packagePath, "scripts", "prebuild.go")
 		if _, err = os.Stat(prebuildScriptPath); os.IsNotExist(err) {
-			log.Debug("prebuild script does not exist for %s, skipping", pluginName)
+			launchr.Log().Debug("prebuild script does not exist, skipping", "plugin", pluginName)
 			continue
 		}
 
@@ -286,7 +284,7 @@ func (b *Builder) preBuild(ctx context.Context) error {
 			return err
 		}
 
-		log.Debug("executing prebuild script for plugin %s", pluginName)
+		launchr.Log().Debug("executing prebuild script for plugin", "plugin", pluginName)
 		err = b.runGoRun(ctx, packagePath, []string{"scripts/prebuild.go", v, tmpPath})
 		if err != nil {
 			return err
@@ -300,7 +298,7 @@ func (b *Builder) preBuild(ctx context.Context) error {
 		}
 
 		// move assets from tmp dir to assets folder.
-		log.Debug("moving assets from tmp to build folder")
+		launchr.Log().Debug("moving assets from tmp to build folder")
 		err = cp.Copy(tmpPath, pluginAssetsPath, cp.Options{OnDirExists: func(_, _ string) cp.DirExistsAction {
 			return cp.Merge
 		}})
@@ -308,7 +306,7 @@ func (b *Builder) preBuild(ctx context.Context) error {
 			return err
 		}
 
-		log.Debug("removing tmp files")
+		launchr.Log().Debug("removing tmp files", "dir", tmpPath)
 		err = os.RemoveAll(tmpPath)
 		if err != nil {
 			return err
@@ -324,7 +322,7 @@ func (b *Builder) preBuild(ctx context.Context) error {
 	// prevent embed error in case of 0 assets in folder.
 	file, err := os.Create(filepath.Clean(filepath.Join(assetsPath, ".info")))
 	if err != nil {
-		fmt.Println(err.Error())
+		launchr.Term().Println(err)
 		os.Exit(2)
 	}
 	defer file.Close()

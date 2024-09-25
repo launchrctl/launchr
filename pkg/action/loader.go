@@ -130,8 +130,8 @@ Action definition is correct, but dashes are not allowed in templates, replace "
 }
 
 // ConvertInputToTplVars creates a map with input variables suitable for template engine.
-func ConvertInputToTplVars(input Input, ac *DefAction) map[string]interface{} {
-	values := make(map[string]interface{}, len(input.Args)+len(input.Opts))
+func ConvertInputToTplVars(input Input, ac *DefAction) map[string]any {
+	values := make(map[string]any, len(input.Args)+len(input.Opts))
 	// Collect argument values.
 	for _, arg := range ac.Arguments {
 		key := arg.Name
@@ -163,7 +163,7 @@ func ConvertInputToTplVars(input Input, ac *DefAction) map[string]interface{} {
 	return values
 }
 
-func addPredefinedVariables(data map[string]interface{}, a *Action) {
+func addPredefinedVariables(data map[string]any, a *Action) {
 	cuser := getCurrentUser()
 	// Set zeros for running in environments like Windows
 	data["current_uid"] = 0

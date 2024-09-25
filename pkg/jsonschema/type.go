@@ -16,7 +16,7 @@ const (
 	Unsupported Type = "UNSUPPORTED"
 )
 
-// TypeFromString creates a Type with enum validation.
+// TypeFromString creates a [Type] with enum validation.
 func TypeFromString(t string) Type {
 	if t == "" {
 		return String
@@ -40,5 +40,5 @@ type Schema struct {
 	Type        Type     `json:"type"`
 	Required    []string `json:"required"`
 	// @todo make a recursive type of properties.
-	Properties map[string]interface{} `json:"properties"`
+	Properties map[string]any `json:"properties"`
 }

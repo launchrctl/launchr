@@ -35,7 +35,6 @@ images:
     args:
       arg1: val1
       arg2: val2
-  my/image3:version: ./
 ...
 ```
 

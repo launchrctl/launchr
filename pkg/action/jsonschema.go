@@ -20,7 +20,7 @@ func (a *Action) JSONSchema() jsonschema.Schema {
 	return s
 }
 
-// JSONSchema returns jsonschema for the arguments and options of the action.
+// JSONSchema returns [jsonschema.Schema] for the arguments and options of the action.
 func (a *DefAction) JSONSchema() jsonschema.Schema {
 	// @todo maybe it should return only properties and not schema.
 	args, argsReq := a.Arguments.JSONSchema()
@@ -29,14 +29,14 @@ func (a *DefAction) JSONSchema() jsonschema.Schema {
 	return jsonschema.Schema{
 		Type:     jsonschema.Object,
 		Required: []string{"arguments"},
-		Properties: map[string]interface{}{
-			"arguments": map[string]interface{}{
+		Properties: map[string]any{
+			"arguments": map[string]any{
 				"type":       "object",
 				"title":      "Arguments",
 				"properties": args,
 				"required":   argsReq,
 			},
-			"options": map[string]interface{}{
+			"options": map[string]any{
 				"type":       "object",
 				"title":      "Options",
 				"properties": opts,
@@ -47,9 +47,9 @@ func (a *DefAction) JSONSchema() jsonschema.Schema {
 }
 
 // JSONSchema collects all arguments json schema definition and also returns fields that are required.
-func (l *ArgumentsList) JSONSchema() (map[string]interface{}, []string) {
+func (l *ArgumentsList) JSONSchema() (map[string]any, []string) {
 	s := *l
-	args := make(map[string]interface{}, len(s))
+	args := make(map[string]any, len(s))
 	req := make([]string, 0, len(s))
 	for i := 0; i < len(s); i++ {
 		args[s[i].Name] = s[i].JSONSchema()
@@ -59,16 +59,16 @@ func (l *ArgumentsList) JSONSchema() (map[string]interface{}, []string) {
 }
 
 // JSONSchema returns argument json schema definition.
-func (a *Argument) JSONSchema() map[string]interface{} {
+func (a *Argument) JSONSchema() map[string]any {
 	m := copyMap(a.RawMap)
 	removeRequiredBool(m)
 	return m
 }
 
 // JSONSchema collects all options json schema definition and also returns fields that are required.
-func (l *OptionsList) JSONSchema() (map[string]interface{}, []string) {
+func (l *OptionsList) JSONSchema() (map[string]any, []string) {
 	s := *l
-	opts := make(map[string]interface{}, len(s))
+	opts := make(map[string]any, len(s))
 	req := make([]string, 0, len(s))
 	for i := 0; i < len(s); i++ {
 		opts[s[i].Name] = s[i].JSONSchema()
@@ -80,13 +80,13 @@ func (l *OptionsList) JSONSchema() (map[string]interface{}, []string) {
 }
 
 // JSONSchema returns json schema definition of an option.
-func (o *Option) JSONSchema() map[string]interface{} {
+func (o *Option) JSONSchema() map[string]any {
 	m := copyMap(o.RawMap)
 	removeRequiredBool(m)
 	return m
 }
 
-func removeRequiredBool(m map[string]interface{}) {
+func removeRequiredBool(m map[string]any) {
 	// @todo that's not right, but currently the required field in action yaml doesn't comply with json schema.
 	delete(m, "required")
 }

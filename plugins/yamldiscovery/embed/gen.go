@@ -3,7 +3,6 @@ package embed
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"text/template"
@@ -51,17 +50,17 @@ type pluginVars struct {
 	StructName     string
 }
 
-// Generate implements launchr.GeneratePlugin interface.
+// Generate implements [launchr.GeneratePlugin] interface.
 func (p *Plugin) Generate(buildPath string, workDir string) (*launchr.PluginGeneratedData, error) {
 	// Generate actions tar.
-	fmt.Println("[INFO] Discovering actions")
+	launchr.Term().Info().Println("Discovering actions")
 	tarName, actions, err := createActionTar(os.DirFS(workDir), buildPath)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("[INFO] Discovered:")
+	launchr.Term().Info().Println("Discovered:")
 	for i, a := range actions {
-		fmt.Printf("%d. %s\n", i+1, a.ID)
+		launchr.Term().Info().Printfln("%d. %s", i+1, a.ID)
 	}
 	var id = "actions.yamldiscovery.gen"
 	tpl, err := template.New(id).Parse(pluginTemplate)
@@ -69,7 +68,7 @@ func (p *Plugin) Generate(buildPath string, workDir string) (*launchr.PluginGene
 		return nil, err
 	}
 
-	fmt.Println("[INFO] Generating embed actions go file")
+	launchr.Term().Info().Println("Generating embed actions go file")
 	var buf bytes.Buffer
 	structName := "ActionsYamlDiscoveryGen"
 	err = tpl.Execute(&buf, &pluginVars{

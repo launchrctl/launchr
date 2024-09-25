@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/launchrctl/launchr/pkg/log"
+	"github.com/launchrctl/launchr/internal/launchr"
 )
 
 type envVars []string
@@ -55,17 +55,23 @@ func (a *envVars) Unset(k string) {
 }
 
 type buildEnvironment struct {
-	wd  string
-	env envVars
+	wd      string
+	env     envVars
+	streams launchr.Streams
 }
 
-func newBuildEnvironment() (*buildEnvironment, error) {
+func newBuildEnvironment(streams launchr.Streams) (*buildEnvironment, error) {
 	tmpDir, err := os.MkdirTemp(".", "build_")
 	if err != nil {
 		return nil, err
 	}
 
-	return &buildEnvironment{wd: tmpDir, env: envFromOs()}, nil
+	env := envFromOs()
+	return &buildEnvironment{
+		wd:      tmpDir,
+		env:     env,
+		streams: streams,
+	}, nil
 }
 
 func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptions) error {
@@ -159,8 +165,8 @@ func (env *buildEnvironment) NewCommand(ctx context.Context, command string, arg
 	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.Dir = env.wd
 	cmd.Env = env.env
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = env.streams.Out()
+	cmd.Stderr = env.streams.Err()
 	return cmd
 }
 
@@ -170,7 +176,7 @@ func (env *buildEnvironment) execGoMod(ctx context.Context, args ...string) erro
 }
 
 func (env *buildEnvironment) execGoGet(ctx context.Context, args ...string) error {
-	cmd := env.NewCommand(ctx, env.Go(), append([]string{"get", "-d"}, args...)...)
+	cmd := env.NewCommand(ctx, env.Go(), append([]string{"get"}, args...)...)
 	return env.RunCmd(ctx, cmd)
 }
 
@@ -194,8 +200,7 @@ func (env *buildEnvironment) execGoList(ctx context.Context, args ...string) (st
 }
 
 func (env *buildEnvironment) RunCmd(ctx context.Context, cmd *exec.Cmd) error {
-	log.Debug("Executing shell: %s", cmd)
-	log.Debug("Shell env variables: %s", cmd.Env)
+	launchr.Log().Debug("executing shell", "cmd", cmd)
 	err := cmd.Start()
 	if err != nil {
 		return err

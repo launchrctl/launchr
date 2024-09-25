@@ -10,7 +10,7 @@ import (
 
 	jsvalidate "github.com/santhosh-tekuri/jsonschema/v5"
 
-	"github.com/launchrctl/launchr/pkg/cli"
+	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 	"github.com/launchrctl/launchr/pkg/types"
 )
@@ -32,33 +32,33 @@ type Action struct {
 	wd     string
 	fsdir  string      // fsdir is a base directory where the action was discovered (for better ID idp).
 	fpath  string      // fpath is a path to action definition file.
-	def    *Definition // def is an action definition. Loaded by Loader, may be nil when not initialized.
-	defRaw *Definition // defRaw is a raw action definition. Loaded by Loader, may be nil when not initialized.
+	def    *Definition // def is an action definition. Loaded by [Loader], may be nil when not initialized.
+	defRaw *Definition // defRaw is a raw action definition. Loaded by [Loader], may be nil when not initialized.
 
 	env        RunEnvironment            // env is the run environment driver to execute the action.
 	input      Input                     // input is a container for env variables.
-	processors map[string]ValueProcessor // processors are ValueProcessors for manipulating input.
+	processors map[string]ValueProcessor // processors are [ValueProcessor] for manipulating input.
 }
 
 // Input is a container for action input arguments and options.
 type Input struct {
 	Args     TypeArgs
 	Opts     TypeOpts
-	IO       cli.Streams // @todo should it be in Input?
+	IO       launchr.Streams // @todo should it be in Input?
 	ArgsRaw  []string
 	UserOpts TypeOpts
 }
 
 type (
 	// TypeArgs is a type alias for action arguments.
-	TypeArgs = map[string]interface{}
+	TypeArgs = map[string]any
 	// TypeOpts is a type alias for action options.
-	TypeOpts = map[string]interface{}
+	TypeOpts = map[string]any
 )
 
 // NewAction creates a new action.
 func NewAction(wd, fsdir, fpath string) *Action {
-	// We don't define ID here because we use Action object for
+	// We don't define ID here because we use [Action] object for
 	// context creation to calculate ID later.
 	return &Action{
 		wd:    wd,
@@ -82,7 +82,7 @@ func (a *Action) Clone() *Action {
 	return c
 }
 
-// SetProcessors sets the value processors for an Action.
+// SetProcessors sets the value processors for an [Action].
 func (a *Action) SetProcessors(list map[string]ValueProcessor) {
 	a.processors = list
 }
@@ -148,7 +148,7 @@ func (a *Action) ActionDef() *DefAction {
 	return a.def.Action
 }
 
-// ImageBuildInfo implements ImageBuildResolver.
+// ImageBuildInfo implements [ImageBuildResolver].
 func (a *Action) ImageBuildInfo(image string) *types.BuildDefinition {
 	return a.ActionDef().Build.ImageBuildInfo(image, a.Dir())
 }
@@ -220,7 +220,7 @@ func (a *Action) processArgs(args TypeArgs) error {
 	return nil
 }
 
-func (a *Action) processValue(value interface{}, valueType jsonschema.Type, toApplyProcessors []ValueProcessDef) (interface{}, error) {
+func (a *Action) processValue(value any, valueType jsonschema.Type, toApplyProcessors []ValueProcessDef) (any, error) {
 	newValue := value
 	processors := a.GetProcessors()
 
@@ -269,7 +269,7 @@ func (a *Action) validateJSONSchema(inp Input) error { //nolint:unused
 	if err != nil {
 		return err
 	}
-	err = sch.Validate(map[string]interface{}{
+	err = sch.Validate(map[string]any{
 		"arguments": inp.Args,
 		"options":   inp.Opts,
 	})
