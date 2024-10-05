@@ -2,7 +2,6 @@
 package builder
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"os"
@@ -99,7 +98,7 @@ func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptio
 		}
 	}
 	if !coreRepl {
-		err = env.execGoGet(ctx, opts.CorePkg.String())
+		err = env.execGoGet(ctx, opts.NoCache, opts.CorePkg.String())
 		if err != nil {
 			return err
 		}
@@ -114,7 +113,7 @@ nextPlugin:
 				continue nextPlugin
 			}
 		}
-		err = env.execGoGet(ctx, p.String())
+		err = env.execGoGet(ctx, opts.NoCache, p.String())
 		if err != nil {
 			return err
 		}
@@ -126,23 +125,10 @@ nextPlugin:
 
 func (env *buildEnvironment) CreateSourceFiles(ctx context.Context, files []genGoFile) error {
 	// Generate project files.
-	var buf bytes.Buffer
 	var err error
 	for _, f := range files {
-		buf.Reset()
-		// Render template.
-		err = tmplView.ExecuteTemplate(&buf, f.TmplName, f.Vars)
-		if err != nil {
-			return err
-		}
-		// Create target file with directories recursively.
-		target := filepath.Join(env.wd, f.Filename)
-		dir := filepath.Dir(target)
-		err = os.MkdirAll(dir, 0700)
-		if err != nil {
-			return err
-		}
-		err = os.WriteFile(target, buf.Bytes(), 0600)
+		// Generate the file.
+		err = f.WriteFile(filepath.Join(env.wd, f.file))
 		if err != nil {
 			return err
 		}
@@ -175,8 +161,12 @@ func (env *buildEnvironment) execGoMod(ctx context.Context, args ...string) erro
 	return env.RunCmd(ctx, cmd)
 }
 
-func (env *buildEnvironment) execGoGet(ctx context.Context, args ...string) error {
+func (env *buildEnvironment) execGoGet(ctx context.Context, nocache bool, args ...string) error {
 	cmd := env.NewCommand(ctx, env.Go(), append([]string{"get"}, args...)...)
+	if nocache {
+		// Download the dependencies directly.
+		cmd.Env = append(cmd.Env, "GOSUMDB=off", "GOPROXY=direct")
+	}
 	return env.RunCmd(ctx, cmd)
 }
 

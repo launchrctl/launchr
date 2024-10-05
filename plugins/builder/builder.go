@@ -2,7 +2,6 @@ package builder
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"go/build"
 	"os"
@@ -10,7 +9,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"text/template"
 
 	cp "github.com/otiai10/copy"
 	"golang.org/x/mod/module"
@@ -50,15 +48,16 @@ func (p UsePluginInfo) String() string {
 
 // BuildOptions stores launchr build parameters.
 type BuildOptions struct {
-	LaunchrVersion *launchr.AppVersion
-	Version        string
-	CorePkg        UsePluginInfo
-	PkgName        string
-	ModReplace     map[string]string
-	Plugins        []UsePluginInfo
-	BuildOutput    string
-	Debug          bool
-	Tags           []string
+	AppVersion  *launchr.AppVersion
+	Version     string
+	CorePkg     UsePluginInfo
+	PkgName     string
+	ModReplace  map[string]string
+	Plugins     []UsePluginInfo
+	BuildOutput string
+	Debug       bool
+	Tags        []string
+	NoCache     bool
 }
 
 var validPkgNameRegex = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
@@ -72,14 +71,9 @@ func (opts *BuildOptions) Validate() error {
 }
 
 type genGoFile struct {
-	TmplName string
-	Vars     any
-	Filename string
+	launchr.Template
+	file string
 }
-
-//go:embed tmpl/*.tmpl
-var embedTmplFs embed.FS
-var tmplView = template.Must(template.ParseFS(embedTmplFs, "tmpl/*.tmpl"))
 
 type buildVars struct {
 	PkgName string
@@ -119,7 +113,7 @@ func (b *Builder) Build(ctx context.Context, streams launchr.Streams) error {
 	launchr.Log().Debug("creating build environment", "temp_dir", b.env.wd, "env", b.env.env)
 
 	// Write files to dir and generate go mod.
-	launchr.Term().Info().Println("Creating project files and fetching dependencies")
+	launchr.Term().Info().Println("Creating the project files and fetching dependencies")
 	b.env.SetEnv("CGO_ENABLED", "0")
 	err = b.env.CreateModFile(ctx, b.BuildOptions)
 	if err != nil {
@@ -134,18 +128,19 @@ func (b *Builder) Build(ctx context.Context, streams launchr.Streams) error {
 		Cwd:     b.wd,
 	}
 	files := []genGoFile{
-		{"main.tmpl", &mainVars, "main.go"},
-		{"gen.tmpl", &mainVars, "gen.go"},
-		{"genpkg.tmpl", nil, "gen/pkg.go"},
+		{launchr.Template{Tmpl: tmplMain, Data: &mainVars}, "main.go"},
+		{launchr.Template{Tmpl: tmplGen, Data: &mainVars}, "gen.go"},
 	}
 
+	launchr.Term().Info().Println("Generating the go files")
 	err = b.env.CreateSourceFiles(ctx, files)
 	if err != nil {
 		return err
 	}
 
 	// Generate code for provided plugins.
-	err = b.runGen(ctx)
+	launchr.Term().Info().Println("Running plugin generation")
+	err = b.runGoGenerate(ctx)
 	if err != nil {
 		return err
 	}
@@ -157,6 +152,7 @@ func (b *Builder) Build(ctx context.Context, streams launchr.Streams) error {
 	}
 
 	// prebuild
+	// @todo remove
 	launchr.Term().Info().Println("Executing prebuild scripts")
 	err = b.preBuild(ctx)
 	if err != nil {
@@ -196,7 +192,7 @@ func (b *Builder) goBuild(ctx context.Context) error {
 	ldflags = append(
 		ldflags,
 		"-X", "'"+launchr.PkgPath+".name="+b.PkgName+"'",
-		"-X", "'"+launchr.PkgPath+".builtWith="+b.LaunchrVersion.Short()+"'",
+		"-X", "'"+launchr.PkgPath+".builtWith="+b.AppVersion.Short()+"'",
 	)
 
 	if b.Version != "" {
@@ -343,7 +339,7 @@ func (b *Builder) runGoRun(ctx context.Context, dir string, args []string) error
 	return b.env.RunCmd(ctx, cmd)
 }
 
-func (b *Builder) runGen(ctx context.Context) error {
+func (b *Builder) runGoGenerate(ctx context.Context) error {
 	genArgs := []string{"generate", "./..."}
 	cmd := b.env.NewCommand(ctx, b.env.Go(), genArgs...)
 	env := make(envVars, len(cmd.Env))

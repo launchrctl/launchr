@@ -35,6 +35,8 @@ type (
 	AppVersion = launchr.AppVersion
 	// Command is an application command to execute.
 	Command = launchr.Command
+	// Template provides templating functionality to generate files.
+	Template = launchr.Template
 
 	// Logger is a logger and its config holder struct.
 	Logger = launchr.Logger
@@ -68,8 +70,6 @@ type (
 	ActionsAlterPlugin = action.AlterActionsPlugin
 	// CobraPlugin is an interface to implement a plugin for cobra.
 	CobraPlugin = launchr.CobraPlugin
-	// PluginGeneratedData is a struct containing a result information of plugin generation.
-	PluginGeneratedData = launchr.PluginGeneratedData
 	// GeneratePlugin is an interface to generate supporting files before build.
 	GeneratePlugin = launchr.GeneratePlugin
 	// PluginManager handles plugins.

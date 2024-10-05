@@ -7,9 +7,8 @@ import (
 	"os"
 
 	"github.com/launchrctl/launchr"
-	_ "github.com/launchrctl/launchr/cmd/launchr/gen"
 )
 
 func main() {
-	os.Exit(launchr.Run(&launchr.AppOptions{}))
+	os.Exit(launchr.Run())
 }

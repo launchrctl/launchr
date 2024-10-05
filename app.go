@@ -42,17 +42,20 @@ type appImpl struct {
 	cfgDir  string
 
 	// Services.
-	streams       Streams
-	services      map[ServiceInfo]Service
-	actionMngr    action.Manager
-	pluginMngr    PluginManager
-	config        Config
-	assetsStorage embed.FS
+	streams    Streams
+	services   map[ServiceInfo]Service
+	actionMngr action.Manager
+	pluginMngr PluginManager
+	config     Config
 }
 
-// AppOptions represents the launchr application options.
-type AppOptions struct {
-	AssetsFs embed.FS
+var assetsStorage embed.FS
+
+// SetAssetsStorage stores assets for web client.
+// Deprecated: not supported. Plugins must define their dependencies using GeneratePlugin.
+// @todo remove
+func SetAssetsStorage(assets embed.FS) {
+	assetsStorage = assets
 }
 
 // getPluginByType returns specific plugins from the app.
@@ -81,8 +84,8 @@ func getPluginByType[T Plugin](app *appImpl) []T {
 	return res
 }
 
-func newApp(options *AppOptions) *appImpl {
-	return &appImpl{assetsStorage: options.AssetsFs}
+func newApp() *appImpl {
+	return &appImpl{}
 }
 
 func (app *appImpl) Name() string         { return name }
@@ -130,6 +133,7 @@ func (app *appImpl) GetService(v any) {
 	panic(fmt.Sprintf("service %q does not exist", stype))
 }
 
+// Deprecated: @todo remove
 func (app *appImpl) GetPluginAssets(p Plugin) fs.FS {
 	pluginsMap := app.pluginMngr.All()
 	var packagePath string
@@ -143,7 +147,7 @@ func (app *appImpl) GetPluginAssets(p Plugin) fs.FS {
 		panic(errors.New("trying to get assets for unknown plugin"))
 	}
 
-	subFS, err := fs.Sub(app.assetsStorage, filepath.Join("assets", packagePath))
+	subFS, err := fs.Sub(assetsStorage, filepath.Join("assets", packagePath))
 	if err != nil {
 		panic(fmt.Errorf(errTplAssetsNotFound, packagePath))
 	}
@@ -352,6 +356,6 @@ func (app *appImpl) Execute() int {
 }
 
 // Run executes launchr application.
-func Run(options *AppOptions) int {
-	return newApp(options).Execute()
+func Run() int {
+	return newApp().Execute()
 }

@@ -26,8 +26,6 @@ type Config interface {
 	DirPath() string
 	// Path provides an absolute path to launchr config directory.
 	Path(parts ...string) string
-	// EnsurePath creates all directories in the path.
-	EnsurePath(parts ...string) error
 	// Exists checks if key exists in config. Key level delimiter is dot.
 	// For example - `path.to.something`.
 	Exists(key string) bool
@@ -147,8 +145,4 @@ func (cfg *config) parse() error {
 func (cfg *config) Path(parts ...string) string {
 	parts = append([]string{cfg.rootPath}, parts...)
 	return filepath.Clean(filepath.Join(parts...))
-}
-
-func (cfg *config) EnsurePath(parts ...string) error {
-	return EnsurePath(cfg.Path(parts...))
 }

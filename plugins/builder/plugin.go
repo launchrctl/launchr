@@ -36,6 +36,7 @@ type builderInput struct {
 	plugins []string
 	replace []string
 	debug   bool
+	nocache bool
 }
 
 // OnAppInit implements [launchr.OnAppInitPlugin] interface.
@@ -67,6 +68,7 @@ func (p *Plugin) CobraAddCommands(rootCmd *launchr.Command) error {
 	buildCmd.Flags().StringSliceVarP(&flags.plugins, "plugin", "p", nil, `Include PLUGIN into the build with an optional version`)
 	buildCmd.Flags().StringSliceVarP(&flags.replace, "replace", "r", nil, `Replace go dependency, see "go mod edit -replace"`)
 	buildCmd.Flags().BoolVarP(&flags.debug, "debug", "d", false, `Include debug flags into the build to support go debugging with "delve". If not specified, debugging info is trimmed`)
+	buildCmd.Flags().BoolVarP(&flags.nocache, "no-cache", "", false, `Disable the usage of cache, e.g., when using 'go get' for dependencies.`)
 	rootCmd.AddCommand(buildCmd)
 	return nil
 }
@@ -101,15 +103,16 @@ func Execute(ctx context.Context, streams launchr.Streams, flags *builderInput) 
 	}
 
 	opts := &BuildOptions{
-		LaunchrVersion: launchr.Version(),
-		Version:        flags.version,
-		CorePkg:        UsePluginInfo{Path: launchr.PkgPath},
-		PkgName:        flags.name,
-		ModReplace:     replace,
-		Plugins:        plugins,
-		Tags:           flags.tags,
-		BuildOutput:    flags.out,
-		Debug:          flags.debug,
+		AppVersion:  launchr.Version(),
+		Version:     flags.version,
+		CorePkg:     UsePluginInfo{Path: launchr.PkgPath},
+		PkgName:     flags.name,
+		ModReplace:  replace,
+		Plugins:     plugins,
+		Tags:        flags.tags,
+		BuildOutput: flags.out,
+		Debug:       flags.debug,
+		NoCache:     flags.nocache,
 	}
 
 	if err = opts.Validate(); err != nil {
