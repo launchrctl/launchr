@@ -6,7 +6,10 @@ package main
 import (
 	"embed"
 
-	core "{{.CorePkg.Path}}"
+	_ "{{.CorePkg.Path}}"
+	{{range .Plugins}}
+	_ "{{.Path}}"
+	{{- end}}
 )
 
 //go:embed assets/*
