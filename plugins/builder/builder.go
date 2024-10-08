@@ -128,7 +128,9 @@ func (b *Builder) Build(ctx context.Context, streams launchr.Streams) error {
 		Cwd:     b.wd,
 	}
 	files := []genGoFile{
-		{launchr.Template{Tmpl: tmplMain, Data: &mainVars}, "main.go"},
+		// Create files that will generate the main code.
+		// See [Plugin.Generate] in plugin.go for main.go file generation.
+		{launchr.Template{Tmpl: tmplPlugins, Data: &mainVars}, "plugins.go"},
 		{launchr.Template{Tmpl: tmplGen, Data: &mainVars}, "gen.go"},
 	}
 

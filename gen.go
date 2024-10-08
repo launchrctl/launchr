@@ -50,3 +50,8 @@ func (app *appImpl) Generate() int {
 func Gen() int {
 	return newApp().Generate()
 }
+
+// GenAndExit runs the generation and exits with a result code.
+func GenAndExit() {
+	os.Exit(Gen())
+}

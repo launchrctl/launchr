@@ -252,8 +252,8 @@ func (app *appImpl) discoverActions() (err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	for _, p := range getPluginByType[action.DiscoveryPlugin](app) {
-		for _, fs := range app.GetRegisteredFS() {
-			actions, errDis := p.DiscoverActions(ctx, fs, idp)
+		for _, regfs := range app.GetRegisteredFS() {
+			actions, errDis := p.DiscoverActions(ctx, regfs, idp)
 			if errDis != nil {
 				return errDis
 			}
@@ -355,7 +355,12 @@ func (app *appImpl) Execute() int {
 	return 0
 }
 
-// Run executes launchr application.
+// Run executes the application.
 func Run() int {
 	return newApp().Execute()
+}
+
+// RunAndExit runs the application and exits with a result code.
+func RunAndExit() {
+	os.Exit(Run())
 }

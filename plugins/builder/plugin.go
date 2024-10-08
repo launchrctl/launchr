@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -73,6 +74,18 @@ func (p *Plugin) CobraAddCommands(rootCmd *launchr.Command) error {
 	return nil
 }
 
+// Generate implements [launchr.GeneratePlugin] interface.
+func (p *Plugin) Generate(buildPath string, _ string) error {
+	launchr.Term().Info().Println("Generating main.go file")
+	tpl := launchr.Template{
+		Tmpl: tmplMain,
+		Data: &buildVars{
+			CorePkg: corePkgInfo(),
+		},
+	}
+	return tpl.WriteFile(filepath.Join(buildPath, "main.go"))
+}
+
 // Execute runs launchr and executes build of launchr.
 func Execute(ctx context.Context, streams launchr.Streams, flags *builderInput) error {
 	// Set build timeout.
@@ -105,7 +118,7 @@ func Execute(ctx context.Context, streams launchr.Streams, flags *builderInput) 
 	opts := &BuildOptions{
 		AppVersion:  launchr.Version(),
 		Version:     flags.version,
-		CorePkg:     UsePluginInfo{Path: launchr.PkgPath},
+		CorePkg:     corePkgInfo(),
 		PkgName:     flags.name,
 		ModReplace:  replace,
 		Plugins:     plugins,
@@ -125,6 +138,10 @@ func Execute(ctx context.Context, streams launchr.Streams, flags *builderInput) 
 	}
 	defer builder.Close()
 	return builder.Build(ctx, streams)
+}
+
+func corePkgInfo() UsePluginInfo {
+	return UsePluginInfo{Path: launchr.PkgPath}
 }
 
 func parsePlugins(plugins []string) ([]UsePluginInfo, error) {
