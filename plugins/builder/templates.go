@@ -6,7 +6,7 @@ package main
 import (
 	"embed"
 
-	_ "{{.CorePkg.Path}}"
+	core "{{.CorePkg.Path}}"
 	{{range .Plugins}}
 	_ "{{.Path}}"
 	{{- end}}
