@@ -2,10 +2,13 @@
 package builder
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -77,13 +80,65 @@ func (p *Plugin) CobraAddCommands(rootCmd *launchr.Command) error {
 // Generate implements [launchr.GeneratePlugin] interface.
 func (p *Plugin) Generate(buildPath string, _ string) error {
 	launchr.Term().Info().Println("Generating main.go file")
+
+	// Temporary solution to build with an old version.
+	// @todo remove when the new version is released.
+	var imports []UsePluginInfo
+	_, err := os.Stat(filepath.Join(buildPath, "plugins.go"))
+	if os.IsNotExist(err) {
+		imports, err = extractGenImports(filepath.Join(buildPath, "gen.go"))
+		if err != nil {
+			return err
+		}
+	}
+
 	tpl := launchr.Template{
 		Tmpl: tmplMain,
 		Data: &buildVars{
 			CorePkg: corePkgInfo(),
+			Plugins: imports,
 		},
 	}
 	return tpl.WriteFile(filepath.Join(buildPath, "main.go"))
+}
+
+// Deprecated: remove when the new version is deployed.
+func extractGenImports(genpath string) ([]UsePluginInfo, error) {
+	// Open the file
+	file, err := os.Open(genpath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var imports []UsePluginInfo
+	readingImports := false
+	scanner := bufio.NewScanner(file)
+	importRegex := regexp.MustCompile(`^\s*(_|\w+\s+)?"([^"]+)"`)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "import (" {
+			readingImports = true
+			continue
+		}
+		if line == ")" {
+			readingImports = false
+			break
+		}
+		// If we are in the imports section, collect the import paths
+		if readingImports {
+			matches := importRegex.FindStringSubmatch(line)
+			if len(matches) > 1 && matches[2] != launchr.PkgPath {
+				imports = append(imports, UsePluginInfo{Path: matches[2]})
+			}
+		}
+	}
+
+	if err = scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	return imports, nil
 }
 
 // Execute runs launchr and executes build of launchr.
