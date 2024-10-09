@@ -52,7 +52,7 @@ func TarGzEmbedActions(f io.Writer, baseDir string, actions []*action.Action) er
 		}
 
 		h := &tar.Header{
-			Name:    strings.TrimPrefix(string(filepath.Separator), strings.TrimPrefix(a.Filepath(), baseDir)),
+			Name:    strings.TrimPrefix(a.Filepath(), baseDir),
 			Mode:    0600,
 			ModTime: now,
 			Size:    int64(len(c)),

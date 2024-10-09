@@ -8,4 +8,5 @@ import (
 	_ "github.com/launchrctl/launchr/plugins/builtinprocessors"
 	_ "github.com/launchrctl/launchr/plugins/verbosity"
 	_ "github.com/launchrctl/launchr/plugins/yamldiscovery"
+	_ "github.com/launchrctl/launchr/plugins/yamldiscovery/embed"
 )
