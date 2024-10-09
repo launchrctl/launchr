@@ -31,6 +31,39 @@ func NewDockerDriver() (ContainerRunner, error) {
 	return &dockerDriver{cli: c}, nil
 }
 
+func (d *dockerDriver) Info(ctx context.Context) (types.SystemInfo, error) {
+	info, err := d.cli.Info(ctx)
+	if err != nil {
+		return types.SystemInfo{}, err
+	}
+	return types.SystemInfo{
+		ID:              info.ID,
+		Name:            info.Name,
+		ServerVersion:   info.ServerVersion,
+		KernelVersion:   info.KernelVersion,
+		OperatingSystem: info.OperatingSystem,
+		OSVersion:       info.OSVersion,
+		OSType:          info.OSType,
+		Architecture:    info.Architecture,
+		NCPU:            info.NCPU,
+		MemTotal:        info.MemTotal,
+		SecurityOptions: info.SecurityOptions,
+	}, nil
+}
+
+func (d *dockerDriver) IsSELinuxSupported(ctx context.Context) bool {
+	info, errInfo := d.cli.Info(ctx)
+	if errInfo != nil {
+		return false
+	}
+	for i := 0; i < len(info.SecurityOptions); i++ {
+		if info.SecurityOptions[i] == "name=selinux" {
+			return true
+		}
+	}
+	return false
+}
+
 func (d *dockerDriver) ContainerList(ctx context.Context, opts types.ContainerListOptions) []types.ContainerListResult {
 	f := filters.NewArgs()
 	f.Add("name", opts.SearchName)

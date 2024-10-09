@@ -26,7 +26,7 @@ func (e RunStatusError) GetCode() int {
 // RunEnvironment is a common interface for all action run environments.
 type RunEnvironment interface {
 	// Init prepares the run environment.
-	Init() error
+	Init(ctx context.Context) error
 	// Execute runs action a in the environment and operates with IO through streams.
 	Execute(ctx context.Context, a *Action) error
 	// Close does wrap up operations.

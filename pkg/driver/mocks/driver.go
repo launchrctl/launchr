@@ -275,3 +275,18 @@ func (mr *MockContainerRunnerMockRecorder) ImageRemove(arg0, arg1, arg2 any) *go
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImageRemove", reflect.TypeOf((*MockContainerRunner)(nil).ImageRemove), arg0, arg1, arg2)
 }
+
+// Info mocks base method.
+func (m *MockContainerRunner) Info(arg0 context.Context) (types.SystemInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Info", arg0)
+	ret0, _ := ret[0].(types.SystemInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Info indicates an expected call of Info.
+func (mr *MockContainerRunnerMockRecorder) Info(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Info", reflect.TypeOf((*MockContainerRunner)(nil).Info), arg0)
+}
