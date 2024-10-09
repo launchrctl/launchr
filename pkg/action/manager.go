@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/launchrctl/launchr/internal/launchr"
-	"github.com/launchrctl/launchr/pkg/log"
 )
 
 // Manager handles actions and its execution.
@@ -17,12 +16,12 @@ type Manager interface {
 	// All returns all actions copied and decorated.
 	All() map[string]*Action
 	// AllRef returns all original action values from the storage.
-	// Deprecated: use ManagerUnsafe.AllUnsafe instead.
+	// Deprecated: use [ManagerUnsafe.AllUnsafe] instead.
 	AllRef() map[string]*Action
 	// Get returns a copy of an action from the manager with default decorators.
 	Get(id string) (*Action, bool)
 	// GetRef returns an original action value from the storage.
-	// Deprecated: use ManagerUnsafe.GetUnsafe instead.
+	// Deprecated: use [ManagerUnsafe.GetUnsafe] instead.
 	GetRef(id string) (*Action, bool)
 	// Add saves an action in the manager.
 	Add(*Action)
@@ -37,7 +36,7 @@ type Manager interface {
 	// GetActionIDProvider returns global application action id provider.
 	GetActionIDProvider() IDProvider
 	// SetActionIDProvider sets global application action id provider.
-	// This id provider will be used as default on Action discovery process.
+	// This id provider will be used as default on [Action] discovery process.
 	SetActionIDProvider(p IDProvider)
 
 	// AddValueProcessor adds processor to list of available processors
@@ -57,7 +56,7 @@ type Manager interface {
 	RunInfoByID(id string) (RunInfo, bool)
 }
 
-// ManagerUnsafe is an extension of the Manager interface that provides unsafe access to actions.
+// ManagerUnsafe is an extension of the [Manager] interface that provides unsafe access to actions.
 // Warning: Use this with caution!
 type ManagerUnsafe interface {
 	Manager
@@ -65,14 +64,14 @@ type ManagerUnsafe interface {
 	// Use this method only if you need read-only access to the actions without allocating new memory.
 	// Warning: It is unsafe to manipulate these actions directly as they are the original instances
 	// affecting the entire application.
-	// Normally, for action execution you should use the Manager.Get or Manager.All methods,
+	// Normally, for action execution you should use the [Manager.Get] or [Manager.All] methods,
 	// which provide actions configured for execution.
 	AllUnsafe() map[string]*Action
 	// GetUnsafe returns the original action value from the storage.
 	GetUnsafe(id string) (*Action, bool)
 }
 
-// DecorateWithFn is a type alias for functions accepted in a Manager.Decorate interface method.
+// DecorateWithFn is a type alias for functions accepted in a [Manager.Decorate] interface method.
 type DecorateWithFn = func(m Manager, a *Action)
 
 type actionManagerMap struct {
@@ -114,7 +113,7 @@ func (m *actionManagerMap) Add(a *Action) {
 	for _, alias := range def.Action.Aliases {
 		id, ok := m.actionAliases[alias]
 		if ok {
-			log.Warn("Alias %q is already defined by %q", alias, id)
+			launchr.Term().Warning().Printfln("Alias %q is already defined by %q", alias, id)
 		} else {
 			m.actionAliases[alias] = a.ID
 		}
@@ -300,12 +299,12 @@ func (m *actionManagerMap) RunInfoByID(id string) (RunInfo, bool) {
 	return ri, ok
 }
 
-// WithDefaultRunEnvironment adds a default RunEnvironment for an action.
+// WithDefaultRunEnvironment adds a default [RunEnvironment] for an action.
 func WithDefaultRunEnvironment(m Manager, a *Action) {
 	a.SetRunEnvironment(m.DefaultRunEnvironment())
 }
 
-// WithContainerRunEnvironmentConfig configures a ContainerRunEnvironment.
+// WithContainerRunEnvironmentConfig configures a [ContainerRunEnvironment].
 func WithContainerRunEnvironmentConfig(cfg launchr.Config, prefix string) DecorateWithFn {
 	r := LaunchrConfigImageBuildResolver{cfg}
 	ccr := NewImageBuildCacheResolver(cfg)

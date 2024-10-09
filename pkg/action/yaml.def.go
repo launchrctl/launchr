@@ -38,7 +38,7 @@ func (err errUnsupportedActionVersion) Error() string {
 	return fmt.Sprintf("unsupported version %q of an action file", err.version)
 }
 
-// Is implements errors.Is interface.
+// Is implements [errors.Is] interface.
 func (err errUnsupportedActionVersion) Is(cmp error) bool {
 	var errCmp errUnsupportedActionVersion
 	ok := errors.As(cmp, &errCmp)
@@ -52,7 +52,7 @@ var (
 )
 
 // CreateFromYaml creates an action file definition from yaml configuration.
-// It returns pointer to Definition or nil on error.
+// It returns pointer to [Definition] or nil on error.
 func CreateFromYaml(r io.Reader) (*Definition, error) {
 	d := Definition{}
 	decoder := yaml.NewDecoder(r)
@@ -74,7 +74,7 @@ func CreateFromYaml(r io.Reader) (*Definition, error) {
 }
 
 // CreateFromYamlTpl creates an action file definition from yaml configuration
-// as CreateFromYaml but considers that it has unescaped template values.
+// as [CreateFromYaml] but considers that it has unescaped template values.
 func CreateFromYamlTpl(b []byte) (*Definition, error) {
 	// Find unescaped occurrences of template elements.
 	bufRaw := rgxUnescTplRow.ReplaceAllFunc(b, func(match []byte) []byte {
@@ -91,26 +91,26 @@ type Definition struct {
 	Action  *DefAction `yaml:"action"`
 }
 
-// Content implements Loader interface.
+// Content implements [Loader] interface.
 func (d *Definition) Content() ([]byte, error) {
 	w := &bytes.Buffer{}
 	err := yaml.NewEncoder(w).Encode(d)
 	return w.Bytes(), err
 }
 
-// Load implements Loader interface.
+// Load implements [Loader] interface.
 func (d *Definition) Load(_ LoadContext) (*Definition, error) {
 	return d.LoadRaw()
 }
 
-// LoadRaw implements Loader interface.
+// LoadRaw implements [Loader] interface.
 func (d *Definition) LoadRaw() (*Definition, error) {
 	return d, nil
 }
 
 var yamlTree = newGlobalYamlParseMeta()
 
-// UnmarshalYAML implements yaml.Unmarshaler to parse action definition.
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse action definition.
 func (d *Definition) UnmarshalYAML(node *yaml.Node) (err error) {
 	type yamlDef Definition
 	var yd yamlDef
@@ -150,7 +150,7 @@ type DefAction struct {
 	User        string                 `yaml:"user"`
 }
 
-// UnmarshalYAML implements yaml.Unmarshaler to parse action definition.
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse action definition.
 func (a *DefAction) UnmarshalYAML(n *yaml.Node) (err error) {
 	type yamlT DefAction
 	var y yamlT
@@ -173,7 +173,7 @@ func (a *DefAction) UnmarshalYAML(n *yaml.Node) (err error) {
 // StrSlice is an array of strings for command execution.
 type StrSlice []string
 
-// UnmarshalYAML implements yaml.Unmarshaler to parse a string or a list of strings.
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse a string or a list of strings.
 func (l *StrSlice) UnmarshalYAML(n *yaml.Node) (err error) {
 	if n.Kind == yaml.ScalarNode {
 		return yamlTypeErrorLine(sErrArrEl, n.Line, n.Column)
@@ -190,7 +190,7 @@ func (l *StrSlice) UnmarshalYAML(n *yaml.Node) (err error) {
 // StrSliceOrStr is an array of strings for command execution.
 type StrSliceOrStr []string
 
-// UnmarshalYAML implements yaml.Unmarshaler to parse a string or a list of strings.
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse a string or a list of strings.
 func (l *StrSliceOrStr) UnmarshalYAML(n *yaml.Node) (err error) {
 	type yamlT StrSliceOrStr
 	if n.Kind == yaml.ScalarNode {
@@ -211,7 +211,7 @@ func (l *StrSliceOrStr) UnmarshalYAML(n *yaml.Node) (err error) {
 // EnvSlice is an array of env vars or key-value.
 type EnvSlice []string
 
-// UnmarshalYAML implements yaml.Unmarshaler to parse env []string or map[string]string.
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse env []string or map[string]string.
 func (l *EnvSlice) UnmarshalYAML(n *yaml.Node) (err error) {
 	if n.Kind == yaml.MappingNode {
 		var m map[string]string
@@ -244,7 +244,7 @@ func (l *EnvSlice) UnmarshalYAML(n *yaml.Node) (err error) {
 // ArgumentsList is used for custom yaml parsing of arguments list.
 type ArgumentsList []*Argument
 
-// UnmarshalYAML implements yaml.Unmarshaler to parse for ArgumentsList.
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse for [ArgumentsList].
 func (l *ArgumentsList) UnmarshalYAML(nodeList *yaml.Node) (err error) {
 	*l, err = unmarshalListYaml[*Argument](nodeList)
 	return err
@@ -257,10 +257,10 @@ type Argument struct {
 	Description string            `yaml:"description"`
 	Type        jsonschema.Type   `yaml:"type"`
 	Process     []ValueProcessDef `yaml:"process"`
-	RawMap      map[string]interface{}
+	RawMap      map[string]any
 }
 
-// UnmarshalYAML implements yaml.Unmarshaler to parse Argument.
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse [Argument].
 func (a *Argument) UnmarshalYAML(node *yaml.Node) (err error) {
 	type yamlT Argument
 	var y yamlT
@@ -275,7 +275,7 @@ func (a *Argument) UnmarshalYAML(node *yaml.Node) (err error) {
 // OptionsList is used for custom yaml parsing of options list.
 type OptionsList []*Option
 
-// UnmarshalYAML implements yaml.Unmarshaler to parse OptionsList.
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse [OptionsList].
 func (l *OptionsList) UnmarshalYAML(nodeList *yaml.Node) (err error) {
 	*l, err = unmarshalListYaml[*Option](nodeList)
 	return err
@@ -288,19 +288,19 @@ type Option struct {
 	Title       string            `yaml:"title"`
 	Description string            `yaml:"description"`
 	Type        jsonschema.Type   `yaml:"type"`
-	Default     interface{}       `yaml:"default"`
+	Default     any               `yaml:"default"`
 	Required    bool              `yaml:"required"` // @todo that conflicts with json schema object definition
 	Process     []ValueProcessDef `yaml:"process"`
-	RawMap      map[string]interface{}
+	RawMap      map[string]any
 }
 
 // ValueProcessDef stores information about processor and options that should be applied to processor.
 type ValueProcessDef struct {
-	Processor string                 `yaml:"processor"`
-	Options   map[string]interface{} `yaml:"options"`
+	Processor string         `yaml:"processor"`
+	Options   map[string]any `yaml:"options"`
 }
 
-// UnmarshalYAML implements yaml.Unmarshaler to parse Option.
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse [Option].
 func (o *Option) UnmarshalYAML(node *yaml.Node) (err error) {
 	type yamlT Option
 	var y yamlT
@@ -325,7 +325,7 @@ func unmarshalVarYaml(n *yaml.Node, v any, errStr []string) (err error) {
 	vname := reflectValRef(v, "Name").(*string)
 	vtype := reflectValRef(v, "Type").(*jsonschema.Type)
 	vtitle := reflectValRef(v, "Title").(*string)
-	vraw := reflectValRef(v, "RawMap").(*map[string]interface{})
+	vraw := reflectValRef(v, "RawMap").(*map[string]any)
 
 	if *vname == "" {
 		return yamlTypeErrorLine(errStr[0], n.Line, n.Column)
@@ -351,9 +351,9 @@ func unmarshalVarYaml(n *yaml.Node, v any, errStr []string) (err error) {
 	(*vraw)["type"] = *vtype
 	// @todo review hardcoded array elements types when array is properly implemented.
 	if *vtype == jsonschema.Array {
-		items, ok := (*vraw)["items"].(map[string]interface{})
+		items, ok := (*vraw)["items"].(map[string]any)
 		if !ok {
-			items = map[string]interface{}{}
+			items = map[string]any{}
 		}
 
 		items["type"] = jsonschema.String

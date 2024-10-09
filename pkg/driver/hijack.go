@@ -12,9 +12,8 @@ import (
 	"github.com/moby/moby/pkg/stdcopy"
 	"github.com/moby/term"
 
-	"github.com/launchrctl/launchr/pkg/cli"
-	"github.com/launchrctl/launchr/pkg/log"
-	types2 "github.com/launchrctl/launchr/pkg/types"
+	"github.com/launchrctl/launchr/internal/launchr"
+	ltypes "github.com/launchrctl/launchr/pkg/types"
 )
 
 // The default escape key sequence: ctrl-p, ctrl-q
@@ -47,7 +46,7 @@ type Streamer interface {
 
 // ContainerIOStream streams in/out/err to given streams.
 // @todo consider license reference.
-func ContainerIOStream(ctx context.Context, streams cli.Streams, cio *ContainerInOut, config *types2.ContainerCreateOptions) error {
+func ContainerIOStream(ctx context.Context, streams launchr.Streams, cio *ContainerInOut, config *ltypes.ContainerCreateOptions) error {
 	var (
 		out, cerr io.Writer
 		in        io.ReadCloser
@@ -80,7 +79,7 @@ func ContainerIOStream(ctx context.Context, streams cli.Streams, cio *ContainerI
 }
 
 type hijackedIOStreamer struct {
-	streams      cli.Streams
+	streams      launchr.Streams
 	inputStream  io.ReadCloser
 	outputStream io.Writer
 	errorStream  io.Writer
@@ -151,7 +150,7 @@ func (h *hijackedIOStreamer) setupInput() (restore func(), err error) {
 	if h.detachKeys != "" {
 		customEscapeKeys, err := term.ToBytes(h.detachKeys)
 		if err != nil {
-			log.Warn("invalid detach escape keys, using default: %s", err)
+			launchr.Log().Warn("invalid detach escape keys, using default", "error", err)
 		} else {
 			escapeKeys = customEscapeKeys
 		}
@@ -183,10 +182,10 @@ func (h *hijackedIOStreamer) beginOutputStream(restoreInput func()) <-chan error
 			_, err = stdcopy.StdCopy(h.outputStream, h.errorStream, h.io.Out)
 		}
 
-		log.Debug("[hijack] End of stdout")
+		launchr.Log().Debug("[hijack] End of stdout")
 
 		if err != nil {
-			log.Debug("Error receiveStdout: %s", err)
+			launchr.Log().Debug("error receive stdout", "error", err)
 		}
 
 		outputDone <- err
@@ -207,7 +206,7 @@ func (h *hijackedIOStreamer) beginInputStream(restoreInput func()) (doneC <-chan
 			// messages will be in normal type.
 			restoreInput()
 
-			log.Debug("[hijack] End of stdin")
+			launchr.Log().Debug("[hijack] End of stdin")
 			if _, ok := err.(term.EscapeError); ok {
 				detached <- err
 				return
@@ -217,12 +216,12 @@ func (h *hijackedIOStreamer) beginInputStream(restoreInput func()) (doneC <-chan
 				// This error will also occur on the receive
 				// side (from stdout) where it will be
 				// propagated back to the caller.
-				log.Debug("Error sendStdin: %s", err)
+				launchr.Log().Debug("Error send Stdin", "error", err)
 			}
 		}
 
 		if err := h.io.CloseWrite(); err != nil {
-			log.Debug("Couldn't send EOF: %s", err)
+			launchr.Log().Debug("Couldn't send EOF", "error", err)
 		}
 
 		close(inputDone)
@@ -231,14 +230,14 @@ func (h *hijackedIOStreamer) beginInputStream(restoreInput func()) (doneC <-chan
 	return inputDone, detached
 }
 
-func setRawTerminal(streams cli.Streams) error {
+func setRawTerminal(streams launchr.Streams) error {
 	if err := streams.In().SetRawTerminal(); err != nil {
 		return err
 	}
 	return streams.Out().SetRawTerminal()
 }
 
-func restoreTerminal(streams cli.Streams, in io.Closer) error {
+func restoreTerminal(streams launchr.Streams, in io.Closer) error {
 	streams.In().RestoreTerminal()
 	streams.Out().RestoreTerminal()
 	// See github.com/docker/cli repo for more info.

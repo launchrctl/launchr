@@ -17,7 +17,6 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/launchrctl/launchr/internal/launchr"
-	"github.com/launchrctl/launchr/pkg/cli"
 	"github.com/launchrctl/launchr/pkg/driver"
 	mockdriver "github.com/launchrctl/launchr/pkg/driver/mocks"
 	"github.com/launchrctl/launchr/pkg/types"
@@ -29,7 +28,7 @@ type eqImageOpts struct {
 	x types.ImageOptions
 }
 
-func (e eqImageOpts) Matches(x interface{}) bool {
+func (e eqImageOpts) Matches(x any) bool {
 	return assert.ObjectsAreEqual(e.x, x.(types.ImageOptions))
 }
 
@@ -105,10 +104,10 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 		name     string
 		action   *DefAction
 		expBuild *types.BuildDefinition
-		ret      []interface{}
+		ret      []any
 	}
 
-	imgFn := func(s types.ImageStatus, pstr string, err error) []interface{} {
+	imgFn := func(s types.ImageStatus, pstr string, err error) []any {
 		var p io.ReadCloser
 		if pstr != "" {
 			p = io.NopCloser(strings.NewReader(pstr))
@@ -117,7 +116,7 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 		if s != -1 {
 			r = &types.ImageStatusResponse{Status: s, Progress: p}
 		}
-		return []interface{}{r, err}
+		return []any{r, err}
 	}
 
 	aconf := actLoc.ActionDef()
@@ -185,7 +184,7 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 			ctx := context.Background()
 			act := testContainerAction(tt.action)
 			act.input = Input{
-				IO: cli.NoopStreams(),
+				IO: launchr.NoopStreams(),
 			}
 			err = act.EnsureLoaded()
 			assert.NoError(err)
@@ -215,7 +214,7 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 		name     string
 		action   *DefAction
 		expBuild *types.BuildDefinition
-		ret      []interface{}
+		ret      []any
 	}
 
 	tts := []testCase{
@@ -223,13 +222,13 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 			"image removed",
 			actLoc.ActionDef(),
 			nil,
-			[]interface{}{&types.ImageRemoveResponse{Status: types.ImageRemoved}, nil},
+			[]any{&types.ImageRemoveResponse{Status: types.ImageRemoved}, nil},
 		},
 		{
 			"failed to remove",
 			&DefAction{Image: "failed"},
 			nil,
-			[]interface{}{nil, fmt.Errorf("failed to remove")},
+			[]any{nil, fmt.Errorf("failed to remove")},
 		},
 	}
 
@@ -246,7 +245,7 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 
 			act := testContainerAction(tt.action)
 			act.input = Input{
-				IO: cli.NoopStreams(),
+				IO: launchr.NoopStreams(),
 			}
 
 			err := act.EnsureLoaded()
@@ -470,7 +469,7 @@ func (f *fakeWriter) Close() error {
 func Test_ContainerExec_containerAttach(t *testing.T) {
 	t.Parallel()
 	assert, ctrl, d, r := prepareContainerTestSuite(t)
-	streams := cli.NoopStreams()
+	streams := launchr.NoopStreams()
 	defer ctrl.Finish()
 	defer r.Close()
 
@@ -512,8 +511,8 @@ type mockCallInfo struct {
 	fn       string
 	minTimes int
 	maxTimes int
-	args     []interface{}
-	ret      []interface{}
+	args     []any
+	ret      []any
 }
 
 func Test_ContainerExec(t *testing.T) {
@@ -567,38 +566,38 @@ func Test_ContainerExec(t *testing.T) {
 	errAny := errors.New("any")
 	errAttach := errors.New("attach error")
 	errStart := errors.New("start error")
-	errExecError := RunStatusError{code: 2, msg: "action \"test\" finished with the exit code 2"}
+	errExecError := RunStatusError{code: 2, actionID: act.ID}
 
 	successSteps := []mockCallInfo{
 		{
 			"ImageEnsure",
 			1, 1,
-			[]interface{}{eqImageOpts{types.ImageOptions{Name: actConf.Image}}},
-			[]interface{}{imgBuild, nil},
+			[]any{eqImageOpts{types.ImageOptions{Name: actConf.Image}}},
+			[]any{imgBuild, nil},
 		},
 		{
 			"ContainerCreate",
 			1, 1,
-			[]interface{}{opts},
-			[]interface{}{cid, nil},
+			[]any{opts},
+			[]any{cid, nil},
 		},
 		{
 			"ContainerAttach",
 			1, 1,
-			[]interface{}{cid, attOpts},
-			[]interface{}{cio, nil},
+			[]any{cid, attOpts},
+			[]any{cio, nil},
 		},
 		{
 			"ContainerWait",
 			1, 1,
-			[]interface{}{cid, types.ContainerWaitOptions{Condition: types.WaitConditionRemoved}},
-			[]interface{}{},
+			[]any{cid, types.ContainerWaitOptions{Condition: types.WaitConditionRemoved}},
+			[]any{},
 		},
 		{
 			"ContainerStart",
 			1, 1,
-			[]interface{}{cid, types.ContainerStartOptions{}},
-			[]interface{}{nil},
+			[]any{cid, types.ContainerStartOptions{}},
+			[]any{nil},
 		},
 	}
 
@@ -618,8 +617,8 @@ func Test_ContainerExec(t *testing.T) {
 				{
 					"ImageEnsure",
 					1, 1,
-					[]interface{}{gomock.Any()},
-					[]interface{}{imgBuild, errImgEns},
+					[]any{gomock.Any()},
+					[]any{imgBuild, errImgEns},
 				},
 			},
 			errImgEns,
@@ -632,8 +631,8 @@ func Test_ContainerExec(t *testing.T) {
 				mockCallInfo{
 					"ContainerCreate",
 					1, 1,
-					[]interface{}{gomock.Any()},
-					[]interface{}{"", errCreate},
+					[]any{gomock.Any()},
+					[]any{"", errCreate},
 				}),
 			errCreate,
 		},
@@ -645,8 +644,8 @@ func Test_ContainerExec(t *testing.T) {
 				mockCallInfo{
 					"ContainerCreate",
 					1, 1,
-					[]interface{}{gomock.Any()},
-					[]interface{}{"", nil},
+					[]any{gomock.Any()},
+					[]any{"", nil},
 				}),
 			errAny,
 		},
@@ -660,8 +659,8 @@ func Test_ContainerExec(t *testing.T) {
 				mockCallInfo{
 					"ContainerAttach",
 					1, 1,
-					[]interface{}{cid, gomock.Any()},
-					[]interface{}{cio, errAttach},
+					[]any{cid, gomock.Any()},
+					[]any{cio, errAttach},
 				},
 			),
 			errAttach,
@@ -676,8 +675,8 @@ func Test_ContainerExec(t *testing.T) {
 				mockCallInfo{
 					"ContainerStart",
 					1, 1,
-					[]interface{}{cid, gomock.Any()},
-					[]interface{}{errStart},
+					[]any{cid, gomock.Any()},
+					[]any{errStart},
 				},
 			),
 			errStart,
@@ -692,8 +691,8 @@ func Test_ContainerExec(t *testing.T) {
 				mockCallInfo{
 					"ContainerStart",
 					1, 1,
-					[]interface{}{cid, gomock.Any()},
-					[]interface{}{nil},
+					[]any{cid, gomock.Any()},
+					[]any{nil},
 				},
 			),
 			errExecError,
@@ -707,7 +706,7 @@ func Test_ContainerExec(t *testing.T) {
 			resCh, errCh := make(chan types.ContainerWaitResponse, 1), make(chan error, 1)
 			assert, ctrl, d, r := prepareContainerTestSuite(t)
 			a := act.Clone()
-			err := a.SetInput(Input{nil, nil, cli.NoopStreams(), nil, nil})
+			err := a.SetInput(Input{nil, nil, launchr.NoopStreams(), nil, nil})
 			assert.NoError(err)
 			defer ctrl.Finish()
 			defer r.Close()
@@ -715,7 +714,7 @@ func Test_ContainerExec(t *testing.T) {
 			d.EXPECT().ContainerList(gomock.Any(), gomock.Any()).Return(nil) // @todo test different container names
 			for _, step := range tt.steps {
 				if step.fn == "ContainerWait" { //nolint:goconst
-					step.ret = []interface{}{resCh, errCh}
+					step.ret = []any{resCh, errCh}
 				}
 				prev = callContainerDriverMockFn(d, step, prev)
 			}

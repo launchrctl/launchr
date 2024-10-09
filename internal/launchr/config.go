@@ -14,6 +14,7 @@ import (
 )
 
 var configRegex = regexp.MustCompile(`^config\.(yaml|yml)$`)
+
 var (
 	ErrNoConfigFile = errors.New("config file is not found") // ErrNoConfigFile when config file doesn't exist in FS.
 )
@@ -25,14 +26,12 @@ type Config interface {
 	DirPath() string
 	// Path provides an absolute path to launchr config directory.
 	Path(parts ...string) string
-	// EnsurePath creates all directories in the path.
-	EnsurePath(parts ...string) error
 	// Exists checks if key exists in config. Key level delimiter is dot.
 	// For example - `path.to.something`.
 	Exists(key string) bool
 	// Get returns a value by key to a parameter v. Parameter v must be a pointer to a value.
 	// Error may be returned on decode.
-	Get(key string, v interface{}) error
+	Get(key string, v any) error
 }
 
 // ConfigAware provides an interface for structs to support launchr configuration setting.
@@ -86,7 +85,7 @@ func (cfg *config) Exists(path string) bool {
 	return cfg.koanf != nil && cfg.koanf.Exists(path)
 }
 
-func (cfg *config) Get(key string, v interface{}) error {
+func (cfg *config) Get(key string, v any) error {
 	cfg.mx.Lock()
 	defer cfg.mx.Unlock()
 	var err error
@@ -146,8 +145,4 @@ func (cfg *config) parse() error {
 func (cfg *config) Path(parts ...string) string {
 	parts = append([]string{cfg.rootPath}, parts...)
 	return filepath.Clean(filepath.Join(parts...))
-}
-
-func (cfg *config) EnsurePath(parts ...string) error {
-	return EnsurePath(cfg.Path(parts...))
 }

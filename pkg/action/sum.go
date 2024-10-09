@@ -24,7 +24,7 @@ type ImageBuildCacheResolver struct {
 	cfg           launchr.Config
 }
 
-// NewImageBuildCacheResolver creates ImageBuildCacheResolver from global configuration.
+// NewImageBuildCacheResolver creates [ImageBuildCacheResolver] from global configuration.
 func NewImageBuildCacheResolver(cfg launchr.Config) *ImageBuildCacheResolver {
 	fname := cfg.Path(sumFilename)
 	return &ImageBuildCacheResolver{

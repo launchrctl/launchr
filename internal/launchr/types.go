@@ -2,15 +2,24 @@ package launchr
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
+	"os"
+	"path/filepath"
+	"text/template"
 
 	"github.com/spf13/cobra"
-
-	"github.com/launchrctl/launchr/pkg/cli"
 )
 
 // PkgPath is a main module path.
 const PkgPath = "github.com/launchrctl/launchr"
+
+// Command is a type alias for [cobra.Command].
+// to reduce direct dependency on cobra in packages.
+type Command = cobra.Command
+
+// CommandGroup is a type alias for [cobra.Group].
+type CommandGroup = cobra.Group
 
 // App stores global application state.
 type App interface {
@@ -19,20 +28,31 @@ type App interface {
 	// GetWD provides app's working dir.
 	GetWD() string
 	// Streams returns application cli.
-	Streams() cli.Streams
+	Streams() Streams
+	// SetStreams sets application streams.
+	SetStreams(s Streams)
 	// AddService registers a service in the app.
 	// Panics if a service is not unique.
 	AddService(s Service)
-	// GetService retrieves a service of type v and assigns it to v.
+	// GetService retrieves a service of type [v] and assigns it to [v].
 	// Panics if a service is not found.
-	GetService(v interface{})
+	GetService(v any)
 
+	// Deprecated: not supported with no replacement.
 	GetPluginAssets(p Plugin) fs.FS
 	// RegisterFS registers a File System in launchr.
-	// It may be a FS for action discovery, see action.DiscoveryFS.
+	// It may be a FS for action discovery, see [action.DiscoveryFS].
 	RegisterFS(fs ManagedFS)
 	// GetRegisteredFS returns an array of registered File Systems.
 	GetRegisteredFS() []ManagedFS
+}
+
+// AppInternal is an extension to access cobra related functionality of the app.
+// It is intended for internal use only to prevent coupling on volatile functionality.
+type AppInternal interface {
+	App
+	GetRootCmd() *Command
+	EarlyParsedFlags() []string
 }
 
 // AppVersion stores application version.
@@ -47,7 +67,7 @@ type AppVersion struct {
 	Plugins     []string
 }
 
-// PluginInfo provides information about the plugin and is used as a unique data to indentify a plugin.
+// PluginInfo provides information about the plugin and is used as a unique data to identify a plugin.
 type PluginInfo struct {
 	// Weight defines the order of plugins calling. @todo rework to a real dependency resolving.
 	Weight   int
@@ -59,7 +79,7 @@ func (p PluginInfo) String() string {
 	return p.pkgPath + "." + p.typeName
 }
 
-// GetPackagePath returns the package path of the PluginInfo.
+// GetPackagePath returns the package path of the [PluginInfo].
 func (p PluginInfo) GetPackagePath() string {
 	return p.pkgPath
 }
@@ -94,16 +114,38 @@ type CobraPlugin interface {
 	CobraAddCommands(*cobra.Command) error
 }
 
-// PluginGeneratedData is a struct containing a result information of plugin generation.
-type PluginGeneratedData struct {
-	Plugins []string
+// Template provides templating functionality to generate files.
+type Template struct {
+	Tmpl string // Tmpl is a template string.
+	Data any    // Data is a template data.
+}
+
+// Generate executes a template and writes it.
+func (t Template) Generate(w io.Writer) error {
+	var tmpl = template.Must(template.New("tmp").Parse(t.Tmpl))
+	return tmpl.Execute(w, t.Data)
+}
+
+// WriteFile creates/overwrites a file and executes the template with it.
+func (t Template) WriteFile(name string) error {
+	err := EnsurePath(filepath.Dir(name))
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(filepath.Clean(name), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	err = t.Generate(f)
+	return err
 }
 
 // GeneratePlugin is an interface to generate supporting files before build.
 type GeneratePlugin interface {
 	Plugin
 	// Generate is a function called when application is generating code and assets for the build.
-	Generate(buildPath string, workDir string) (*PluginGeneratedData, error)
+	Generate(buildPath string, workDir string) error
 }
 
 // registeredPlugins is a store for plugins on init.
@@ -125,7 +167,7 @@ type PluginManager interface {
 	All() PluginsMap
 }
 
-// NewPluginManagerWithRegistered creates PluginManager with registered plugins.
+// NewPluginManagerWithRegistered creates [PluginManager] with registered plugins.
 func NewPluginManagerWithRegistered() PluginManager {
 	return pluginManagerMap(registeredPlugins)
 }

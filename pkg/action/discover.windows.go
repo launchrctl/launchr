@@ -1,5 +1,4 @@
 //go:build windows
-// +build windows
 
 // Package action provides implementations of discovering and running actions.
 package action

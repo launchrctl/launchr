@@ -21,12 +21,12 @@ type YamlDiscoveryStrategy struct {
 	TargetRgx *regexp.Regexp
 }
 
-// IsValid implements DiscoveryStrategy.
+// IsValid implements [DiscoveryStrategy].
 func (y YamlDiscoveryStrategy) IsValid(name string) bool {
 	return y.TargetRgx.MatchString(name)
 }
 
-// Loader implements DiscoveryStrategy.
+// Loader implements [DiscoveryStrategy].
 func (y YamlDiscoveryStrategy) Loader(l FileLoadFn, p ...LoadProcessor) Loader {
 	return &yamlFileLoader{
 		open: l,

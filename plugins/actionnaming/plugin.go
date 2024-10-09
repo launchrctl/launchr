@@ -21,15 +21,15 @@ func init() {
 	launchr.RegisterPlugin(Plugin{})
 }
 
-// Plugin is launchr plugin to improve actions naming.
+// Plugin is [launchr.Plugin] to improve actions naming.
 type Plugin struct{}
 
-// PluginInfo implements launchr.Plugin interface.
+// PluginInfo implements [launchr.Plugin] interface.
 func (p Plugin) PluginInfo() launchr.PluginInfo {
 	return launchr.PluginInfo{}
 }
 
-// OnAppInit implements launchr.Plugin interface.
+// OnAppInit implements [launchr.Plugin] interface.
 func (p Plugin) OnAppInit(app launchr.App) error {
 	// Get services.
 	var cfg launchr.Config
@@ -56,13 +56,13 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	return nil
 }
 
-// ConfigActionIDProvider is an ID provider based on launchr global configuration.
+// ConfigActionIDProvider is an ID provider based on [launchr.Config] global configuration.
 type ConfigActionIDProvider struct {
 	parent action.IDProvider
 	naming []actionsNaming
 }
 
-// GetID implements action.IDProvider interface.
+// GetID implements [action.IDProvider] interface.
 func (idp *ConfigActionIDProvider) GetID(a *action.Action) string {
 	id := idp.parent.GetID(a)
 	newID := id

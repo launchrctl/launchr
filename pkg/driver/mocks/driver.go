@@ -16,8 +16,8 @@ import (
 
 	driver "github.com/launchrctl/launchr/pkg/driver"
 	types "github.com/launchrctl/launchr/pkg/types"
-	types0 "github.com/moby/moby/api/types"
 	container "github.com/moby/moby/api/types/container"
+	image "github.com/moby/moby/api/types/image"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -173,10 +173,10 @@ func (mr *MockContainerRunnerMockRecorder) ContainerStart(arg0, arg1, arg2 any) 
 }
 
 // ContainerStatPath mocks base method.
-func (m *MockContainerRunner) ContainerStatPath(arg0 context.Context, arg1, arg2 string) (types0.ContainerPathStat, error) {
+func (m *MockContainerRunner) ContainerStatPath(arg0 context.Context, arg1, arg2 string) (container.PathStat, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContainerStatPath", arg0, arg1, arg2)
-	ret0, _ := ret[0].(types0.ContainerPathStat)
+	ret0, _ := ret[0].(container.PathStat)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -217,11 +217,11 @@ func (mr *MockContainerRunnerMockRecorder) ContainerWait(arg0, arg1, arg2 any) *
 }
 
 // CopyFromContainer mocks base method.
-func (m *MockContainerRunner) CopyFromContainer(arg0 context.Context, arg1, arg2 string) (io.ReadCloser, types0.ContainerPathStat, error) {
+func (m *MockContainerRunner) CopyFromContainer(arg0 context.Context, arg1, arg2 string) (io.ReadCloser, container.PathStat, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CopyFromContainer", arg0, arg1, arg2)
 	ret0, _ := ret[0].(io.ReadCloser)
-	ret1, _ := ret[1].(types0.ContainerPathStat)
+	ret1, _ := ret[1].(container.PathStat)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -233,7 +233,7 @@ func (mr *MockContainerRunnerMockRecorder) CopyFromContainer(arg0, arg1, arg2 an
 }
 
 // CopyToContainer mocks base method.
-func (m *MockContainerRunner) CopyToContainer(arg0 context.Context, arg1, arg2 string, arg3 io.Reader, arg4 types0.CopyToContainerOptions) error {
+func (m *MockContainerRunner) CopyToContainer(arg0 context.Context, arg1, arg2 string, arg3 io.Reader, arg4 container.CopyToContainerOptions) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CopyToContainer", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(error)
@@ -262,7 +262,7 @@ func (mr *MockContainerRunnerMockRecorder) ImageEnsure(arg0, arg1 any) *gomock.C
 }
 
 // ImageRemove mocks base method.
-func (m *MockContainerRunner) ImageRemove(arg0 context.Context, arg1 string, arg2 types0.ImageRemoveOptions) (*types.ImageRemoveResponse, error) {
+func (m *MockContainerRunner) ImageRemove(arg0 context.Context, arg1 string, arg2 image.RemoveOptions) (*types.ImageRemoveResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ImageRemove", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*types.ImageRemoveResponse)

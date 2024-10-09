@@ -13,11 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
-
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/action"
-	"github.com/launchrctl/launchr/pkg/cli"
 	_ "github.com/launchrctl/launchr/plugins" // include default plugins
 )
 
@@ -26,30 +23,39 @@ var (
 	errDiscoveryTimeout  = "action discovery timeout exceeded"
 )
 
-// ActionsGroup is a cobra command group definition.
-var ActionsGroup = &cobra.Group{
+// ActionsGroup is a command group definition.
+var ActionsGroup = &launchr.CommandGroup{
 	ID:    "actions",
 	Title: "Actions:",
 }
 
 type appImpl struct {
-	cmd           *cobra.Command
-	streams       cli.Streams
-	workDir       string
-	cfgDir        string
-	services      map[ServiceInfo]Service
-	actionMngr    action.Manager
-	pluginMngr    PluginManager
-	config        Config
-	mFS           []ManagedFS
-	skipActions   bool   // skipActions to skip loading if not requested.
-	reqCmd        string // reqCmd to search for the requested cobra command.
-	assetsStorage embed.FS
+	// Cli related.
+	cmd         *Command
+	flags       []string
+	skipActions bool   // skipActions to skip loading if not requested.
+	reqCmd      string // reqCmd to search for the requested command.
+
+	// FS related.
+	mFS     []ManagedFS
+	workDir string
+	cfgDir  string
+
+	// Services.
+	streams    Streams
+	services   map[ServiceInfo]Service
+	actionMngr action.Manager
+	pluginMngr PluginManager
+	config     Config
 }
 
-// AppOptions represents the launchr application options.
-type AppOptions struct {
-	AssetsFs embed.FS
+var assetsStorage embed.FS
+
+// SetAssetsStorage stores assets for web client.
+// Deprecated: not supported. Plugins must define their dependencies using GeneratePlugin.
+// @todo remove
+func SetAssetsStorage(assets embed.FS) {
+	assetsStorage = assets
 }
 
 // getPluginByType returns specific plugins from the app.
@@ -78,16 +84,20 @@ func getPluginByType[T Plugin](app *appImpl) []T {
 	return res
 }
 
-func newApp(options *AppOptions) *appImpl {
-	return &appImpl{assetsStorage: options.AssetsFs}
+func newApp() *appImpl {
+	return &appImpl{}
 }
 
 func (app *appImpl) Name() string         { return name }
 func (app *appImpl) GetWD() string        { return app.workDir }
-func (app *appImpl) Streams() cli.Streams { return app.streams }
+func (app *appImpl) Streams() Streams     { return app.streams }
+func (app *appImpl) SetStreams(s Streams) { app.streams = s }
 
 func (app *appImpl) RegisterFS(fs ManagedFS)      { app.mFS = append(app.mFS, fs) }
 func (app *appImpl) GetRegisteredFS() []ManagedFS { return app.mFS }
+
+func (app *appImpl) GetRootCmd() *Command       { return app.cmd }
+func (app *appImpl) EarlyParsedFlags() []string { return app.flags }
 
 func (app *appImpl) AddService(s Service) {
 	info := s.ServiceInfo()
@@ -98,8 +108,8 @@ func (app *appImpl) AddService(s Service) {
 	app.services[info] = s
 }
 
-func (app *appImpl) GetService(v interface{}) {
-	// Check v is a pointer and implements Service to set a value later.
+func (app *appImpl) GetService(v any) {
+	// Check v is a pointer and implements [Service] to set a value later.
 	t := reflect.TypeOf(v)
 	isPtr := t != nil && t.Kind() == reflect.Pointer
 	var stype reflect.Type
@@ -107,7 +117,7 @@ func (app *appImpl) GetService(v interface{}) {
 		stype = t.Elem()
 	}
 
-	// v must be Service but can't equal it because all elements implement it
+	// v must be [Service] but can't equal it because all elements implement it
 	// and the first value will always be returned.
 	intService := reflect.TypeOf((*Service)(nil)).Elem()
 	if !isPtr || !stype.Implements(intService) || stype == intService {
@@ -123,6 +133,7 @@ func (app *appImpl) GetService(v interface{}) {
 	panic(fmt.Sprintf("service %q does not exist", stype))
 }
 
+// Deprecated: @todo remove
 func (app *appImpl) GetPluginAssets(p Plugin) fs.FS {
 	pluginsMap := app.pluginMngr.All()
 	var packagePath string
@@ -136,7 +147,7 @@ func (app *appImpl) GetPluginAssets(p Plugin) fs.FS {
 		panic(errors.New("trying to get assets for unknown plugin"))
 	}
 
-	subFS, err := fs.Sub(app.assetsStorage, filepath.Join("assets", packagePath))
+	subFS, err := fs.Sub(assetsStorage, filepath.Join("assets", packagePath))
 	if err != nil {
 		panic(fmt.Errorf(errTplAssetsNotFound, packagePath))
 	}
@@ -144,21 +155,25 @@ func (app *appImpl) GetPluginAssets(p Plugin) fs.FS {
 	return subFS
 }
 
-// earlyPeekFlags tries to parse flags early to allow change behavior before cobra has booted.
-func (app *appImpl) earlyPeekFlags(c *cobra.Command) {
+// earlyPeekFlags tries to parse flags early to allow change behavior before full boot.
+func (app *appImpl) earlyPeekFlags(c *Command) {
+	var err error
 	args := os.Args[1:]
-	// Parse args with cobra.
+	// Parse args with internal tools.
 	// We can't guess cmd because nothing has been defined yet.
-	// We don't care about error because there won't be any on clean cmd.
-	_, flags, _ := c.Find(args)
+	_, app.flags, err = c.Find(args)
+	if err != nil {
+		// There shouldn't be an error when parsing a clean root command.
+		panic(err)
+	}
 	// Quick parse arguments to see if a version or help was requested.
-	for i := 0; i < len(flags); i++ {
+	for i := 0; i < len(app.flags); i++ {
 		// Skip discover actions if we check version.
-		if flags[i] == "--version" {
+		if app.flags[i] == "--version" {
 			app.skipActions = true
 		}
 
-		if app.reqCmd == "" && !strings.HasPrefix(flags[i], "-") {
+		if app.reqCmd == "" && !strings.HasPrefix(app.flags[i], "-") {
 			app.reqCmd = args[i]
 		}
 	}
@@ -167,21 +182,21 @@ func (app *appImpl) earlyPeekFlags(c *cobra.Command) {
 // init initializes application and plugins.
 func (app *appImpl) init() error {
 	var err error
-	// Set root cobra command.
-	app.cmd = &cobra.Command{
+	// Set root command.
+	app.cmd = &Command{
 		Use: name,
 		//Short: "", // @todo
 		//Long:  ``, // @todo
 		SilenceErrors: true, // Handled manually.
 		Version:       version,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: func(cmd *Command, _ []string) error {
 			return cmd.Help()
 		},
 	}
 	app.earlyPeekFlags(app.cmd)
 
 	// Set io streams.
-	app.streams = cli.StandardStreams()
+	app.SetStreams(StandardStreams())
 	app.cmd.SetIn(app.streams.In())
 	app.cmd.SetOut(app.streams.Out())
 	app.cmd.SetErr(app.streams.Err())
@@ -232,13 +247,13 @@ func (app *appImpl) init() error {
 func (app *appImpl) discoverActions() (err error) {
 	var discovered []*action.Action
 	idp := app.actionMngr.GetActionIDProvider()
-	// @todo configure from flags
+	// @todo configure timeout from flags
 	// Define timeout for cases when we may traverse the whole FS, e.g. in / or home.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	for _, p := range getPluginByType[action.DiscoveryPlugin](app) {
-		for _, fs := range app.GetRegisteredFS() {
-			actions, errDis := p.DiscoverActions(ctx, fs, idp)
+		for _, regfs := range app.GetRegisteredFS() {
+			actions, errDis := p.DiscoverActions(ctx, regfs, idp)
 			if errDis != nil {
 				return errDis
 			}
@@ -296,7 +311,8 @@ func (app *appImpl) exec() error {
 		for _, a := range actions {
 			cmd, err := action.CobraImpl(a, app.Streams())
 			if err != nil {
-				fmt.Fprintf(os.Stdout, "[WARNING] Action %q was skipped:\n%v\n", a.ID, err)
+				Log().Warn("action was skipped due to error", "action_id", a.ID, "error", err)
+				Term().Warning().Printfln("Action %q was skipped:\n%v", a.ID, err)
 				continue
 			}
 			cmd.GroupID = ActionsGroup.ID
@@ -304,7 +320,7 @@ func (app *appImpl) exec() error {
 		}
 	}
 
-	// Add cobra commands from plugins.
+	// Add application commands from plugins.
 	for _, p := range getPluginByType[CobraPlugin](app) {
 		if err := p.CobraAddCommands(app.cmd); err != nil {
 			return err
@@ -314,11 +330,11 @@ func (app *appImpl) exec() error {
 	return app.cmd.Execute()
 }
 
-// Execute is a cobra entrypoint to the launchr app.
+// Execute is an entrypoint to the launchr app.
 func (app *appImpl) Execute() int {
 	var err error
 	if err = app.init(); err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
+		Term().Error().Println(err)
 		return 125
 	}
 	if err = app.exec(); err != nil {
@@ -330,7 +346,7 @@ func (app *appImpl) Execute() int {
 			status = stErr.GetCode()
 		default:
 			status = 1
-			fmt.Fprintln(os.Stderr, "Error:", err)
+			Term().Error().Println(err)
 		}
 
 		return status
@@ -339,7 +355,12 @@ func (app *appImpl) Execute() int {
 	return 0
 }
 
-// Run executes launchr application.
-func Run(options *AppOptions) int {
-	return newApp(options).Execute()
+// Run executes the application.
+func Run() int {
+	return newApp().Execute()
+}
+
+// RunAndExit runs the application and exits with a result code.
+func RunAndExit() {
+	os.Exit(Run())
 }

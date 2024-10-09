@@ -6,7 +6,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// UnmarshalYAML implements yaml.Unmarshaler to parse Json Schema type.
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse Json [Schema] type.
 func (t *Type) UnmarshalYAML(n *yaml.Node) (err error) {
 	var s string
 	err = n.Decode(&s)

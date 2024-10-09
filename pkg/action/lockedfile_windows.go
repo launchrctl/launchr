@@ -5,7 +5,7 @@ package action
 import (
 	"golang.org/x/sys/windows"
 
-	"github.com/launchrctl/launchr/pkg/log"
+	"github.com/launchrctl/launchr/internal/launchr"
 )
 
 const (
@@ -33,7 +33,7 @@ func (f *lockedFile) unlock() {
 	ol := new(windows.Overlapped)
 	err := windows.UnlockFileEx(windows.Handle(f.file.Fd()), 0, allBytes, allBytes, ol)
 	if err != nil {
-		log.Debug("unlock is called on a not locked file: %s", err)
+		launchr.Log().Warn("unlock is called on a not locked file: %s", err)
 	}
 	f.locked = false
 }

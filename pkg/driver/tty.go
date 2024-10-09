@@ -2,7 +2,6 @@ package driver
 
 import (
 	"context"
-	"fmt"
 	"os"
 	gosignal "os/signal"
 	"runtime"
@@ -10,12 +9,11 @@ import (
 
 	"github.com/moby/sys/signal"
 
-	"github.com/launchrctl/launchr/pkg/cli"
-	"github.com/launchrctl/launchr/pkg/log"
+	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/types"
 )
 
-type resizeTtyFn func(ctx context.Context, d ContainerRunner, cli cli.Streams, id string, isExec bool) error
+type resizeTtyFn func(ctx context.Context, d ContainerRunner, cli launchr.Streams, id string, isExec bool) error
 
 // resizeTtyTo resizes tty to specific height and width
 func resizeTtyTo(ctx context.Context, d ContainerRunner, id string, height, width uint, isExec bool) error {
@@ -36,19 +34,19 @@ func resizeTtyTo(ctx context.Context, d ContainerRunner, id string, height, widt
 	}
 
 	if err != nil {
-		log.Debug("Error resize: %s\r", err)
+		launchr.Log().Debug("error tty resize", "error", err)
 	}
 	return err
 }
 
 // resizeTty is to resize the tty with cli out's tty size
-func resizeTty(ctx context.Context, d ContainerRunner, cli cli.Streams, id string, isExec bool) error {
+func resizeTty(ctx context.Context, d ContainerRunner, cli launchr.Streams, id string, isExec bool) error {
 	height, width := cli.Out().GetTtySize()
 	return resizeTtyTo(ctx, d, id, height, width, isExec)
 }
 
 // initTtySize is to init the tty's size to the same as the window, if there is an error, it will retry 10 times.
-func initTtySize(ctx context.Context, d ContainerRunner, cli cli.Streams, id string, isExec bool, resizeTtyFunc resizeTtyFn) {
+func initTtySize(ctx context.Context, d ContainerRunner, cli launchr.Streams, id string, isExec bool, resizeTtyFunc resizeTtyFn) {
 	rttyFunc := resizeTtyFunc
 	if rttyFunc == nil {
 		rttyFunc = resizeTty
@@ -63,14 +61,14 @@ func initTtySize(ctx context.Context, d ContainerRunner, cli cli.Streams, id str
 				}
 			}
 			if err != nil {
-				_, _ = fmt.Fprintln(cli.Err(), "failed to resize tty, using default size")
+				launchr.Log().Error("failed to resize tty, using default size", "err", cli.Err())
 			}
 		}()
 	}
 }
 
 // MonitorTtySize updates the container tty size when the terminal tty changes size
-func MonitorTtySize(ctx context.Context, d ContainerRunner, cli cli.Streams, id string, isExec bool) error {
+func MonitorTtySize(ctx context.Context, d ContainerRunner, cli launchr.Streams, id string, isExec bool) error {
 	initTtySize(ctx, d, cli, id, isExec, resizeTty)
 	if runtime.GOOS == "windows" {
 		go func() {

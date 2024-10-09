@@ -2,23 +2,23 @@ package action
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/launchrctl/launchr/internal/launchr"
-	"github.com/launchrctl/launchr/pkg/log"
 	"github.com/launchrctl/launchr/pkg/types"
 )
 
 // RunStatusError is an execution error also containing command exit code.
 type RunStatusError struct {
-	code int
-	msg  string
+	code     int
+	actionID string
 }
 
 func (e RunStatusError) Error() string {
-	return e.msg
+	return fmt.Sprintf("action %q finished with the exit code %d", e.actionID, e.code)
 }
 
-// GetCode returns executions exit code.
+// GetCode returns run result exit code.
 func (e RunStatusError) GetCode() int {
 	return e.code
 }
@@ -65,7 +65,7 @@ type ImageBuildResolver interface {
 // ChainImageBuildResolver is a image build resolver that takes first available image in the chain.
 type ChainImageBuildResolver []ImageBuildResolver
 
-// ImageBuildInfo implements ImageBuildResolver.
+// ImageBuildInfo implements [ImageBuildResolver].
 func (r ChainImageBuildResolver) ImageBuildInfo(image string) *types.BuildDefinition {
 	for i := 0; i < len(r); i++ {
 		if b := r[i].ImageBuildInfo(image); b != nil {
@@ -84,7 +84,7 @@ type ConfigImages map[string]*types.BuildDefinition
 // LaunchrConfigImageBuildResolver is a resolver of image build in launchr config file.
 type LaunchrConfigImageBuildResolver struct{ cfg launchr.Config }
 
-// ImageBuildInfo implements ImageBuildResolver.
+// ImageBuildInfo implements [ImageBuildResolver].
 func (r LaunchrConfigImageBuildResolver) ImageBuildInfo(image string) *types.BuildDefinition {
 	if r.cfg == nil {
 		return nil
@@ -92,7 +92,7 @@ func (r LaunchrConfigImageBuildResolver) ImageBuildInfo(image string) *types.Bui
 	var images ConfigImages
 	err := r.cfg.Get(ConfigImagesKey, &images)
 	if err != nil {
-		log.Warn("configuration file field %q is malformed", ConfigImagesKey)
+		launchr.Term().Warning().Printfln("configuration file field %q is malformed", ConfigImagesKey)
 		return nil
 	}
 	if b, ok := images[image]; ok {

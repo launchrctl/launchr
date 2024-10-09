@@ -9,37 +9,36 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing/fstest"
 	"time"
 
 	"github.com/launchrctl/launchr/pkg/action"
 )
 
-func createActionTar(cfs fs.FS, buildPath string) (string, []*action.Action, error) {
-	name := "actions.tar.gz"
-	target := filepath.Join(buildPath, name)
+func createActionTar(workDir string, buildPath string) ([]*action.Action, error) {
 	// Discover actions.
-	ad := action.NewYamlDiscovery(action.NewDiscoveryFS(cfs, ""))
+	ad := action.NewYamlDiscovery(action.NewDiscoveryFS(os.DirFS(workDir), ""))
 	actions, err := ad.Discover(context.Background())
 	if err != nil {
-		return name, nil, err
+		return nil, err
 	}
 	// Create tar file with actions.
-	f, err := os.Create(filepath.Clean(target))
+	f, err := os.Create(filepath.Clean(buildPath))
 	if err != nil {
-		return name, nil, err
+		return nil, err
 	}
 	defer func() {
 		_ = f.Close()
 	}()
 	// Pack actions in a file.
-	err = TarGzEmbedActions(f, actions)
+	err = TarGzEmbedActions(f, workDir, actions)
 
-	return name, actions, err
+	return actions, err
 }
 
 // TarGzEmbedActions tars and gzip action files to a file f.
-func TarGzEmbedActions(f io.Writer, actions []*action.Action) error {
+func TarGzEmbedActions(f io.Writer, baseDir string, actions []*action.Action) error {
 	gzw := gzip.NewWriter(f)
 	defer gzw.Close()
 	tw := tar.NewWriter(gzw)
@@ -53,17 +52,17 @@ func TarGzEmbedActions(f io.Writer, actions []*action.Action) error {
 		}
 
 		h := &tar.Header{
-			Name:    a.Filepath(),
+			Name:    strings.TrimPrefix(a.Filepath(), baseDir),
 			Mode:    0600,
 			ModTime: now,
 			Size:    int64(len(c)),
 		}
 
-		if err := tw.WriteHeader(h); err != nil {
+		if err = tw.WriteHeader(h); err != nil {
 			return err
 		}
 
-		if _, err := tw.Write(c); err != nil {
+		if _, err = tw.Write(c); err != nil {
 			return err
 		}
 	}
