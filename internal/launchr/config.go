@@ -118,7 +118,7 @@ func (cfg *config) Get(key string, v any) error {
 	}()
 	vcopy := reflect.New(reflect.TypeOf(v).Elem()).Elem()
 
-	err = cfg.koanf.Unmarshal(key, v)
+	err = cfg.koanf.UnmarshalWithConf(key, v, koanf.UnmarshalConf{Tag: "yaml"})
 	if err != nil {
 		// Set value to empty struct not to leak partial parsing to ensure consistent results.
 		reflect.ValueOf(v).Elem().Set(vcopy)

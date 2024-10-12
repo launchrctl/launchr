@@ -38,14 +38,14 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	app.GetService(&am)
 
 	// Load naming configuration.
-	var launchrConfig *launchrCfg
+	var launchrConfig launchrCfg
 	// @todo refactor yaml property position.
 	err := cfg.Get("launchrctl", &launchrConfig)
 	if err != nil {
 		return err
 	}
 	// Override action id provider.
-	if launchrConfig == nil || len(launchrConfig.ActionsNaming) == 0 {
+	if len(launchrConfig.ActionsNaming) == 0 {
 		// No need to override.
 		return nil
 	}

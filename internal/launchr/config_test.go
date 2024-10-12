@@ -26,12 +26,18 @@ func Test_ConfigFromFS(t *testing.T) {
 		Field2 int    `yaml:"field2"`
 	}
 
+	type testYamlCustomTag struct {
+		CustomTag []testYamlFieldSub `yaml:"custom_tag"`
+	}
+
 	type expValType struct {
-		stru    testYamlFieldSub
-		struErr string
-		ptr     *testYamlFieldSub
-		ptrErr  string
-		prim    testYamlFieldSub
+		Struct       testYamlFieldSub
+		StructErr    string
+		CustomTag    testYamlCustomTag
+		CustomTagErr string
+		Ptr          *testYamlFieldSub
+		PtrErr       string
+		Primitive    testYamlFieldSub
 	}
 	type testCase struct {
 		name   string
@@ -40,13 +46,16 @@ func Test_ConfigFromFS(t *testing.T) {
 	}
 
 	expValid := expValType{
-		stru: testYamlFieldSub{"str", 1},
-		ptr:  &testYamlFieldSub{"str3", 3},
-		prim: testYamlFieldSub{"str2", 2},
+		Struct: testYamlFieldSub{"str", 1},
+		CustomTag: testYamlCustomTag{
+			[]testYamlFieldSub{{"str4", 4}},
+		},
+		Ptr:       &testYamlFieldSub{"str3", 3},
+		Primitive: testYamlFieldSub{"str2", 2},
 	}
 	var expEmpty expValType
 	expInvalid := expValType{
-		struErr: "error(s) decoding",
+		StructErr: "error(s) decoding",
 	}
 	var errCheck = func(err error, errStr string) {
 		if errStr == "" {
@@ -73,27 +82,33 @@ func Test_ConfigFromFS(t *testing.T) {
 			assert.NotNil(cfg)
 			var err error
 			var val1, val1c testYamlFieldSub
+			var valcustom testYamlCustomTag
 			var val1ptr *testYamlFieldSub
 			// Check struct.
 			err = cfg.Get("test_perm", &val1)
-			errCheck(err, tt.expVal.struErr)
-			assert.Equal(tt.expVal.stru, val1)
+			errCheck(err, tt.expVal.StructErr)
+			assert.Equal(tt.expVal.Struct, val1)
+			// Check custom.
+			err = cfg.Get("test_custom", &valcustom)
+			errCheck(err, tt.expVal.CustomTagErr)
+			assert.Equal(tt.expVal.CustomTag, valcustom)
+
 			// Check cache works.
 			err = cfg.Get("test_perm", &val1c)
-			errCheck(err, tt.expVal.struErr)
+			errCheck(err, tt.expVal.StructErr)
 			assert.Equal(val1, val1c)
 			// Check pointer to a struct.
 			err = cfg.Get("test_ptr", &val1ptr)
-			errCheck(err, tt.expVal.ptrErr)
-			assert.Equal(tt.expVal.ptr, val1ptr)
+			errCheck(err, tt.expVal.PtrErr)
+			assert.Equal(tt.expVal.Ptr, val1ptr)
 
 			// Check primitives.
 			var val2s string
 			var val2int int
 			_ = cfg.Get("field1", &val2s)
 			_ = cfg.Get("field2", &val2int)
-			assert.Equal(tt.expVal.prim.Field1, val2s)
-			assert.Equal(tt.expVal.prim.Field2, val2int)
+			assert.Equal(tt.expVal.Primitive.Field1, val2s)
+			assert.Equal(tt.expVal.Primitive.Field2, val2int)
 		})
 	}
 }
@@ -107,6 +122,10 @@ test_perm:
 test_ptr:
   field1: str3
   field2: 3
+test_custom:
+  custom_tag:
+    - field1: str4
+      field2: 4
 `
 
 const yamlInvalid = `
