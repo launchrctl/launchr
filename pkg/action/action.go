@@ -42,11 +42,16 @@ type Action struct {
 
 // Input is a container for action input arguments and options.
 type Input struct {
-	Args     TypeArgs
-	Opts     TypeOpts
-	IO       launchr.Streams // @todo should it be in Input?
-	ArgsRaw  []string
-	UserOpts TypeOpts
+	// Args contains parsed and named arguments.
+	Args TypeArgs
+	// Opts contains parsed options with default values.
+	Opts TypeOpts
+	// IO contains out/in/err destinations. @todo should it be in Input?
+	IO launchr.Streams
+	// ArgsRaw contains raw positional arguments.
+	ArgsRaw []string
+	// OptsRaw contains options that were input by a user and without default values.
+	OptsRaw TypeOpts
 }
 
 type (
@@ -168,7 +173,7 @@ func (a *Action) SetInput(input Input) (err error) {
 		return err
 	}
 
-	err = a.processOptions(input.Opts, input.UserOpts)
+	err = a.processOptions(input.Opts, input.OptsRaw)
 	if err != nil {
 		return err
 	}
@@ -179,20 +184,21 @@ func (a *Action) SetInput(input Input) (err error) {
 	return a.EnsureLoaded()
 }
 
-func (a *Action) processOptions(opts, userOpts TypeOpts) error {
+func (a *Action) processOptions(opts, optsRaw TypeOpts) error {
 	for _, optDef := range a.ActionDef().Options {
 		if _, ok := opts[optDef.Name]; !ok {
 			continue
 		}
 
-		value := userOpts[optDef.Name]
+		value := optsRaw[optDef.Name]
 		toApply := optDef.Process
 
 		value, err := a.processValue(value, optDef.Type, toApply)
 		if err != nil {
 			return err
 		}
-
+		// Replace the value.
+		// Check for nil not to override the default value.
 		if value != nil {
 			opts[optDef.Name] = value
 		}

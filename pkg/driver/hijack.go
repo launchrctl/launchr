@@ -7,9 +7,9 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/moby/moby/api/types"
-	"github.com/moby/moby/pkg/ioutils"
-	"github.com/moby/moby/pkg/stdcopy"
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/pkg/ioutils"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/moby/term"
 
 	"github.com/launchrctl/launchr/internal/launchr"

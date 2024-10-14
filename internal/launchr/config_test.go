@@ -59,7 +59,7 @@ func Test_ConfigFromFS(t *testing.T) {
 	}
 	var errCheck = func(err error, errStr string) {
 		if errStr == "" {
-			assert.NoError(err)
+			assert.True(assert.NoError(err))
 		} else {
 			assert.ErrorContains(err, errStr)
 		}

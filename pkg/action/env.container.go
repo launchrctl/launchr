@@ -10,9 +10,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/moby/moby/pkg/archive"
-	"github.com/moby/moby/pkg/jsonmessage"
-	"github.com/moby/moby/pkg/namesgenerator"
+	"github.com/docker/docker/pkg/archive"
+	"github.com/docker/docker/pkg/jsonmessage"
+	"github.com/docker/docker/pkg/namesgenerator"
 	"github.com/moby/sys/signal"
 	"github.com/moby/term"
 
@@ -438,7 +438,7 @@ func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
 		// Output docker status only in Debug.
 		err = displayJSONMessages(status.Progress, streams)
 		if err != nil {
-			launchr.Term().Error().Println("Error occurred while pulling the image")
+			launchr.Term().Error().Println("Error occurred while pulling the image %q", image)
 			log.Error("error while pulling the image", "error", err)
 		}
 	case types.ImageBuild:
@@ -453,7 +453,7 @@ func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
 		// Output docker status only in Debug.
 		err = displayJSONMessages(status.Progress, streams)
 		if err != nil {
-			launchr.Term().Error().Println("Error occurred while building the image")
+			launchr.Term().Error().Println("Error occurred while building the image %q", image)
 			log.Error("error while building the image", "error", err)
 		}
 	}

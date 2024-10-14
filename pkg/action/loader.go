@@ -3,11 +3,11 @@ package action
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
+	"syscall"
 	"text/template"
-
-	"github.com/a8m/envsubst"
 )
 
 // Loader is an interface for loading an action file.
@@ -54,7 +54,21 @@ func (p *pipeProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
 type envProcessor struct{}
 
 func (p envProcessor) Process(_ LoadContext, b []byte) ([]byte, error) {
-	return envsubst.Bytes(b)
+	s := os.Expand(string(b), getenv)
+	return []byte(s), nil
+}
+
+func getenv(key string) string {
+	if key == "$" {
+		return "$"
+	}
+	// Replace all subexpressions.
+	if strings.Contains(key, "$") {
+		key = os.Expand(key, getenv)
+	}
+	// @todo implement ${var-$DEFAULT}, ${var:-$DEFAULT}, ${var+$DEFAULT}, ${var:+$DEFAULT},
+	v, _ := syscall.Getenv(key)
+	return v
 }
 
 type inputProcessor struct{}

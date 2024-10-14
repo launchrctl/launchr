@@ -97,16 +97,11 @@ Arguments and Options are available by their machine names - `{{ .myArg1 }}`, `{
 
 ### Environment variables:
 
-| __Expression__     | __Meaning__                                                          |
-|--------------------|----------------------------------------------------------------------|
-| `${var}`           | Value of var (same as `$var`)                                        |
-| `${var-$DEFAULT}`  | If var not set, evaluate expression as $DEFAULT                      |
-| `${var:-$DEFAULT}` | If var not set or is empty, evaluate expression as $DEFAULT          |
-| `${var=$DEFAULT}`  | If var not set, evaluate expression as $DEFAULT                      |
-| `${var:=$DEFAULT}` | If var not set or is empty, evaluate expression as $DEFAULT          |
-| `${var+$OTHER}`    | If var set, evaluate expression as $OTHER, otherwise as empty string |
-| `${var:+$OTHER}`   | If var set, evaluate expression as $OTHER, otherwise as empty string |
-| `$$var`            | Escape expressions. Result will be `$var`.                           |
+| __Expression__   | __Meaning__                                |
+|------------------|--------------------------------------------|
+| `$var`           | Value of var                               |
+| `${var}`         | Value of var (same as `$var`)              |
+| `$$var`          | Escape expressions. Result will be `$var`. |
 
 ### Example
 

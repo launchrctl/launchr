@@ -11,8 +11,8 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/moby/moby/pkg/jsonmessage"
-	"github.com/moby/moby/pkg/stdcopy"
+	"github.com/docker/docker/pkg/jsonmessage"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
@@ -99,7 +99,7 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 		},
 	})
 	err := actLoc.EnsureLoaded()
-	assert.NoError(t, err)
+	assert.True(t, assert.NoError(t, err))
 	type testCase struct {
 		name     string
 		action   *DefAction
@@ -187,7 +187,7 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 				IO: launchr.NoopStreams(),
 			}
 			err = act.EnsureLoaded()
-			assert.NoError(err)
+			assert.True(assert.NoError(err))
 			a := act.ActionDef()
 			imgOpts := types.ImageOptions{Name: a.Image, Build: tt.expBuild}
 			d.EXPECT().
@@ -209,7 +209,7 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 		},
 	})
 	err := actLoc.EnsureLoaded()
-	assert.NoError(t, err)
+	assert.True(t, assert.NoError(t, err))
 	type testCase struct {
 		name     string
 		action   *DefAction
@@ -249,7 +249,7 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 			}
 
 			err := act.EnsureLoaded()
-			assert.NoError(err)
+			assert.True(assert.NoError(err))
 
 			a := act.ActionDef()
 			imgOpts := types.ImageRemoveOptions{Force: true, PruneChildren: false}
@@ -270,7 +270,7 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 	defer r.Close()
 
 	a := testContainerAction(nil)
-	assert.NoError(a.EnsureLoaded())
+	assert.True(assert.NoError(a.EnsureLoaded()))
 	act := a.ActionDef()
 
 	runCfg := &types.ContainerCreateOptions{
@@ -311,7 +311,7 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 		Return(expCid, nil)
 
 	cid, err := r.containerCreate(ctx, a, runCfg)
-	assert.NoError(err)
+	assert.True(assert.NoError(err))
 	assert.Equal(expCid, cid)
 
 	// Create with a custom wd
@@ -329,7 +329,7 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 		Return(expCid, nil)
 
 	cid, err = r.containerCreate(ctx, a, runCfg)
-	assert.NoError(err)
+	assert.True(assert.NoError(err))
 	assert.Equal(expCid, cid)
 
 	// Create with anonymous volumes.
@@ -347,7 +347,7 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 		Return(expCid, nil)
 
 	cid, err = r.containerCreate(ctx, a, runCfg)
-	assert.NoError(err)
+	assert.True(assert.NoError(err))
 	assert.Equal(expCid, cid)
 
 	// Image ensure fail.
@@ -493,8 +493,8 @@ func Test_ContainerExec_containerAttach(t *testing.T) {
 		Return(cio, nil)
 	acio, errCh, err := r.attachContainer(ctx, streams, cid, opts)
 	assert.Equal(acio, cio)
-	assert.NoError(err)
-	assert.NoError(<-errCh)
+	assert.True(assert.NoError(err))
+	assert.True(assert.NoError(<-errCh))
 	_ = acio.Close()
 
 	expErr := errors.New("fail to attach")
@@ -520,7 +520,7 @@ func Test_ContainerExec(t *testing.T) {
 
 	cid := "cid"
 	act := testContainerAction(nil)
-	assert.NoError(t, act.EnsureLoaded())
+	assert.True(t, assert.NoError(t, act.EnsureLoaded()))
 	actConf := act.ActionDef()
 	imgBuild := &types.ImageStatusResponse{Status: types.ImageExists}
 	cio := testContainerIO()
@@ -706,8 +706,8 @@ func Test_ContainerExec(t *testing.T) {
 			resCh, errCh := make(chan types.ContainerWaitResponse, 1), make(chan error, 1)
 			assert, ctrl, d, r := prepareContainerTestSuite(t)
 			a := act.Clone()
-			err := a.SetInput(Input{nil, nil, launchr.NoopStreams(), nil, nil})
-			assert.NoError(err)
+			err := a.SetInput(Input{IO: launchr.NoopStreams()})
+			assert.True(assert.NoError(err))
 			defer ctrl.Finish()
 			defer r.Close()
 			var prev *gomock.Call

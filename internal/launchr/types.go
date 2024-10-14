@@ -111,7 +111,7 @@ type CobraPlugin interface {
 	Plugin
 	// CobraAddCommands is a hook called when cobra root command is available.
 	// Plugins may register its command line commands here.
-	CobraAddCommands(*cobra.Command) error
+	CobraAddCommands(root *Command) error
 }
 
 // Template provides templating functionality to generate files.

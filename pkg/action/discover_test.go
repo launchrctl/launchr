@@ -8,7 +8,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/moby/moby/pkg/namesgenerator"
+	"github.com/docker/docker/pkg/namesgenerator"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -79,13 +79,13 @@ func Test_Discover_ActionWD(t *testing.T) {
 	ad := NewYamlDiscovery(NewDiscoveryFS(tfs, expectedWD))
 	ctx := context.Background()
 	actions, err := ad.Discover(ctx)
-	assert.NoError(t, err)
+	assert.True(t, assert.NoError(t, err))
 	assert.Equal(t, expFPath, actions[0].fpath)
 	assert.Equal(t, absPath(expectedWD), actions[0].wd)
 
 	ad = NewYamlDiscovery(NewDiscoveryFS(tfs, ""))
 	actions, err = ad.Discover(ctx)
-	assert.NoError(t, err)
+	assert.True(t, assert.NoError(t, err))
 	assert.Equal(t, expFPath, actions[0].fpath)
 	assert.Equal(t, absPath(""), actions[0].wd)
 }

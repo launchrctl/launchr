@@ -9,9 +9,9 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
-	"github.com/moby/moby/client"
-	"github.com/moby/moby/errdefs"
-	"github.com/moby/moby/pkg/archive"
+	"github.com/docker/docker/client"
+	"github.com/docker/docker/errdefs"
+	"github.com/docker/docker/pkg/archive"
 
 	"github.com/launchrctl/launchr/pkg/types"
 )

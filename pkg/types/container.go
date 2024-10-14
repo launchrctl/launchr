@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
-	typescontainer "github.com/moby/moby/api/types/container"
-	typesimage "github.com/moby/moby/api/types/image"
+	typescontainer "github.com/docker/docker/api/types/container"
+	typesimage "github.com/docker/docker/api/types/image"
 	"gopkg.in/yaml.v3"
 )
 

@@ -14,10 +14,10 @@ import (
 	io "io"
 	reflect "reflect"
 
+	container "github.com/docker/docker/api/types/container"
+	image "github.com/docker/docker/api/types/image"
 	driver "github.com/launchrctl/launchr/pkg/driver"
 	types "github.com/launchrctl/launchr/pkg/types"
-	container "github.com/moby/moby/api/types/container"
-	image "github.com/moby/moby/api/types/image"
 	gomock "go.uber.org/mock/gomock"
 )
 

@@ -42,27 +42,30 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 
 // AddValueProcessors submits new ValueProcessors to action.Manager.
 func addValueProcessors(m action.Manager, cfg launchr.Config) {
-	getByKey := func(value interface{}, options map[string]interface{}) (interface{}, error) {
+	getByKey := func(value any, options map[string]any) (any, error) {
 		return getByKeyProcessor(value, options, cfg)
 	}
 
-	proc := action.NewFuncProcessor([]jsonschema.Type{jsonschema.String, jsonschema.Integer, jsonschema.Boolean, jsonschema.Number}, getByKey)
+	proc := action.NewFuncProcessor(
+		[]jsonschema.Type{jsonschema.String, jsonschema.Integer, jsonschema.Boolean, jsonschema.Number},
+		getByKey,
+	)
 	m.AddValueProcessor(getConfigValue, proc)
 }
 
-func getByKeyProcessor(value interface{}, options map[string]interface{}, cfg launchr.Config) (interface{}, error) {
+func getByKeyProcessor(value any, options map[string]any, cfg launchr.Config) (any, error) {
 	if value != nil {
-		launchr.Term().Warning().Println("Skipping processor %q, value is not empty. Value will remain unchanged", getConfigValue)
+		launchr.Term().Warning().Printfln("Skipping processor %q, value is not empty. Value will remain unchanged", getConfigValue)
 		launchr.Log().Warn("skipping processor, value is not empty", "processor", getConfigValue)
 		return value, nil
 	}
 
 	path, ok := options["path"].(string)
 	if !ok {
-		return value, fmt.Errorf("option `path` is required for %q processor", getConfigValue)
+		return value, fmt.Errorf(`option "path" is required for %q processor`, getConfigValue)
 	}
 
-	var res interface{}
+	var res any
 	err := cfg.Get(path, &res)
 	if err != nil {
 		return value, err

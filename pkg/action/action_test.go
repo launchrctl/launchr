@@ -17,11 +17,11 @@ func Test_Action(t *testing.T) {
 	ad := NewYamlDiscovery(NewDiscoveryFS(fs, ""))
 	ctx := context.Background()
 	actions, err := ad.Discover(ctx)
-	assert.NoError(err)
+	assert.True(assert.NoError(err))
 	assert.NotEmpty(actions)
 	act := actions[0]
 	err = act.EnsureLoaded()
-	assert.NoError(err)
+	assert.True(assert.NoError(err))
 	actConf := act.ActionDef()
 	// Test image name.
 	assert.Equal("my/image:v1", actConf.Image)
@@ -46,8 +46,8 @@ func Test_Action(t *testing.T) {
 		"optarr": []any{"opt5.1val", "opt5.2val"},
 		"opt6":   "unexpectedOpt",
 	}
-	err = act.SetInput(Input{inputArgs, inputOpts, nil, nil, nil})
-	assert.NoError(err)
+	err = act.SetInput(Input{Args: inputArgs, Opts: inputOpts})
+	assert.True(assert.NoError(err))
 	assert.Equal(inputArgs, act.input.Args)
 	assert.Equal(inputOpts, act.input.Opts)
 
@@ -65,7 +65,7 @@ func Test_Action(t *testing.T) {
 	}
 	act.Reset()
 	err = act.EnsureLoaded()
-	assert.NoError(err)
+	assert.True(assert.NoError(err))
 	actConf = act.ActionDef()
 	assert.Equal(execExp, []string(actConf.Command))
 	assert.NotNil(act.def)
