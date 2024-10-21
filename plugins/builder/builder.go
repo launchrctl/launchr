@@ -135,20 +135,17 @@ func (b *Builder) Build(ctx context.Context, streams launchr.Streams) error {
 	}
 
 	launchr.Term().Info().Println("Generating the go files")
-	err = b.env.CreateSourceFiles(ctx, files)
-	if err != nil {
-		return err
+	for _, f := range files {
+		// Generate the file.
+		err = f.WriteFile(filepath.Join(b.env.wd, f.file))
+		if err != nil {
+			return err
+		}
 	}
 
 	// Generate code for provided plugins.
 	launchr.Term().Info().Println("Running plugin generation")
-	err = b.runGoGenerate(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Make sure all dependencies are met after generation.
-	err = b.env.execGoMod(ctx, "tidy")
+	err = b.runGoRun(ctx, b.env.wd, "gen.go", "--work-dir="+b.wd, "--build-dir="+b.env.wd, "--release")
 	if err != nil {
 		return err
 	}
@@ -242,7 +239,7 @@ func (b *Builder) preBuild(ctx context.Context) error {
 		}
 	}
 
-	assetsPath := filepath.Join(b.wd, b.env.wd, "assets")
+	assetsPath := filepath.Join(b.env.wd, "assets")
 	buildName := filepath.Base(b.env.wd)
 	err = os.MkdirAll(assetsPath, 0750)
 	if err != nil {
@@ -283,7 +280,7 @@ func (b *Builder) preBuild(ctx context.Context) error {
 		}
 
 		launchr.Log().Debug("executing prebuild script for plugin", "plugin", pluginName)
-		err = b.runGoRun(ctx, packagePath, []string{"scripts/prebuild.go", v, tmpPath})
+		err = b.runGoRun(ctx, packagePath, "scripts/prebuild.go", v, tmpPath)
 		if err != nil {
 			return err
 		}
@@ -328,22 +325,10 @@ func (b *Builder) preBuild(ctx context.Context) error {
 	return nil
 }
 
-func (b *Builder) runGoRun(ctx context.Context, dir string, args []string) error {
+func (b *Builder) runGoRun(ctx context.Context, dir string, args ...string) error {
 	runArgs := append([]string{"run"}, args...)
 	cmd := b.env.NewCommand(ctx, b.env.Go(), runArgs...)
 	cmd.Dir = dir
-	env := make(envVars, len(cmd.Env))
-	copy(env, cmd.Env)
-	// Exclude target platform information as it may break "go run".
-	env.Unset("GOOS")
-	env.Unset("GOARCH")
-	cmd.Env = env
-	return b.env.RunCmd(ctx, cmd)
-}
-
-func (b *Builder) runGoGenerate(ctx context.Context) error {
-	genArgs := []string{"generate", "./..."}
-	cmd := b.env.NewCommand(ctx, b.env.Go(), genArgs...)
 	env := make(envVars, len(cmd.Env))
 	copy(env, cmd.Env)
 	// Exclude target platform information as it may break "go run".

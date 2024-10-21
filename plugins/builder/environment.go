@@ -64,6 +64,10 @@ func newBuildEnvironment(streams launchr.Streams) (*buildEnvironment, error) {
 	if err != nil {
 		return nil, err
 	}
+	tmpDir, err = filepath.Abs(tmpDir)
+	if err != nil {
+		return nil, err
+	}
 
 	env := envFromOs()
 	return &buildEnvironment{
@@ -89,6 +93,16 @@ func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptio
 		}
 	}
 
+	// Download the requested dependencies directly.
+	if opts.NoCache {
+		domains := make([]string, len(opts.Plugins))
+		for i := 0; i < len(domains); i++ {
+			domains[i] = opts.Plugins[i].Path
+		}
+		noproxy := strings.Join(domains, ",")
+		env.env = append(env.env, "GONOSUMDB="+noproxy, "GONOPROXY="+noproxy)
+	}
+
 	// Download core.
 	var coreRepl bool
 	for repl := range opts.ModReplace {
@@ -98,7 +112,7 @@ func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptio
 		}
 	}
 	if !coreRepl {
-		err = env.execGoGet(ctx, opts.NoCache, opts.CorePkg.String())
+		err = env.execGoGet(ctx, opts.CorePkg.String())
 		if err != nil {
 			return err
 		}
@@ -113,32 +127,12 @@ nextPlugin:
 				continue nextPlugin
 			}
 		}
-		err = env.execGoGet(ctx, opts.NoCache, p.String())
+		err = env.execGoGet(ctx, p.String())
 		if err != nil {
 			return err
 		}
 	}
 	// @todo update all but with fixed versions if requested
-
-	return err
-}
-
-func (env *buildEnvironment) CreateSourceFiles(ctx context.Context, files []genGoFile) error {
-	// Generate project files.
-	var err error
-	for _, f := range files {
-		// Generate the file.
-		err = f.WriteFile(filepath.Join(env.wd, f.file))
-		if err != nil {
-			return err
-		}
-	}
-
-	// Make sure all dependencies are met.
-	err = env.execGoMod(ctx, "tidy")
-	if err != nil {
-		return err
-	}
 
 	return err
 }
@@ -161,12 +155,8 @@ func (env *buildEnvironment) execGoMod(ctx context.Context, args ...string) erro
 	return env.RunCmd(ctx, cmd)
 }
 
-func (env *buildEnvironment) execGoGet(ctx context.Context, nocache bool, args ...string) error {
+func (env *buildEnvironment) execGoGet(ctx context.Context, args ...string) error {
 	cmd := env.NewCommand(ctx, env.Go(), append([]string{"get"}, args...)...)
-	if nocache {
-		// Download the dependencies directly.
-		cmd.Env = append(cmd.Env, "GOSUMDB=off", "GOPROXY=direct")
-	}
 	return env.RunCmd(ctx, cmd)
 }
 

@@ -24,10 +24,10 @@ func (p Plugin) PluginInfo() launchr.PluginInfo {
 
 // Generate implements [launchr.GeneratePlugin] interface.
 // It generates an actions.tar.gz archive and related init functionality.
-func (p Plugin) Generate(buildPath string, workDir string) error {
+func (p Plugin) Generate(config launchr.GenerateConfig) error {
 	// Generate actions tar.
 	launchr.Term().Info().Println("Discovering actions...")
-	actions, err := createActionTar(workDir, filepath.Join(buildPath, "actions.tar.gz"))
+	actions, err := createActionTar(config.WorkDir, filepath.Join(config.BuildDir, "actions.tar.gz"))
 	if err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func (p Plugin) Generate(buildPath string, workDir string) error {
 			"CorePkg": launchr.PkgPath,
 		},
 	}
-	return tpl.WriteFile(filepath.Join(buildPath, "yamldiscovery.embed.gen.go"))
+	return tpl.WriteFile(filepath.Join(config.BuildDir, "yamldiscovery.embed.gen.go"))
 }
 
 // ActionsTarGzPlugin stores embed actions and sets them on app launch with OnAppInit function.

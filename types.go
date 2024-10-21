@@ -72,6 +72,8 @@ type (
 	CobraPlugin = launchr.CobraPlugin
 	// GeneratePlugin is an interface to generate supporting files before build.
 	GeneratePlugin = launchr.GeneratePlugin
+	// GenerateConfig defines generation config.
+	GenerateConfig = launchr.GenerateConfig
 	// PluginManager handles plugins.
 	PluginManager = launchr.PluginManager
 	// ServiceInfo provides service info for its initialization.

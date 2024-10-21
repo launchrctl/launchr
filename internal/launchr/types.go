@@ -145,7 +145,13 @@ func (t Template) WriteFile(name string) error {
 type GeneratePlugin interface {
 	Plugin
 	// Generate is a function called when application is generating code and assets for the build.
-	Generate(buildPath string, workDir string) error
+	Generate(config GenerateConfig) error
+}
+
+// GenerateConfig defines generation config.
+type GenerateConfig struct {
+	WorkDir  string // WorkDir is where the script must consider current working directory.
+	BuildDir string // BuildDir is where the script will output the result.
 }
 
 // registeredPlugins is a store for plugins on init.
@@ -201,4 +207,10 @@ func InitServiceInfo(si *ServiceInfo, s Service) {
 type ManagedFS interface {
 	fs.FS
 	FS() fs.FS
+}
+
+// MapItem is a helper struct used to return an ordered map as a slice.
+type MapItem[K, V any] struct {
+	K K // K is a key of the map item.
+	V V // V is a value of the map item.
 }

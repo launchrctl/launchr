@@ -2,13 +2,10 @@
 package builder
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"math"
-	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -68,7 +65,7 @@ func (p *Plugin) CobraAddCommands(rootCmd *launchr.Command) error {
 	buildCmd.Flags().StringVarP(&flags.out, "output", "o", "", `Build output file, by default application name is used`)
 	buildCmd.Flags().StringVar(&flags.version, "build-version", "", `Arbitrary version of application`)
 	buildCmd.Flags().StringVarP(&flags.timeout, "timeout", "t", "120s", `Build timeout duration, example: 0, 100ms, 1h23m`)
-	buildCmd.Flags().StringSliceVarP(&flags.tags, "tag", "", nil, `Add build tags`)
+	buildCmd.Flags().StringSliceVarP(&flags.tags, "tag", "", nil, `Go build tags`)
 	buildCmd.Flags().StringSliceVarP(&flags.plugins, "plugin", "p", nil, `Include PLUGIN into the build with an optional version`)
 	buildCmd.Flags().StringSliceVarP(&flags.replace, "replace", "r", nil, `Replace go dependency, see "go mod edit -replace"`)
 	buildCmd.Flags().BoolVarP(&flags.debug, "debug", "d", false, `Include debug flags into the build to support go debugging with "delve". If not specified, debugging info is trimmed`)
@@ -78,66 +75,15 @@ func (p *Plugin) CobraAddCommands(rootCmd *launchr.Command) error {
 }
 
 // Generate implements [launchr.GeneratePlugin] interface.
-func (p *Plugin) Generate(buildPath string, _ string) error {
+func (p *Plugin) Generate(config launchr.GenerateConfig) error {
 	launchr.Term().Info().Println("Generating main.go file")
-
-	// Temporary solution to build with an old version.
-	// @todo remove when the new version is released.
-	var imports []UsePluginInfo
-	_, err := os.Stat(filepath.Join(buildPath, "plugins.go"))
-	if os.IsNotExist(err) {
-		imports, err = extractGenImports(filepath.Join(buildPath, "gen.go"))
-		if err != nil {
-			return err
-		}
-	}
-
 	tpl := launchr.Template{
 		Tmpl: tmplMain,
 		Data: &buildVars{
 			CorePkg: corePkgInfo(),
-			Plugins: imports,
 		},
 	}
-	return tpl.WriteFile(filepath.Join(buildPath, "main.go"))
-}
-
-// Deprecated: remove when the new version is deployed.
-func extractGenImports(genpath string) ([]UsePluginInfo, error) {
-	// Open the file
-	file, err := os.Open(genpath) //nolint
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	var imports []UsePluginInfo
-	readingImports := false
-	scanner := bufio.NewScanner(file)
-	importRegex := regexp.MustCompile(`^\s*(_|\w+\s+)?"([^"]+)"`)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "import (" {
-			readingImports = true
-			continue
-		}
-		if line == ")" {
-			break
-		}
-		// If we are in the imports section, collect the import paths
-		if readingImports {
-			matches := importRegex.FindStringSubmatch(line)
-			if len(matches) > 1 && matches[2] != launchr.PkgPath {
-				imports = append(imports, UsePluginInfo{Path: matches[2]})
-			}
-		}
-	}
-
-	if err = scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	return imports, nil
+	return tpl.WriteFile(filepath.Join(config.BuildDir, "main.go"))
 }
 
 // Execute runs launchr and executes build of launchr.

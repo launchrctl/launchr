@@ -59,15 +59,16 @@ func SetAssetsStorage(assets embed.FS) {
 }
 
 // getPluginByType returns specific plugins from the app.
-func getPluginByType[T Plugin](app *appImpl) []T {
-	plugins := app.pluginMngr.All()
-	res := make([]T, 0, len(plugins))
+func getPluginByType[T Plugin](app *appImpl) []launchr.MapItem[PluginInfo, T] {
 	// Collect plugins according to their weights.
-	m := make(map[int][]T)
-	for pi, p := range plugins {
+	m := make(map[int][]launchr.MapItem[PluginInfo, T])
+	cnt := 0
+	for pi, p := range app.pluginMngr.All() {
 		p, ok := p.(T)
 		if ok {
-			m[pi.Weight] = append(m[pi.Weight], p)
+			item := launchr.MapItem[PluginInfo, T]{K: pi, V: p}
+			m[pi.Weight] = append(m[pi.Weight], item)
+			cnt++
 		}
 	}
 	// Sort weight keys.
@@ -78,6 +79,7 @@ func getPluginByType[T Plugin](app *appImpl) []T {
 	sort.Ints(weights)
 	// Merge all to a sorted list of plugins.
 	// @todo maybe sort everything on init to optimize.
+	res := make([]launchr.MapItem[PluginInfo, T], 0, cnt)
 	for _, w := range weights {
 		res = append(res, m[w]...)
 	}
@@ -229,7 +231,7 @@ func (app *appImpl) init() error {
 
 	// Run OnAppInit hook.
 	for _, p := range getPluginByType[OnAppInitPlugin](app) {
-		if err = p.OnAppInit(app); err != nil {
+		if err = p.V.OnAppInit(app); err != nil {
 			return err
 		}
 	}
@@ -253,7 +255,7 @@ func (app *appImpl) discoverActions() (err error) {
 	defer cancel()
 	for _, p := range getPluginByType[action.DiscoveryPlugin](app) {
 		for _, regfs := range app.GetRegisteredFS() {
-			actions, errDis := p.DiscoverActions(ctx, regfs, idp)
+			actions, errDis := p.V.DiscoverActions(ctx, regfs, idp)
 			if errDis != nil {
 				return errDis
 			}
@@ -272,7 +274,7 @@ func (app *appImpl) discoverActions() (err error) {
 
 	// Alter all registered actions.
 	for _, p := range getPluginByType[action.AlterActionsPlugin](app) {
-		err = p.AlterActions()
+		err = p.V.AlterActions()
 		if err != nil {
 			return err
 		}
@@ -322,7 +324,7 @@ func (app *appImpl) exec() error {
 
 	// Add application commands from plugins.
 	for _, p := range getPluginByType[CobraPlugin](app) {
-		if err := p.CobraAddCommands(app.cmd); err != nil {
+		if err := p.V.CobraAddCommands(app.cmd); err != nil {
 			return err
 		}
 	}

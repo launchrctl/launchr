@@ -105,7 +105,8 @@ func getPluginModules(plugins PluginsMap, bi *debug.BuildInfo) []string {
 			continue
 		}
 		for _, d := range bi.Deps {
-			if strings.HasPrefix(pi.pkgPath, d.Path) {
+			// Path may be empty on "go run".
+			if d.Path != "" && strings.HasPrefix(pi.pkgPath, d.Path) {
 				s := fmt.Sprintf("%s %s", pi.pkgPath, d.Version)
 				if d.Replace != nil {
 					s = fmt.Sprintf("%s => %s %s", s, d.Replace.Path, d.Replace.Version)
