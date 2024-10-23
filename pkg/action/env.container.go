@@ -305,7 +305,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	// @todo maybe we should note that SIG was sent to the container. Code 130 is sent on Ctlr+C.
 	log.Info("action finished with the exit code", "exit_code", status)
 	if status != 0 {
-		err = RunStatusError{code: status, actionID: a.ID}
+		err = launchr.NewExitError(status, fmt.Sprintf("action %q finished with exit code %d", a.ID, status))
 	}
 
 	// Copy back the result from the volume.

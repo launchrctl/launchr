@@ -15,14 +15,8 @@ type Manager interface {
 	launchr.Service
 	// All returns all actions copied and decorated.
 	All() map[string]*Action
-	// AllRef returns all original action values from the storage.
-	// Deprecated: use [ManagerUnsafe.AllUnsafe] instead.
-	AllRef() map[string]*Action
 	// Get returns a copy of an action from the manager with default decorators.
 	Get(id string) (*Action, bool)
-	// GetRef returns an original action value from the storage.
-	// Deprecated: use [ManagerUnsafe.GetUnsafe] instead.
-	GetRef(id string) (*Action, bool)
 	// Add saves an action in the manager.
 	Add(*Action)
 	// Delete deletes the action from the manager.
@@ -126,11 +120,6 @@ func (m *actionManagerMap) AllUnsafe() map[string]*Action {
 	return copyMap(m.actionStore)
 }
 
-// Deprecated: use AllUnsafe instead.
-func (m *actionManagerMap) AllRef() map[string]*Action {
-	return m.AllUnsafe()
-}
-
 func (m *actionManagerMap) GetIDFromAlias(alias string) string {
 	if id, ok := m.actionAliases[alias]; ok {
 		return id
@@ -172,11 +161,6 @@ func (m *actionManagerMap) GetUnsafe(id string) (*Action, bool) {
 	defer m.mx.Unlock()
 	a, ok := m.actionStore[id]
 	return a, ok
-}
-
-// Deprecated: use GetUnsafe instead.
-func (m *actionManagerMap) GetRef(id string) (*Action, bool) {
-	return m.GetUnsafe(id)
 }
 
 func (m *actionManagerMap) AddValueProcessor(name string, vp ValueProcessor) {

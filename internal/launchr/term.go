@@ -2,6 +2,7 @@ package launchr
 
 import (
 	"io"
+	"log"
 	"reflect"
 
 	"github.com/pterm/pterm"
@@ -105,6 +106,8 @@ func (t *Terminal) DisableOutput() {
 // SetOutput sets an output to target writer.
 func (t *Terminal) SetOutput(w io.Writer) {
 	t.w = w
+	// If some library uses std log, redirect as well.
+	log.SetOutput(w)
 	// Ensure underlying printers use self.
 	// Used to simplify update of writers in the printers.
 	for i := 0; i < len(t.p); i++ {

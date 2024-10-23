@@ -3,15 +3,10 @@ package builder
 import (
 	"context"
 	"fmt"
-	"go/build"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	cp "github.com/otiai10/copy"
-	"golang.org/x/mod/module"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 )
@@ -150,14 +145,6 @@ func (b *Builder) Build(ctx context.Context, streams launchr.Streams) error {
 		return err
 	}
 
-	// prebuild
-	// @todo remove
-	launchr.Term().Info().Println("Executing prebuild scripts")
-	err = b.preBuild(ctx)
-	if err != nil {
-		return err
-	}
-
 	// Build the main go package.
 	launchr.Term().Info().Printfln("Building %s", b.PkgName)
 	err = b.goBuild(ctx)
@@ -221,110 +208,6 @@ func (b *Builder) goBuild(ctx context.Context) error {
 	return nil
 }
 
-func (b *Builder) preBuild(ctx context.Context) error {
-	output, err := b.env.execGoList(ctx)
-	if err != nil {
-		return err
-	}
-
-	pluginVersionMap := make(map[string]string)
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		pv := strings.Split(line, " ")
-		for _, p := range b.BuildOptions.Plugins {
-			if strings.Contains(pv[0], p.Path) {
-				pluginVersionMap[p.Path] = pv[1]
-				continue
-			}
-		}
-	}
-
-	assetsPath := filepath.Join(b.env.wd, "assets")
-	buildName := filepath.Base(b.env.wd)
-	err = os.MkdirAll(assetsPath, 0750)
-	if err != nil {
-		return err
-	}
-
-	for pluginName, v := range pluginVersionMap {
-		if _, ok := b.BuildOptions.ModReplace[pluginName]; ok {
-			launchr.Log().Debug("skipping prebuild script for replaced plugin", "plugin", pluginName)
-			continue
-		}
-
-		packagePath, _ := getModulePath(pluginName, v)
-		if _, err = os.Stat(packagePath); os.IsNotExist(err) {
-			launchr.Log().Debug("module/version in not installed", "package", packagePath)
-			continue
-		}
-
-		// check if prebuild script exists.
-		prebuildScriptPath := filepath.Join(packagePath, "scripts", "prebuild.go")
-		if _, err = os.Stat(prebuildScriptPath); os.IsNotExist(err) {
-			launchr.Log().Debug("prebuild script does not exist, skipping", "plugin", pluginName)
-			continue
-		}
-
-		tmpPath := filepath.Join(os.TempDir(), buildName, filepath.Base(pluginName))
-
-		// clean tmp folder if it existed before.
-		err = os.RemoveAll(tmpPath)
-		if err != nil {
-			return err
-		}
-
-		// prepare tmp folder for assets and force prebuild script to push data there.
-		err = os.MkdirAll(tmpPath, 0750)
-		if err != nil {
-			return err
-		}
-
-		launchr.Log().Debug("executing prebuild script for plugin", "plugin", pluginName)
-		err = b.runGoRun(ctx, packagePath, "scripts/prebuild.go", v, tmpPath)
-		if err != nil {
-			return err
-		}
-
-		// prepare plugin assets folder.
-		pluginAssetsPath := filepath.Join(assetsPath, pluginName)
-		err = os.MkdirAll(pluginAssetsPath, 0750)
-		if err != nil {
-			return err
-		}
-
-		// move assets from tmp dir to assets folder.
-		launchr.Log().Debug("moving assets from tmp to build folder")
-		err = cp.Copy(tmpPath, pluginAssetsPath, cp.Options{OnDirExists: func(_, _ string) cp.DirExistsAction {
-			return cp.Merge
-		}})
-		if err != nil {
-			return err
-		}
-
-		launchr.Log().Debug("removing tmp files", "dir", tmpPath)
-		err = os.RemoveAll(tmpPath)
-		if err != nil {
-			return err
-		}
-	}
-
-	err = os.RemoveAll(filepath.Join(os.TempDir(), buildName))
-	if err != nil {
-		return err
-	}
-
-	// create empty .info file for embed.
-	// prevent embed error in case of 0 assets in folder.
-	file, err := os.Create(filepath.Clean(filepath.Join(assetsPath, ".info")))
-	if err != nil {
-		launchr.Term().Println(err)
-		os.Exit(2)
-	}
-	defer file.Close()
-
-	return nil
-}
-
 func (b *Builder) runGoRun(ctx context.Context, dir string, args ...string) error {
 	runArgs := append([]string{"run"}, args...)
 	cmd := b.env.NewCommand(ctx, b.env.Go(), runArgs...)
@@ -336,28 +219,4 @@ func (b *Builder) runGoRun(ctx context.Context, dir string, args ...string) erro
 	env.Unset("GOARCH")
 	cmd.Env = env
 	return b.env.RunCmd(ctx, cmd)
-}
-
-func getModulePath(name, version string) (string, error) {
-	cache, ok := os.LookupEnv("GOMODCACHE")
-	if !ok {
-		gopath := os.Getenv("GOPATH")
-		if gopath == "" {
-			gopath = build.Default.GOPATH
-		}
-
-		cache = path.Join(gopath, "pkg", "mod")
-	}
-
-	escapedPath, err := module.EscapePath(name)
-	if err != nil {
-		return "", err
-	}
-
-	escapedVersion, err := module.EscapeVersion(version)
-	if err != nil {
-		return "", err
-	}
-
-	return path.Join(cache, escapedPath+"@"+escapedVersion), nil
 }

@@ -89,7 +89,7 @@ func Test_CreateFromYaml(t *testing.T) {
 			t.Parallel()
 			_, err := CreateFromYaml(bytes.NewReader([]byte(tt.input)))
 			if tt.expErr == errAny {
-				assert.Error(t, err)
+				assert.True(t, assert.Error(t, err))
 			} else if assert.IsType(t, tt.expErr, err) {
 				assert.Equal(t, tt.expErr, err)
 			} else {
@@ -122,7 +122,7 @@ func Test_CreateFromYamlTpl(t *testing.T) {
 			t.Parallel()
 			_, err := CreateFromYamlTpl([]byte(tt.input))
 			if tt.expErr == errAny {
-				assert.Error(t, err)
+				assert.True(t, assert.Error(t, err))
 			} else {
 				assert.ErrorIs(t, tt.expErr, err)
 			}

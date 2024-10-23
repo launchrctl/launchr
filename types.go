@@ -86,6 +86,9 @@ type (
 	ConfigAware = launchr.ConfigAware
 	// ManagedFS is a File System managed by launchr.
 	ManagedFS = launchr.ManagedFS
+
+	// ExitError is an error holding an error code of executed command.
+	ExitError = launchr.ExitError
 )
 
 // Version provides app version info.
@@ -129,3 +132,6 @@ func NewTextHandlerLogger(w io.Writer) *Logger { return launchr.NewTextHandlerLo
 
 // NewJSONHandlerLogger creates a logger with a [io.Writer] and JSON output.
 func NewJSONHandlerLogger(w io.Writer) *Logger { return launchr.NewJSONHandlerLogger(w) }
+
+// NewExitError creates a new ExitError.
+func NewExitError(code int, msg string) error { return launchr.NewExitError(code, msg) }

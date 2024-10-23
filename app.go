@@ -2,10 +2,8 @@ package launchr
 
 import (
 	"context"
-	"embed"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -19,8 +17,7 @@ import (
 )
 
 var (
-	errTplAssetsNotFound = "assets not found for requested plugin %s"
-	errDiscoveryTimeout  = "action discovery timeout exceeded"
+	errDiscoveryTimeout = "action discovery timeout exceeded"
 )
 
 // ActionsGroup is a command group definition.
@@ -47,15 +44,6 @@ type appImpl struct {
 	actionMngr action.Manager
 	pluginMngr PluginManager
 	config     Config
-}
-
-var assetsStorage embed.FS
-
-// SetAssetsStorage stores assets for web client.
-// Deprecated: not supported. Plugins must define their dependencies using GeneratePlugin.
-// @todo remove
-func SetAssetsStorage(assets embed.FS) {
-	assetsStorage = assets
 }
 
 // getPluginByType returns specific plugins from the app.
@@ -133,28 +121,6 @@ func (app *appImpl) GetService(v any) {
 		}
 	}
 	panic(fmt.Sprintf("service %q does not exist", stype))
-}
-
-// Deprecated: @todo remove
-func (app *appImpl) GetPluginAssets(p Plugin) fs.FS {
-	pluginsMap := app.pluginMngr.All()
-	var packagePath string
-	for pi, plg := range pluginsMap {
-		if plg == p {
-			packagePath = pi.GetPackagePath()
-		}
-	}
-
-	if packagePath == "" {
-		panic(errors.New("trying to get assets for unknown plugin"))
-	}
-
-	subFS, err := fs.Sub(assetsStorage, filepath.Join("assets", packagePath))
-	if err != nil {
-		panic(fmt.Errorf(errTplAssetsNotFound, packagePath))
-	}
-
-	return subFS
 }
 
 // earlyPeekFlags tries to parse flags early to allow change behavior before full boot.
@@ -341,13 +307,16 @@ func (app *appImpl) Execute() int {
 	}
 	if err = app.exec(); err != nil {
 		var status int
-		var stErr action.RunStatusError
+		var errExit ExitError
 
 		switch {
-		case errors.As(err, &stErr):
-			status = stErr.GetCode()
+		case errors.As(err, &errExit):
+			status = errExit.ExitCode()
 		default:
 			status = 1
+		}
+		msg := err.Error()
+		if msg != "" {
 			Term().Error().Println(err)
 		}
 

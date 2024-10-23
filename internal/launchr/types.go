@@ -38,8 +38,6 @@ type App interface {
 	// Panics if a service is not found.
 	GetService(v any)
 
-	// Deprecated: not supported with no replacement.
-	GetPluginAssets(p Plugin) fs.FS
 	// RegisterFS registers a File System in launchr.
 	// It may be a FS for action discovery, see [action.DiscoveryFS].
 	RegisterFS(fs ManagedFS)
@@ -213,4 +211,25 @@ type ManagedFS interface {
 type MapItem[K, V any] struct {
 	K K // K is a key of the map item.
 	V V // V is a value of the map item.
+}
+
+// ExitError is an error holding an error code of executed command.
+type ExitError struct {
+	code int
+	msg  string
+}
+
+// NewExitError creates a new ExitError.
+func NewExitError(code int, msg string) error {
+	return ExitError{code, msg}
+}
+
+// Error implements [error] interface.
+func (e ExitError) Error() string {
+	return e.msg
+}
+
+// ExitCode returns the exit code.
+func (e ExitError) ExitCode() int {
+	return e.code
 }

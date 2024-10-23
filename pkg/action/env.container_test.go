@@ -357,7 +357,7 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 		Return(nil, errImg)
 
 	cid, err = r.containerCreate(ctx, a, runCfg)
-	assert.Error(err)
+	assert.True(assert.Error(err))
 	assert.Equal("", cid)
 
 	// Container create fail.
@@ -369,7 +369,7 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 		ContainerCreate(ctx, gomock.Any()).
 		Return("", expErr)
 	cid, err = r.containerCreate(ctx, a, runCfg)
-	assert.Error(err)
+	assert.True(assert.Error(err))
 	assert.Equal("", cid)
 }
 
@@ -566,7 +566,7 @@ func Test_ContainerExec(t *testing.T) {
 	errAny := errors.New("any")
 	errAttach := errors.New("attach error")
 	errStart := errors.New("start error")
-	errExecError := RunStatusError{code: 2, actionID: act.ID}
+	errExecError := launchr.NewExitError(2, fmt.Sprintf("action %q finished with exit code 2", act.ID))
 
 	successSteps := []mockCallInfo{
 		{
@@ -726,7 +726,7 @@ func Test_ContainerExec(t *testing.T) {
 			if tt.expErr != errAny {
 				assert.Equal(tt.expErr, err)
 			} else {
-				assert.Error(err)
+				assert.True(assert.Error(err))
 			}
 		})
 	}
