@@ -372,6 +372,7 @@ type DefParameter struct {
 	Description string          `yaml:"description"`
 	Type        jsonschema.Type `yaml:"type"`
 	Default     any             `yaml:"default"`
+	Enum        []any           `yaml:"enum"`
 	Items       *DefArrayItems  `yaml:"items"`
 
 	// Action specific behavior for parameters.
@@ -420,6 +421,15 @@ func (p *DefParameter) UnmarshalYAML(n *yaml.Node) (err error) {
 	}
 	if p.Title == "" {
 		p.Title = p.Name
+	}
+	// Cast enum any to expected type, make sure enum is correctly filled.
+	for i := 0; i < len(p.Enum); i++ {
+		v, err := jsonschema.TypeDefault(p.Type, p.Enum[i])
+		if err != nil {
+			enumNode := yamlFindNodeByKey(n, "enum")
+			return yamlTypeErrorLine(err.Error(), enumNode.Line, enumNode.Column)
+		}
+		p.Enum[i] = v
 	}
 	p.raw["type"] = p.Type
 	if p.Type == jsonschema.Array {

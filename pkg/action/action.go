@@ -248,7 +248,7 @@ func (a *Action) processValue(v any, vtype jsonschema.Type, applyProc []DefValue
 	}
 	// Cast to []any slice because jsonschema validator supports only this type.
 	if vtype == jsonschema.Array {
-		res = TypedSliceToAny(res)
+		res = CastSliceTypedToAny(res)
 	}
 
 	return res, nil

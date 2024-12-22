@@ -82,11 +82,11 @@ func defaultVal[T any](val any, d T) (T, error) {
 		return v, nil
 	}
 
-	return d, fmt.Errorf("default value type and expected type mismatch")
+	return d, fmt.Errorf("value type and expected type mismatch")
 }
 
-// CastStringToType converts a string value to jsonschema type.
-func CastStringToType(s string, t Type) (any, error) {
+// ConvertStringToType converts a string value to jsonschema type.
+func ConvertStringToType(s string, t Type) (any, error) {
 	switch t {
 	case String:
 		return s, nil

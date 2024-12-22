@@ -69,7 +69,7 @@ func ArgsPosToNamed(a *Action, args []string) InputParams {
 func castArgStrToType(v string, pdef *DefParameter) any {
 	var err error
 	if pdef.Type != jsonschema.Array {
-		res, err := jsonschema.CastStringToType(v, pdef.Type)
+		res, err := jsonschema.ConvertStringToType(v, pdef.Type)
 		if err != nil {
 			return jsonschema.MustTypeDefault(pdef.Type, nil)
 		}
@@ -78,7 +78,7 @@ func castArgStrToType(v string, pdef *DefParameter) any {
 	items := strings.Split(v, ",")
 	res := make([]any, len(items))
 	for i, item := range items {
-		res[i], err = jsonschema.CastStringToType(item, pdef.Items.Type)
+		res[i], err = jsonschema.ConvertStringToType(item, pdef.Items.Type)
 		if err != nil {
 			return jsonschema.MustTypeDefault(pdef.Items.Type, nil)
 		}
@@ -196,14 +196,14 @@ func setParamDefaults(params InputParams, paramDef ParametersList) InputParams {
 		}
 		// Cast to []any slice because jsonschema validator supports only this type.
 		if d.Type == jsonschema.Array {
-			res[k] = TypedSliceToAny(res[k])
+			res[k] = CastSliceTypedToAny(res[k])
 		}
 	}
 	return res
 }
 
-// TypedSliceToAny converts an unknown slice to []any slice.
-func TypedSliceToAny(slice any) []any {
+// CastSliceTypedToAny converts an unknown slice to []any slice.
+func CastSliceTypedToAny(slice any) []any {
 	if slice == nil {
 		return nil
 	}
@@ -221,8 +221,8 @@ func TypedSliceToAny(slice any) []any {
 	return res
 }
 
-// AnyToTypedSlice converts []any slice to a typed slice.
-func AnyToTypedSlice[T any](orig []any) []T {
+// CastSliceAnyToTyped converts []any slice to a typed slice.
+func CastSliceAnyToTyped[T any](orig []any) []T {
 	res := make([]T, len(orig))
 	for i := 0; i < len(orig); i++ {
 		res[i] = orig[i].(T)
@@ -230,7 +230,12 @@ func AnyToTypedSlice[T any](orig []any) []T {
 	return res
 }
 
+// InputArgSlice is a helper function to get an argument of specific type slice.
+func InputArgSlice[T any](input *Input, name string) []T {
+	return CastSliceAnyToTyped[T](input.Arg(name).([]any))
+}
+
 // InputOptSlice is a helper function to get an option of specific type slice.
 func InputOptSlice[T any](input *Input, name string) []T {
-	return AnyToTypedSlice[T](input.Opt(name).([]any))
+	return CastSliceAnyToTyped[T](input.Opt(name).([]any))
 }

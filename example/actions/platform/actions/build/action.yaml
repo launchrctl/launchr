@@ -13,7 +13,7 @@ action:
     - name: opt1
       title: Option 1
       description: Some additional info for option
-      default: 
+      default: ""
     - name: opt2
       title: Option 2
       description: Some additional info for option
@@ -30,6 +30,15 @@ action:
       title: Option 4
       description: Some additional info for option
       type: array
+    - name: optenum
+      title: Option 5
+      type: string
+      enum: [enum1, enum2]
+    - name: optarrbool
+      title: Option 6
+      type: array
+      items:
+        type: boolean
 
 runtime:
   type: container

@@ -57,6 +57,7 @@ func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, err
 				}
 			}
 
+			// Set and validate input.
 			if err = a.SetInput(input); err != nil {
 				return err
 			}
@@ -208,15 +209,16 @@ func setFlag(cmd *launchr.Command, opt *action.DefParameter) (any, error) {
 	case jsonschema.Boolean:
 		val = cmd.Flags().BoolP(opt.Name, opt.Shorthand, dval.(bool), desc)
 	case jsonschema.Array:
+		dslice := dval.([]any)
 		switch opt.Items.Type {
 		case jsonschema.String:
-			val = cmd.Flags().StringSliceP(opt.Name, opt.Shorthand, action.AnyToTypedSlice[string](dval.([]any)), desc)
+			val = cmd.Flags().StringSliceP(opt.Name, opt.Shorthand, action.CastSliceAnyToTyped[string](dslice), desc)
 		case jsonschema.Integer:
-			val = cmd.Flags().IntSliceP(opt.Name, opt.Shorthand, action.AnyToTypedSlice[int](dval.([]any)), desc)
+			val = cmd.Flags().IntSliceP(opt.Name, opt.Shorthand, action.CastSliceAnyToTyped[int](dslice), desc)
 		case jsonschema.Number:
-			val = cmd.Flags().Float64SliceP(opt.Name, opt.Shorthand, action.AnyToTypedSlice[float64](dval.([]any)), desc)
+			val = cmd.Flags().Float64SliceP(opt.Name, opt.Shorthand, action.CastSliceAnyToTyped[float64](dslice), desc)
 		case jsonschema.Boolean:
-			val = cmd.Flags().BoolSliceP(opt.Name, opt.Shorthand, action.AnyToTypedSlice[bool](dval.([]any)), desc)
+			val = cmd.Flags().BoolSliceP(opt.Name, opt.Shorthand, action.CastSliceAnyToTyped[bool](dslice), desc)
 		default:
 			// @todo use cmd.Flags().Var() and define a custom value, jsonschema accepts "any".
 			return nil, fmt.Errorf("json schema array type %q is not implemented", opt.Items.Type)

@@ -42,7 +42,7 @@ func Test_CreateFromYaml(t *testing.T) {
 		{"invalid arguments field - object", invalidArgsObjYaml, yamlTypeErrorLine(sErrFieldMustBeArr, 7, 5)},
 		{"invalid argument empty name", invalidArgsEmptyNameYaml, yamlTypeErrorLine(sErrEmptyActionParamName, 7, 7)},
 		{"invalid argument name", invalidArgsNameYaml, yamlTypeErrorLine(fmt.Sprintf(sErrInvalidActionParamName, "0arg"), 7, 13)},
-		{"invalid argument default type", invalidArgsDefaultMismatch, yamlTypeErrorLine("default value type and expected type mismatch", 8, 16)},
+		{"invalid argument default type", invalidArgsDefaultMismatch, yamlTypeErrorLine("value type and expected type mismatch", 8, 16)},
 
 		// Options are incorrectly provided v1 - string, not an array of objects.
 		{"invalid options field - string", invalidOptsStrYaml, yamlTypeErrorLine(sErrFieldMustBeArr, 6, 12)},
