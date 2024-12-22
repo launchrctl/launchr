@@ -573,3 +573,18 @@ action:
       type: string
       required: true
 `
+
+const validPatternFormat = `
+runtime: plugin
+action:
+  title: Title
+  arguments:
+    - name: arg_email
+      type: string
+      required: true
+      format: email
+    - name: arg_pattern
+      type: string
+      required: true
+      pattern: "^[A-Z]+$"
+`

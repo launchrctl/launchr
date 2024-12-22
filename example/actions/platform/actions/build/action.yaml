@@ -39,6 +39,10 @@ action:
       type: array
       items:
         type: boolean
+    - name: optip
+      title: Option 7
+      type: string
+      format: "ipv4"
 
 runtime:
   type: container

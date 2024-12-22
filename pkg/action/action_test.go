@@ -251,46 +251,48 @@ func Test_ActionInputValidate(t *testing.T) {
 			newErrAddProps(opt(), "opt_undefined"),
 		)},
 		{"valid args positional", validArgString, nil, nil, setPosArgs("arg1"), nil},
-		{"invalid args positional - more than expected", validArgString, nil, nil, setPosArgs("arg1", "arg2"), fmt.Errorf("accepts 1 arg(s), received 2")},
+		{"invalid args positional - given more than expected", validArgString, nil, nil, setPosArgs("arg1", "arg2"),
+			fmt.Errorf("accepts 1 arg(s), received 2"),
+		},
 		{"invalid arg string - number given", validArgString, InputParams{"arg_string": 1}, nil, nil, schemaErr(
 			newErrExpType(arg("arg_string"), "string", "number"),
 		)},
-		{"invalid required - arg missing", validArgString, InputParams{}, nil, nil, schemaErr(
+		{"invalid required - arg not given", validArgString, InputParams{}, nil, nil, schemaErr(
 			newErrMissProp(arg(), "arg_string"),
 		)},
-		{"invalid required - skip validation", validArgString, InputParams{}, nil, setValidatedInput, nil},
+		{"invalid required ok - validation skipped", validArgString, InputParams{}, nil, setValidatedInput, nil},
 		{"valid arg optional", validArgStringOptional, InputParams{}, nil, nil, nil},
 		{"valid arg string enum", validArgStringEnum, InputParams{"arg_enum": "enum1"}, nil, nil, nil},
 		{"invalid arg string enum - number given", validArgStringEnum, InputParams{"arg_enum": 1}, nil, nil, schemaErr(
 			newErrExpType(arg("arg_enum"), "string", "number"),
 		)},
-		{"invalid arg string enum - incorrect enum", validArgStringEnum, InputParams{"arg_enum": "invalid"}, nil, nil, schemaErr(
+		{"invalid arg string enum - incorrect enum given", validArgStringEnum, InputParams{"arg_enum": "invalid"}, nil, nil, schemaErr(
 			newErrEnum(arg("arg_enum"), "enum1", "enum2"),
 		)},
 		{"valid arg boolean", validArgBoolean, InputParams{"arg_boolean": true}, nil, nil, nil},
-		{"valid arg default - correct input", validArgDefault, InputParams{"arg_default": "my_val"}, nil, assertArgValue("arg_default", "my_val"), nil},
-		{"invalid arg default - wrong input type", validArgDefault, InputParams{"arg_default": true}, nil, nil, schemaErr(
+		{"valid arg default - correct type given", validArgDefault, InputParams{"arg_default": "my_val"}, nil, assertArgValue("arg_default", "my_val"), nil},
+		{"invalid arg default - wrong type given", validArgDefault, InputParams{"arg_default": true}, nil, nil, schemaErr(
 			newErrExpType(arg("arg_default"), "string", "boolean"),
 		)},
-		{"valid arg default - missing arg", validArgDefault, InputParams{}, nil, assertArgValue("arg_default", "default_string"), nil},
+		{"valid arg default - arg not given", validArgDefault, InputParams{}, nil, assertArgValue("arg_default", "default_string"), nil},
 		{"valid boolean opt", validOptBoolean, nil, InputParams{"opt_boolean": true}, nil, nil},
 		{"invalid boolean opt - string given", validOptBoolean, nil, InputParams{"opt_boolean": "str"}, nil, schemaErr(
 			newErrExpType(opt("opt_boolean"), "boolean", "string"),
 		)},
-		{"valid array type string - string slice", validOptArrayImplicitString, nil, InputParams{"opt_array_str": []string{"str1", "str2"}}, nil, nil},
-		{"valid array type string - any slice", validOptArrayImplicitString, nil, InputParams{"opt_array_str": []any{"str1", "str2"}}, nil, nil},
-		{"invalid array type string - slice int", validOptArrayImplicitString, nil, InputParams{"opt_array_str": []int{1, 2, 3}}, nil, schemaErr(
+		{"valid array type string - string slice given", validOptArrayImplicitString, nil, InputParams{"opt_array_str": []string{"str1", "str2"}}, nil, nil},
+		{"valid array type string - any slice given", validOptArrayImplicitString, nil, InputParams{"opt_array_str": []any{"str1", "str2"}}, nil, nil},
+		{"invalid array type string - int slice given", validOptArrayImplicitString, nil, InputParams{"opt_array_str": []int{1, 2, 3}}, nil, schemaErr(
 			newErrExpType(opt("opt_array_str", "0"), "string", "number"),
 			newErrExpType(opt("opt_array_str", "1"), "string", "number"),
 			newErrExpType(opt("opt_array_str", "2"), "string", "number"),
 		)},
 		{"valid array type string enum", validOptArrayStringEnum, nil, InputParams{"opt_array_enum": []string{"enum_arr1", "enum_arr2"}}, nil, nil},
-		{"invalid array type string enum - incorrect enum", validOptArrayStringEnum, nil, InputParams{"opt_array_enum": []string{"enum_arr_incorrect1", "enum_arr_incorrect2"}}, nil, schemaErr(
+		{"invalid array type string enum - incorrect enum given", validOptArrayStringEnum, nil, InputParams{"opt_array_enum": []string{"enum_arr_incorrect1", "enum_arr_incorrect2"}}, nil, schemaErr(
 			newErrEnum(opt("opt_array_enum", "0"), "enum_arr1", "enum_arr2"),
 			newErrEnum(opt("opt_array_enum", "1"), "enum_arr1", "enum_arr2"),
 		)},
 		{"valid array type integer", validOptArrayInt, nil, InputParams{"opt_array_int": []int{1, 2, 3}}, nil, nil},
-		{"valid array type integer - default", validOptArrayIntDefault, nil, nil, nil, nil},
+		{"valid array type integer - default used", validOptArrayIntDefault, nil, nil, nil, nil},
 		{"valid multiple args and opts", validMultipleArgsAndOpts, InputParams{"arg_int": 1, "arg_str": "mystr", "arg_str2": "mystr", "arg_bool": true}, InputParams{"opt_str_required": "mystr"}, nil, nil},
 		{"invalid multiple args and opts - multiple causes", validMultipleArgsAndOpts, InputParams{"arg_int": "str", "arg_str": 1}, InputParams{"opt_str": 1}, nil, schemaErr(
 			newErrMissProp(arg(), "arg_str2", "arg_bool"),
@@ -298,6 +300,11 @@ func Test_ActionInputValidate(t *testing.T) {
 			newErrExpType(arg("arg_str"), "string", "number"),
 			newErrMissProp(opt(), "opt_str_required"),
 			newErrExpType(opt("opt_str"), "string", "number"),
+		)},
+		{"valid format and pattern - email and uppercase given", validPatternFormat, InputParams{"arg_email": "my@example.com", "arg_pattern": "EXAMPLE"}, nil, nil, nil},
+		{"invalid format and pattern - wrong email and lowercase given", validPatternFormat, InputParams{"arg_email": "incorrect", "arg_pattern": "example"}, nil, nil, schemaErr(
+			newError(arg("arg_email"), "'incorrect' is not valid email: missing @"),
+			newError(arg("arg_pattern"), "'example' does not match pattern '^[A-Z]+$'"),
 		)},
 	}
 

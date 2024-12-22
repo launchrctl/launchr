@@ -133,6 +133,7 @@ func Validate(s Schema, input map[string]any) error {
 	if err = c.AddResource(s.ID, schema); err != nil {
 		return err
 	}
+	c.AssertFormat()
 	sch, err := c.Compile(s.ID)
 	if err != nil {
 		return err
