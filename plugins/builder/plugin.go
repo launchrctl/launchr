@@ -2,7 +2,9 @@
 package builder
 
 import (
+	"bytes"
 	"context"
+	_ "embed"
 	"fmt"
 	"math"
 	"path/filepath"
@@ -10,7 +12,11 @@ import (
 	"time"
 
 	"github.com/launchrctl/launchr/internal/launchr"
+	"github.com/launchrctl/launchr/pkg/action"
 )
+
+//go:embed action.yaml
+var actionYaml []byte
 
 func init() {
 	launchr.RegisterPlugin(&Plugin{})
@@ -43,35 +49,30 @@ type builderInput struct {
 // OnAppInit implements [launchr.OnAppInitPlugin] interface.
 func (p *Plugin) OnAppInit(app launchr.App) error {
 	p.app = app
+	actionYaml = bytes.Replace(actionYaml, []byte("DEFAULT_NAME_PLACEHOLDER"), []byte(p.app.Name()), 1)
 	return nil
 }
 
-// CobraAddCommands implements [launchr.CobraPlugin] interface to provide build functionality.
-func (p *Plugin) CobraAddCommands(rootCmd *launchr.Command) error {
-	// Flag options.
-	flags := builderInput{}
+// DiscoverActions implements [launchr.ActionDiscoveryPlugin] interface.
+func (p *Plugin) DiscoverActions(_ context.Context) ([]*action.Action, error) {
+	a := action.NewFromYAML("build", actionYaml)
+	a.SetRuntime(action.NewFnRuntime(func(ctx context.Context, a *action.Action) error {
+		input := a.Input()
+		flags := builderInput{
+			name:    input.Opt("name").(string),
+			out:     input.Opt("output").(string),
+			version: input.Opt("build-version").(string),
+			timeout: input.Opt("timeout").(string),
+			tags:    action.InputOptSlice[string](input, "tag"),
+			plugins: action.InputOptSlice[string](input, "plugin"),
+			replace: action.InputOptSlice[string](input, "replace"),
+			debug:   input.Opt("debug").(bool),
+			nocache: input.Opt("no-cache").(bool),
+		}
 
-	buildCmd := &launchr.Command{
-		Use:   "build",
-		Short: "Builds application with specified configuration",
-		RunE: func(cmd *launchr.Command, _ []string) error {
-			// Don't show usage help on a runtime error.
-			cmd.SilenceUsage = true
-			return Execute(cmd.Context(), p.app.Streams(), &flags)
-		},
-	}
-	// Command flags.
-	buildCmd.Flags().StringVarP(&flags.name, "name", "n", p.app.Name(), `Result application name`)
-	buildCmd.Flags().StringVarP(&flags.out, "output", "o", "", `Build output file, by default application name is used`)
-	buildCmd.Flags().StringVar(&flags.version, "build-version", "", `Arbitrary version of application`)
-	buildCmd.Flags().StringVarP(&flags.timeout, "timeout", "t", "120s", `Build timeout duration, example: 0, 100ms, 1h23m`)
-	buildCmd.Flags().StringSliceVarP(&flags.tags, "tag", "", nil, `Go build tags`)
-	buildCmd.Flags().StringSliceVarP(&flags.plugins, "plugin", "p", nil, `Include PLUGIN into the build with an optional version`)
-	buildCmd.Flags().StringSliceVarP(&flags.replace, "replace", "r", nil, `Replace go dependency, see "go mod edit -replace"`)
-	buildCmd.Flags().BoolVarP(&flags.debug, "debug", "d", false, `Include debug flags into the build to support go debugging with "delve". If not specified, debugging info is trimmed`)
-	buildCmd.Flags().BoolVarP(&flags.nocache, "no-cache", "", false, `Disable the usage of cache, e.g., when using 'go get' for dependencies.`)
-	rootCmd.AddCommand(buildCmd)
-	return nil
+		return Execute(ctx, p.app.Streams(), &flags)
+	}))
+	return []*action.Action{a}, nil
 }
 
 // Generate implements [launchr.GeneratePlugin] interface.

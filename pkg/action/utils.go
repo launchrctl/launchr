@@ -2,13 +2,10 @@ package action
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 	"sync"
 
 	"gopkg.in/yaml.v3"
-
-	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 func yamlTypeError(s string) *yaml.TypeError {
@@ -48,6 +45,7 @@ func yamlNodeLineCol(n *yaml.Node, k string) (int, int) {
 	return n.Line, n.Column
 }
 
+// dupSet is a unique set of strings, checks is string is already added to the set.
 type dupSet map[string]struct{}
 
 var replDashes = strings.NewReplacer("-", "_")
@@ -62,11 +60,15 @@ func (d dupSet) isUnique(s string) bool {
 	return true
 }
 
+// yamlParseDefNodes contains the set of yaml nodes for parsing context.
+// Used to identify unique names of action arguments and options.
 type yamlParseDefNodes struct {
 	nodes map[*yaml.Node]struct{}
 	dups  dupSet
 }
 
+// yamlGlobalParseMeta has a yaml node tree defined per action [Definition].
+// Used to have a context about during the parsing stage.
 type yamlGlobalParseMeta struct {
 	tree map[*Definition]yamlParseDefNodes
 	mx   sync.RWMutex
@@ -112,6 +114,7 @@ func (m *yamlGlobalParseMeta) dupsByNode(n *yaml.Node) dupSet {
 	return nil
 }
 
+// collectAllNodes traverses all yaml tree and returns all nodes as a slice.
 func collectAllNodes(n *yaml.Node) []*yaml.Node {
 	res := make([]*yaml.Node, 0, len(n.Content)+1)
 	res = append(res, n)
@@ -119,48 +122,6 @@ func collectAllNodes(n *yaml.Node) []*yaml.Node {
 		res = append(res, collectAllNodes(n.Content[i])...)
 	}
 	return res
-}
-
-func reflectValRef(v any, n string) any {
-	return reflect.ValueOf(v).Elem().FieldByName(n).Addr().Interface()
-}
-
-func getDefaultByType(o *Option) any {
-	// @todo rethink default if it's not actually defined, do not set anything.
-	switch o.Type {
-	case jsonschema.String:
-		return defaultVal(o.Default, "")
-	case jsonschema.Integer:
-		return defaultVal(o.Default, 0)
-	case jsonschema.Number:
-		return defaultVal(o.Default, .0)
-	case jsonschema.Boolean:
-		return defaultVal(o.Default, false)
-	case jsonschema.Array:
-		return defaultVal(o.Default, []string{})
-	default:
-		return fmt.Errorf("value for json schema type %q is not implemented", o.Type)
-	}
-}
-
-func defaultVal[T any](val any, d T) T {
-	if val == nil {
-		return d
-	}
-
-	switch v := val.(type) {
-	case T:
-		return v
-	case []any:
-		if _, ok := (any)(d).([]string); ok {
-			strSlice := make([]string, len(v))
-			for i, item := range v {
-				strSlice[i] = fmt.Sprintf("%v", item)
-			}
-			return (any)(strSlice).(T)
-		}
-	}
-	return d
 }
 
 func copyMap[K comparable, V any](m map[K]V) map[K]V {

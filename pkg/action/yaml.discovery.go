@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"io"
-	"io/fs"
 	"regexp"
 	"sync"
 )
@@ -28,43 +27,32 @@ func (y YamlDiscoveryStrategy) IsValid(name string) bool {
 
 // Loader implements [DiscoveryStrategy].
 func (y YamlDiscoveryStrategy) Loader(l FileLoadFn, p ...LoadProcessor) Loader {
-	return &yamlFileLoader{
-		open: l,
-		processor: NewPipeProcessor(
-			append([]LoadProcessor{escapeYamlTplCommentsProcessor{}}, p...)...,
-		),
+	return &YamlFileLoader{
+		YamlLoader: YamlLoader{
+			Processor: NewPipeProcessor(
+				append([]LoadProcessor{escapeYamlTplCommentsProcessor{}}, p...)...,
+			),
+		},
+		FileOpen: l,
 	}
 }
 
-type yamlFileLoader struct {
-	processor LoadProcessor
-	raw       *Definition
-	cached    []byte
-	open      func() (fs.File, error)
-	mx        sync.Mutex
+// YamlLoader loads action yaml from a string.
+type YamlLoader struct {
+	Bytes     []byte        // Bytes represents yaml content bytes.
+	Processor LoadProcessor // Processor processes variables inside the file.
+
+	raw *Definition // raw holds unprocessed definition.
+	mx  sync.Mutex  // mx is a mutex for loading and processing only once.
 }
 
-func (l *yamlFileLoader) Content() ([]byte, error) {
-	l.mx.Lock()
-	defer l.mx.Unlock()
-	// @todo unload unused, maybe manager must do it.
-	var err error
-	if l.cached != nil {
-		return l.cached, nil
-	}
-	f, err := l.open()
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	l.cached, err = io.ReadAll(f)
-	if err != nil {
-		return nil, err
-	}
-	return l.cached, nil
+// Content implements [Loader] interface.
+func (l *YamlLoader) Content() ([]byte, error) {
+	return l.Bytes, nil
 }
 
-func (l *yamlFileLoader) LoadRaw() (*Definition, error) {
+// LoadRaw implements [Loader] interface.
+func (l *YamlLoader) LoadRaw() (*Definition, error) {
 	var err error
 	buf, err := l.Content()
 	if err != nil {
@@ -73,7 +61,7 @@ func (l *yamlFileLoader) LoadRaw() (*Definition, error) {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 	if l.raw == nil {
-		l.raw, err = CreateFromYamlTpl(buf)
+		l.raw, err = NewDefFromYamlTpl(buf)
 		if err != nil {
 			return nil, err
 		}
@@ -81,7 +69,8 @@ func (l *yamlFileLoader) LoadRaw() (*Definition, error) {
 	return l.raw, err
 }
 
-func (l *yamlFileLoader) Load(ctx LoadContext) (res *Definition, err error) {
+// Load implements [Loader] interface.
+func (l *YamlLoader) Load(ctx LoadContext) (res *Definition, err error) {
 	// Open a file and cache content for future reads.
 	c, err := l.Content()
 	if err != nil {
@@ -89,16 +78,63 @@ func (l *yamlFileLoader) Load(ctx LoadContext) (res *Definition, err error) {
 	}
 	buf := make([]byte, len(c))
 	copy(buf, c)
-	buf, err = l.processor.Process(ctx, buf)
-	if err != nil {
-		return nil, err
+	if l.Processor != nil {
+		buf, err = l.Processor.Process(ctx, buf)
+		if err != nil {
+			return nil, err
+		}
 	}
-	r := bytes.NewReader(buf)
-	res, err = CreateFromYaml(r)
+	res, err = NewDefFromYaml(buf)
 	if err != nil {
 		return nil, err
 	}
 	return res, err
+}
+
+// YamlFileLoader loads action yaml from a file.
+type YamlFileLoader struct {
+	YamlLoader
+	FileOpen FileLoadFn // FileOpen lazy loads the content of the file.
+}
+
+// LoadRaw implements [Loader] interface.
+func (l *YamlFileLoader) LoadRaw() (*Definition, error) {
+	_, err := l.Content()
+	if err != nil {
+		return nil, err
+	}
+	return l.YamlLoader.LoadRaw()
+}
+
+// Load implements [Loader] interface.
+func (l *YamlFileLoader) Load(ctx LoadContext) (res *Definition, err error) {
+	// Open a file and cache content for future reads.
+	_, err = l.Content()
+	if err != nil {
+		return nil, err
+	}
+	return l.YamlLoader.Load(ctx)
+}
+
+// Content implements [Loader] interface.
+func (l *YamlFileLoader) Content() ([]byte, error) {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+	// @todo unload unused, maybe manager must do it.
+	var err error
+	if l.Bytes != nil {
+		return l.Bytes, nil
+	}
+	f, err := l.FileOpen()
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	l.Bytes, err = io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+	return l.Bytes, nil
 }
 
 type escapeYamlTplCommentsProcessor struct{}

@@ -1,6 +1,9 @@
 action:
   title: aliasaction
   description: Test alias definition
+
+runtime:
+  type: container
   image: buildargs:latest
   alias:
     - "alias1"

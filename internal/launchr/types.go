@@ -49,8 +49,8 @@ type App interface {
 // It is intended for internal use only to prevent coupling on volatile functionality.
 type AppInternal interface {
 	App
-	GetRootCmd() *Command
-	EarlyParsedFlags() []string
+	RootCmd() *Command
+	CmdEarlyParsed() CmdEarlyParsed
 }
 
 // AppVersion stores application version.
@@ -224,7 +224,7 @@ func NewExitError(code int, msg string) error {
 	return ExitError{code, msg}
 }
 
-// Error implements [error] interface.
+// Error implements error interface.
 func (e ExitError) Error() string {
 	return e.msg
 }

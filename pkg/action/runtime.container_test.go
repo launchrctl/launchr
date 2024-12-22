@@ -14,6 +14,7 @@ import (
 	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/launchrctl/launchr/internal/launchr"
@@ -43,21 +44,21 @@ func launchrCfg() launchr.Config {
 	return launchr.ConfigFromFS(cfgRoot)
 }
 
-func prepareContainerTestSuite(t *testing.T) (*assert.Assertions, *gomock.Controller, *mockdriver.MockContainerRunner, *containerEnv) {
+func prepareContainerTestSuite(t *testing.T) (*assert.Assertions, *gomock.Controller, *mockdriver.MockContainerRunner, *runtimeContainer) {
 	assert := assert.New(t)
 	ctrl := gomock.NewController(t)
 	d := mockdriver.NewMockContainerRunner(ctrl)
 	d.EXPECT().Close()
-	r := &containerEnv{driver: d, dtype: "mock"}
+	r := &runtimeContainer{driver: d, dtype: "mock"}
 	r.AddImageBuildResolver(cfgImgRes)
 	r.SetContainerNameProvider(ContainerNameProvider{Prefix: containerNamePrefix})
 
 	return assert, ctrl, d, r
 }
 
-func testContainerAction(aconf *DefAction) *Action {
-	if aconf == nil {
-		aconf = &DefAction{
+func testContainerAction(cdef *DefRuntimeContainer) *Action {
+	if cdef == nil {
+		cdef = &DefRuntimeContainer{
 			Image: "myimage",
 			ExtraHosts: []string{
 				"my:host1",
@@ -69,12 +70,20 @@ func testContainerAction(aconf *DefAction) *Action {
 			},
 		}
 	}
-	return &Action{
-		ID:     "test",
-		Loader: &Definition{Action: aconf},
-		fpath:  "my/action/test/action.yaml",
-		wd:     absPath("test"),
+	a := &Action{
+		ID: "test",
+		loader: &Definition{
+			Action: &DefAction{},
+			Runtime: &DefRuntime{
+				Type:      runtimeTypeContainer,
+				Container: cdef,
+			},
+		},
+		fpath: "my/action/test/action.yaml",
+		wd:    launchr.MustAbs("test"),
 	}
+	_ = a.EnsureLoaded()
+	return a
 }
 
 func testContainerIO() *driver.ContainerInOut {
@@ -92,17 +101,17 @@ func testContainerIO() *driver.ContainerInOut {
 func Test_ContainerExec_imageEnsure(t *testing.T) {
 	t.Parallel()
 
-	actLoc := testContainerAction(&DefAction{
+	actLoc := testContainerAction(&DefRuntimeContainer{
 		Image: "build:local",
 		Build: &types.BuildDefinition{
 			Context: ".",
 		},
 	})
 	err := actLoc.EnsureLoaded()
-	assert.True(t, assert.NoError(t, err))
+	require.NoError(t, err)
 	type testCase struct {
 		name     string
-		action   *DefAction
+		action   *DefRuntimeContainer
 		expBuild *types.BuildDefinition
 		ret      []any
 	}
@@ -119,23 +128,23 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 		return []any{r, err}
 	}
 
-	aconf := actLoc.ActionDef()
+	aconf := actLoc.RuntimeDef().Container
 	tts := []testCase{
 		{
 			"image exists",
-			&DefAction{Image: "exists"},
+			&DefRuntimeContainer{Image: "exists"},
 			nil,
 			imgFn(types.ImageExists, "", nil),
 		},
 		{
 			"image pulled",
-			&DefAction{Image: "pull"},
+			&DefRuntimeContainer{Image: "pull"},
 			nil,
 			imgFn(types.ImagePull, `{"stream":"Successfully pulled image\n"}`, nil),
 		},
 		{
 			"image pulled error",
-			&DefAction{Image: "pull"},
+			&DefRuntimeContainer{Image: "pull"},
 			nil,
 			imgFn(
 				types.ImagePull,
@@ -161,13 +170,13 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 		},
 		{
 			"image build config",
-			&DefAction{Image: "build:config"},
+			&DefRuntimeContainer{Image: "build:config"},
 			cfgImgRes.ImageBuildInfo("build:config"),
 			imgFn(types.ImageBuild, `{"stream":"Successfully built image \"config\"\n"}`, nil),
 		},
 		{
 			"driver error",
-			&DefAction{Image: ""},
+			&DefRuntimeContainer{Image: ""},
 			nil,
 			imgFn(-1, "", fmt.Errorf("incorrect image")),
 		},
@@ -183,13 +192,11 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 			defer r.Close()
 			ctx := context.Background()
 			act := testContainerAction(tt.action)
-			act.input = Input{
-				IO: launchr.NoopStreams(),
-			}
+			act.input = NewInput(act, nil, nil, launchr.NoopStreams())
 			err = act.EnsureLoaded()
-			assert.True(assert.NoError(err))
-			a := act.ActionDef()
-			imgOpts := types.ImageOptions{Name: a.Image, Build: tt.expBuild}
+			require.NoError(t, err)
+			run := act.RuntimeDef().Container
+			imgOpts := types.ImageOptions{Name: run.Image, Build: tt.expBuild}
 			d.EXPECT().
 				ImageEnsure(ctx, eqImageOpts{imgOpts}).
 				Return(tt.ret...)
@@ -202,17 +209,17 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 func Test_ContainerExec_imageRemove(t *testing.T) {
 	t.Parallel()
 
-	actLoc := testContainerAction(&DefAction{
+	actLoc := testContainerAction(&DefRuntimeContainer{
 		Image: "build:local",
 		Build: &types.BuildDefinition{
 			Context: ".",
 		},
 	})
 	err := actLoc.EnsureLoaded()
-	assert.True(t, assert.NoError(t, err))
+	require.NoError(t, err)
 	type testCase struct {
 		name     string
-		action   *DefAction
+		action   *DefRuntimeContainer
 		expBuild *types.BuildDefinition
 		ret      []any
 	}
@@ -220,13 +227,13 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 	tts := []testCase{
 		{
 			"image removed",
-			actLoc.ActionDef(),
+			actLoc.RuntimeDef().Container,
 			nil,
 			[]any{&types.ImageRemoveResponse{Status: types.ImageRemoved}, nil},
 		},
 		{
 			"failed to remove",
-			&DefAction{Image: "failed"},
+			&DefRuntimeContainer{Image: "failed"},
 			nil,
 			[]any{nil, fmt.Errorf("failed to remove")},
 		},
@@ -244,17 +251,15 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 			defer r.driver.Close()
 
 			act := testContainerAction(tt.action)
-			act.input = Input{
-				IO: launchr.NoopStreams(),
-			}
+			act.input = NewInput(act, nil, nil, launchr.NoopStreams())
 
 			err := act.EnsureLoaded()
-			assert.True(assert.NoError(err))
+			require.NoError(t, err)
 
-			a := act.ActionDef()
+			run := act.RuntimeDef().Container
 			imgOpts := types.ImageRemoveOptions{Force: true, PruneChildren: false}
 			d.EXPECT().
-				ImageRemove(ctx, a.Image, gomock.Eq(imgOpts)).
+				ImageRemove(ctx, run.Image, gomock.Eq(imgOpts)).
 				Return(tt.ret...)
 			err = r.imageRemove(ctx, act)
 
@@ -270,13 +275,13 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 	defer r.Close()
 
 	a := testContainerAction(nil)
-	assert.True(assert.NoError(a.EnsureLoaded()))
-	act := a.ActionDef()
+	require.NoError(t, a.EnsureLoaded())
+	run := a.RuntimeDef()
 
 	runCfg := &types.ContainerCreateOptions{
 		ContainerName: "container",
 		NetworkMode:   types.NetworkModeHost,
-		ExtraHosts:    act.ExtraHosts,
+		ExtraHosts:    run.Container.ExtraHosts,
 		AutoRemove:    true,
 		OpenStdin:     true,
 		StdinOnce:     true,
@@ -292,44 +297,44 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 
 	eqCfg := *runCfg
 	eqCfg.Binds = []string{
-		absPath(a.WorkDir()) + ":" + containerHostMount,
-		absPath(a.Dir()) + ":" + containerActionMount,
+		launchr.MustAbs(a.WorkDir()) + ":" + containerHostMount,
+		launchr.MustAbs(a.Dir()) + ":" + containerActionMount,
 	}
 	eqCfg.WorkingDir = containerHostMount
-	eqCfg.Cmd = act.Command
-	eqCfg.Image = act.Image
+	eqCfg.Cmd = run.Container.Command
+	eqCfg.Image = run.Container.Image
 
 	ctx := context.Background()
 
 	// Normal create.
 	expCid := "container_id"
 	d.EXPECT().
-		ImageEnsure(ctx, types.ImageOptions{Name: act.Image}).
+		ImageEnsure(ctx, types.ImageOptions{Name: run.Container.Image}).
 		Return(&types.ImageStatusResponse{Status: types.ImageExists}, nil)
 	d.EXPECT().
 		ContainerCreate(ctx, gomock.Eq(eqCfg)).
 		Return(expCid, nil)
 
 	cid, err := r.containerCreate(ctx, a, runCfg)
-	assert.True(assert.NoError(err))
+	require.NoError(t, err)
 	assert.Equal(expCid, cid)
 
 	// Create with a custom wd
 	a.def.WD = "../myactiondir"
-	wd := absPath(a.def.WD)
+	wd := launchr.MustAbs(a.def.WD)
 	eqCfg.Binds = []string{
 		wd + ":" + containerHostMount,
-		absPath(a.Dir()) + ":" + containerActionMount,
+		launchr.MustAbs(a.Dir()) + ":" + containerActionMount,
 	}
 	d.EXPECT().
-		ImageEnsure(ctx, types.ImageOptions{Name: act.Image}).
+		ImageEnsure(ctx, types.ImageOptions{Name: run.Container.Image}).
 		Return(&types.ImageStatusResponse{Status: types.ImageExists}, nil)
 	d.EXPECT().
 		ContainerCreate(ctx, gomock.Eq(eqCfg)).
 		Return(expCid, nil)
 
 	cid, err = r.containerCreate(ctx, a, runCfg)
-	assert.True(assert.NoError(err))
+	require.NoError(t, err)
 	assert.Equal(expCid, cid)
 
 	// Create with anonymous volumes.
@@ -340,20 +345,20 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 		containerActionMount: {},
 	}
 	d.EXPECT().
-		ImageEnsure(ctx, types.ImageOptions{Name: act.Image}).
+		ImageEnsure(ctx, types.ImageOptions{Name: run.Container.Image}).
 		Return(&types.ImageStatusResponse{Status: types.ImageExists}, nil)
 	d.EXPECT().
 		ContainerCreate(ctx, gomock.Eq(eqCfg)).
 		Return(expCid, nil)
 
 	cid, err = r.containerCreate(ctx, a, runCfg)
-	assert.True(assert.NoError(err))
+	require.NoError(t, err)
 	assert.Equal(expCid, cid)
 
 	// Image ensure fail.
 	errImg := fmt.Errorf("error on image ensure")
 	d.EXPECT().
-		ImageEnsure(ctx, types.ImageOptions{Name: act.Image}).
+		ImageEnsure(ctx, types.ImageOptions{Name: run.Container.Image}).
 		Return(nil, errImg)
 
 	cid, err = r.containerCreate(ctx, a, runCfg)
@@ -363,7 +368,7 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 	// Container create fail.
 	expErr := fmt.Errorf("driver container create error")
 	d.EXPECT().
-		ImageEnsure(ctx, types.ImageOptions{Name: act.Image}).
+		ImageEnsure(ctx, types.ImageOptions{Name: run.Container.Image}).
 		Return(&types.ImageStatusResponse{Status: types.ImageExists}, nil)
 	d.EXPECT().
 		ContainerCreate(ctx, gomock.Any()).
@@ -493,8 +498,8 @@ func Test_ContainerExec_containerAttach(t *testing.T) {
 		Return(cio, nil)
 	acio, errCh, err := r.attachContainer(ctx, streams, cid, opts)
 	assert.Equal(acio, cio)
-	assert.True(assert.NoError(err))
-	assert.True(assert.NoError(<-errCh))
+	require.NoError(t, err)
+	require.NoError(t, <-errCh)
 	_ = acio.Close()
 
 	expErr := errors.New("fail to attach")
@@ -520,8 +525,8 @@ func Test_ContainerExec(t *testing.T) {
 
 	cid := "cid"
 	act := testContainerAction(nil)
-	assert.True(t, assert.NoError(t, act.EnsureLoaded()))
-	actConf := act.ActionDef()
+	require.NoError(t, act.EnsureLoaded())
+	runConf := act.RuntimeDef().Container
 	imgBuild := &types.ImageStatusResponse{Status: types.ImageExists}
 	cio := testContainerIO()
 	nprv := ContainerNameProvider{Prefix: containerNamePrefix}
@@ -535,13 +540,13 @@ func Test_ContainerExec(t *testing.T) {
 
 	opts := types.ContainerCreateOptions{
 		ContainerName: nprv.Get(act.ID),
-		Cmd:           actConf.Command,
-		Image:         actConf.Image,
+		Cmd:           runConf.Command,
+		Image:         runConf.Image,
 		NetworkMode:   types.NetworkModeHost,
-		ExtraHosts:    actConf.ExtraHosts,
+		ExtraHosts:    runConf.ExtraHosts,
 		Binds: []string{
-			absPath(act.WorkDir()) + ":" + containerHostMount,
-			absPath(act.Dir()) + ":" + containerActionMount,
+			launchr.MustAbs(act.WorkDir()) + ":" + containerHostMount,
+			launchr.MustAbs(act.Dir()) + ":" + containerActionMount,
 		},
 		WorkingDir:   containerHostMount,
 		AutoRemove:   true,
@@ -551,7 +556,7 @@ func Test_ContainerExec(t *testing.T) {
 		AttachStdout: true,
 		AttachStderr: true,
 		Tty:          false,
-		Env:          actConf.Env,
+		Env:          runConf.Env,
 		User:         getCurrentUser(),
 	}
 	attOpts := types.ContainerAttachOptions{
@@ -572,7 +577,7 @@ func Test_ContainerExec(t *testing.T) {
 		{
 			"ImageEnsure",
 			1, 1,
-			[]any{eqImageOpts{types.ImageOptions{Name: actConf.Image}}},
+			[]any{eqImageOpts{types.ImageOptions{Name: runConf.Image}}},
 			[]any{imgBuild, nil},
 		},
 		{
@@ -706,8 +711,12 @@ func Test_ContainerExec(t *testing.T) {
 			resCh, errCh := make(chan types.ContainerWaitResponse, 1), make(chan error, 1)
 			assert, ctrl, d, r := prepareContainerTestSuite(t)
 			a := act.Clone()
-			err := a.SetInput(Input{IO: launchr.NoopStreams()})
-			assert.True(assert.NoError(err))
+			err := a.EnsureLoaded()
+			require.NoError(t, err)
+			input := NewInput(a, nil, nil, launchr.NoopStreams())
+			input.SetValidated(true)
+			err = a.SetInput(input)
+			require.NoError(t, err)
 			defer ctrl.Finish()
 			defer r.Close()
 			var prev *gomock.Call
@@ -724,7 +733,7 @@ func Test_ContainerExec(t *testing.T) {
 			ctx := context.Background()
 			err = r.Execute(ctx, a)
 			if tt.expErr != errAny {
-				assert.Equal(tt.expErr, err)
+				assert.ErrorIs(err, tt.expErr)
 			} else {
 				assert.True(assert.Error(err))
 			}

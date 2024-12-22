@@ -10,6 +10,9 @@ import (
 
 	"github.com/docker/docker/pkg/namesgenerator"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/launchrctl/launchr/internal/launchr"
 )
 
 type genPathType int
@@ -79,15 +82,15 @@ func Test_Discover_ActionWD(t *testing.T) {
 	ad := NewYamlDiscovery(NewDiscoveryFS(tfs, expectedWD))
 	ctx := context.Background()
 	actions, err := ad.Discover(ctx)
-	assert.True(t, assert.NoError(t, err))
+	require.NoError(t, err)
 	assert.Equal(t, expFPath, actions[0].fpath)
-	assert.Equal(t, absPath(expectedWD), actions[0].wd)
+	assert.Equal(t, launchr.MustAbs(expectedWD), actions[0].wd)
 
 	ad = NewYamlDiscovery(NewDiscoveryFS(tfs, ""))
 	actions, err = ad.Discover(ctx)
-	assert.True(t, assert.NoError(t, err))
+	require.NoError(t, err)
 	assert.Equal(t, expFPath, actions[0].fpath)
-	assert.Equal(t, absPath(""), actions[0].wd)
+	assert.Equal(t, launchr.MustAbs(""), actions[0].wd)
 }
 
 type dirEntry string

@@ -1,37 +1,21 @@
 package launchr
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"reflect"
-	"sort"
 	"strings"
-	"time"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/action"
 	_ "github.com/launchrctl/launchr/plugins" // include default plugins
 )
 
-var (
-	errDiscoveryTimeout = "action discovery timeout exceeded"
-)
-
-// ActionsGroup is a command group definition.
-var ActionsGroup = &launchr.CommandGroup{
-	ID:    "actions",
-	Title: "Actions:",
-}
-
 type appImpl struct {
 	// Cli related.
-	cmd         *Command
-	flags       []string
-	skipActions bool   // skipActions to skip loading if not requested.
-	reqCmd      string // reqCmd to search for the requested command.
+	cmd      *Command
+	earlyCmd launchr.CmdEarlyParsed
 
 	// FS related.
 	mFS     []ManagedFS
@@ -41,37 +25,7 @@ type appImpl struct {
 	// Services.
 	streams    Streams
 	services   map[ServiceInfo]Service
-	actionMngr action.Manager
 	pluginMngr PluginManager
-	config     Config
-}
-
-// getPluginByType returns specific plugins from the app.
-func getPluginByType[T Plugin](app *appImpl) []launchr.MapItem[PluginInfo, T] {
-	// Collect plugins according to their weights.
-	m := make(map[int][]launchr.MapItem[PluginInfo, T])
-	cnt := 0
-	for pi, p := range app.pluginMngr.All() {
-		p, ok := p.(T)
-		if ok {
-			item := launchr.MapItem[PluginInfo, T]{K: pi, V: p}
-			m[pi.Weight] = append(m[pi.Weight], item)
-			cnt++
-		}
-	}
-	// Sort weight keys.
-	weights := make([]int, 0, len(m))
-	for w := range m {
-		weights = append(weights, w)
-	}
-	sort.Ints(weights)
-	// Merge all to a sorted list of plugins.
-	// @todo maybe sort everything on init to optimize.
-	res := make([]launchr.MapItem[PluginInfo, T], 0, cnt)
-	for _, w := range weights {
-		res = append(res, m[w]...)
-	}
-	return res
 }
 
 func newApp() *appImpl {
@@ -86,8 +40,8 @@ func (app *appImpl) SetStreams(s Streams) { app.streams = s }
 func (app *appImpl) RegisterFS(fs ManagedFS)      { app.mFS = append(app.mFS, fs) }
 func (app *appImpl) GetRegisteredFS() []ManagedFS { return app.mFS }
 
-func (app *appImpl) GetRootCmd() *Command       { return app.cmd }
-func (app *appImpl) EarlyParsedFlags() []string { return app.flags }
+func (app *appImpl) RootCmd() *Command                      { return app.cmd }
+func (app *appImpl) CmdEarlyParsed() launchr.CmdEarlyParsed { return app.earlyCmd }
 
 func (app *appImpl) AddService(s Service) {
 	info := s.ServiceInfo()
@@ -123,30 +77,6 @@ func (app *appImpl) GetService(v any) {
 	panic(fmt.Sprintf("service %q does not exist", stype))
 }
 
-// earlyPeekFlags tries to parse flags early to allow change behavior before full boot.
-func (app *appImpl) earlyPeekFlags(c *Command) {
-	var err error
-	args := os.Args[1:]
-	// Parse args with internal tools.
-	// We can't guess cmd because nothing has been defined yet.
-	_, app.flags, err = c.Find(args)
-	if err != nil {
-		// There shouldn't be an error when parsing a clean root command.
-		panic(err)
-	}
-	// Quick parse arguments to see if a version or help was requested.
-	for i := 0; i < len(app.flags); i++ {
-		// Skip discover actions if we check version.
-		if app.flags[i] == "--version" {
-			app.skipActions = true
-		}
-
-		if app.reqCmd == "" && !strings.HasPrefix(app.flags[i], "-") {
-			app.reqCmd = args[i]
-		}
-	}
-}
-
 // init initializes application and plugins.
 func (app *appImpl) init() error {
 	var err error
@@ -161,8 +91,7 @@ func (app *appImpl) init() error {
 			return cmd.Help()
 		},
 	}
-	app.earlyPeekFlags(app.cmd)
-
+	app.earlyCmd = launchr.EarlyPeekCommand()
 	// Set io streams.
 	app.SetStreams(StandardStreams())
 	app.cmd.SetIn(app.streams.In())
@@ -171,40 +100,31 @@ func (app *appImpl) init() error {
 
 	// Set working dir and config dir.
 	app.cfgDir = "." + name
-	app.workDir, err = filepath.Abs(".")
-	if err != nil {
-		return err
-	}
+	app.workDir = launchr.MustAbs(".")
+	actionsPath := launchr.MustAbs(os.Getenv(strings.ToUpper(name + "_ACTIONS_PATH")))
 	// Initialize managed FS for action discovery.
 	app.mFS = make([]ManagedFS, 0, 4)
-	app.RegisterFS(action.NewDiscoveryFS(os.DirFS(app.workDir), app.GetWD()))
+	app.RegisterFS(action.NewDiscoveryFS(os.DirFS(actionsPath), app.GetWD()))
 
 	// Prepare dependencies.
 	app.services = make(map[ServiceInfo]Service)
 	app.pluginMngr = launchr.NewPluginManagerWithRegistered()
 	// @todo consider home dir for global config.
-	app.config = launchr.ConfigFromFS(os.DirFS(app.cfgDir))
-	app.actionMngr = action.NewManager(
-		action.WithDefaultRunEnvironment,
-		action.WithContainerRunEnvironmentConfig(app.config, name+"_"),
+	config := launchr.ConfigFromFS(os.DirFS(app.cfgDir))
+	actionMngr := action.NewManager(
+		action.WithDefaultRuntime,
+		action.WithContainerRuntimeConfig(config, name+"_"),
 		action.WithValueProcessors(),
 	)
 
 	// Register services for other modules.
-	app.AddService(app.actionMngr)
+	app.AddService(actionMngr)
 	app.AddService(app.pluginMngr)
-	app.AddService(app.config)
+	app.AddService(config)
 
 	// Run OnAppInit hook.
-	for _, p := range getPluginByType[OnAppInitPlugin](app) {
+	for _, p := range launchr.GetPluginByType[OnAppInitPlugin](app.pluginMngr) {
 		if err = p.V.OnAppInit(app); err != nil {
-			return err
-		}
-	}
-
-	// Discover actions.
-	if !app.skipActions {
-		if err = app.discoverActions(); err != nil {
 			return err
 		}
 	}
@@ -212,84 +132,14 @@ func (app *appImpl) init() error {
 	return nil
 }
 
-func (app *appImpl) discoverActions() (err error) {
-	var discovered []*action.Action
-	idp := app.actionMngr.GetActionIDProvider()
-	// @todo configure timeout from flags
-	// Define timeout for cases when we may traverse the whole FS, e.g. in / or home.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	for _, p := range getPluginByType[action.DiscoveryPlugin](app) {
-		for _, regfs := range app.GetRegisteredFS() {
-			actions, errDis := p.V.DiscoverActions(ctx, regfs, idp)
-			if errDis != nil {
-				return errDis
-			}
-			discovered = append(discovered, actions...)
-		}
-	}
-	// Failed to discover actions in reasonable time.
-	if errCtx := ctx.Err(); errCtx != nil {
-		return errors.New(errDiscoveryTimeout)
-	}
-
-	// Add discovered actions.
-	for _, a := range discovered {
-		app.actionMngr.Add(a)
-	}
-
-	// Alter all registered actions.
-	for _, p := range getPluginByType[action.AlterActionsPlugin](app) {
-		err = p.V.AlterActions()
-		if err != nil {
-			return err
-		}
-	}
-	// @todo maybe cache discovery result for performance.
-	return err
-}
-
 func (app *appImpl) exec() error {
-	if app.skipActions {
+	if app.earlyCmd.IsVersion {
 		app.cmd.SetVersionTemplate(Version().Full())
-	}
-	// Check the requested command to see what actions we must actually load.
-	var actions map[string]*action.Action
-	if app.reqCmd != "" {
-		// Check if an alias was provided to find the real action.
-		app.reqCmd = app.actionMngr.GetIDFromAlias(app.reqCmd)
-		a, ok := app.actionMngr.Get(app.reqCmd)
-		if ok {
-			// Use only the requested action.
-			actions = map[string]*action.Action{a.ID: a}
-		} else {
-			// Action was not requested, no need to load them.
-			app.skipActions = true
-		}
-	} else {
-		// Load all.
-		actions = app.actionMngr.All()
-	}
-	// Convert actions to cobra commands.
-	// @todo consider cobra completion and caching between runs.
-	if !app.skipActions {
-		if len(actions) > 0 {
-			app.cmd.AddGroup(ActionsGroup)
-		}
-		for _, a := range actions {
-			cmd, err := action.CobraImpl(a, app.Streams())
-			if err != nil {
-				Log().Warn("action was skipped due to error", "action_id", a.ID, "error", err)
-				Term().Warning().Printfln("Action %q was skipped:\n%v", a.ID, err)
-				continue
-			}
-			cmd.GroupID = ActionsGroup.ID
-			app.cmd.AddCommand(cmd)
-		}
+		return app.cmd.Execute()
 	}
 
 	// Add application commands from plugins.
-	for _, p := range getPluginByType[CobraPlugin](app) {
+	for _, p := range launchr.GetPluginByType[CobraPlugin](app.pluginMngr) {
 		if err := p.V.CobraAddCommands(app.cmd); err != nil {
 			return err
 		}

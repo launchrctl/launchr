@@ -38,8 +38,8 @@ type Manager interface {
 	// GetValueProcessors returns list of available processors
 	GetValueProcessors() map[string]ValueProcessor
 
-	// DefaultRunEnvironment provides the default action run environment.
-	DefaultRunEnvironment() RunEnvironment
+	// DefaultRuntime provides the default action runtime.
+	DefaultRuntime() Runtime
 	// Run executes an action in foreground.
 	Run(ctx context.Context, a *Action) (RunInfo, error)
 	// RunBackground executes an action in background.
@@ -202,8 +202,8 @@ func (m *actionManagerMap) SetActionIDProvider(p IDProvider) {
 	m.idProvider = p
 }
 
-func (m *actionManagerMap) DefaultRunEnvironment() RunEnvironment {
-	return NewDockerEnvironment()
+func (m *actionManagerMap) DefaultRuntime() Runtime {
+	return NewContainerRuntimeDocker()
 }
 
 // RunInfo stores information about a running action.
@@ -283,17 +283,19 @@ func (m *actionManagerMap) RunInfoByID(id string) (RunInfo, bool) {
 	return ri, ok
 }
 
-// WithDefaultRunEnvironment adds a default [RunEnvironment] for an action.
-func WithDefaultRunEnvironment(m Manager, a *Action) {
-	a.SetRunEnvironment(m.DefaultRunEnvironment())
+// WithDefaultRuntime adds a default [Runtime] for an action.
+func WithDefaultRuntime(m Manager, a *Action) {
+	if a.Runtime() == nil {
+		a.SetRuntime(m.DefaultRuntime())
+	}
 }
 
-// WithContainerRunEnvironmentConfig configures a [ContainerRunEnvironment].
-func WithContainerRunEnvironmentConfig(cfg launchr.Config, prefix string) DecorateWithFn {
+// WithContainerRuntimeConfig configures a [ContainerRuntime].
+func WithContainerRuntimeConfig(cfg launchr.Config, prefix string) DecorateWithFn {
 	r := LaunchrConfigImageBuildResolver{cfg}
 	ccr := NewImageBuildCacheResolver(cfg)
 	return func(_ Manager, a *Action) {
-		if env, ok := a.env.(ContainerRunEnvironment); ok {
+		if env, ok := a.Runtime().(ContainerRuntime); ok {
 			env.AddImageBuildResolver(r)
 			env.SetImageBuildCacheResolver(ccr)
 			env.SetContainerNameProvider(ContainerNameProvider{Prefix: prefix, RandomSuffix: true})

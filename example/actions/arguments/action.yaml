@@ -10,6 +10,9 @@ action:
       description: Option to do something
       type: boolean
       default: false
+
+runtime:
+  type: container
   image: envvars:latest
   build:
     context: ./

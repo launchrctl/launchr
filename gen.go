@@ -2,8 +2,9 @@ package launchr
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
+
+	"github.com/launchrctl/launchr/internal/launchr"
 )
 
 func (app *appImpl) gen() error {
@@ -13,21 +14,12 @@ func (app *appImpl) gen() error {
 		BuildDir: ".",
 	}
 	isRelease := false
-	app.cmd.RunE = func(_ *Command, args []string) error {
-		if len(args) > 0 {
-			// Save backward compatibility with the previous build implementation.
-			// @todo delete after release.
-			config.WorkDir = args[0]
-		}
+	app.cmd.RunE = func(cmd *Command, _ []string) error {
+		// Don't show usage help on a runtime error.
+		cmd.SilenceUsage = true
 		// Set absolute paths.
-		config.WorkDir, err = filepath.Abs(config.WorkDir)
-		if err != nil {
-			return err
-		}
-		config.BuildDir, err = filepath.Abs(config.BuildDir)
-		if err != nil {
-			return err
-		}
+		config.WorkDir = launchr.MustAbs(config.WorkDir)
+		config.BuildDir = launchr.MustAbs(config.BuildDir)
 		// Change working directory to the selected.
 		err = os.Chdir(config.WorkDir)
 		if err != nil {
@@ -35,7 +27,7 @@ func (app *appImpl) gen() error {
 		}
 
 		// Call generate functions on plugins.
-		for _, p := range getPluginByType[GeneratePlugin](app) {
+		for _, p := range launchr.GetPluginByType[GeneratePlugin](app.pluginMngr) {
 			if !isRelease && strings.HasPrefix(p.K.GetPackagePath(), PkgPath) {
 				// Skip core packages if not requested.
 				// Implemented for development of plugins to prevent generating of main.go.
@@ -64,7 +56,6 @@ func (app *appImpl) gen() error {
 // Generate runs generation of included plugins.
 func (app *appImpl) Generate() int {
 	// Do not discover actions on generate.
-	app.skipActions = true
 	var err error
 	if err = app.init(); err != nil {
 		Term().Error().Println(err)
@@ -79,6 +70,7 @@ func (app *appImpl) Generate() int {
 
 // Gen generates application specific build files and returns os exit code.
 func Gen() int {
+	launchr.IsGen = true
 	return newApp().Generate()
 }
 

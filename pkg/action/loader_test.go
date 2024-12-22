@@ -6,31 +6,34 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func testLoaderAction() *Action {
 	af := &Definition{
 		Version: "1",
 		Action: &DefAction{
-			Arguments: ArgumentsList{
-				&Argument{
+			Arguments: ParametersList{
+				&DefParameter{
 					Name: "arg1",
 				},
 			},
-			Options: OptionsList{
-				&Option{
+			Options: ParametersList{
+				&DefParameter{
 					Name: "optStr",
 				},
-				&Option{
+				&DefParameter{
 					Name: "opt-str",
 				},
 			},
 		},
 	}
-	return &Action{
+	a := &Action{
 		ID:     "my_actions",
-		Loader: af,
+		loader: af,
 	}
+	_ = a.EnsureLoaded()
+	return a
 }
 
 func Test_EnvProcessor(t *testing.T) {
@@ -46,12 +49,14 @@ func Test_InputProcessor(t *testing.T) {
 	act := testLoaderAction()
 	ctx := LoadContext{Action: act}
 	proc := inputProcessor{}
-	err := act.SetInput(Input{Args: TypeArgs{"arg1": "arg1"}, Opts: TypeOpts{"optStr": "optVal1", "opt-str": "opt-val2"}})
-	assert.True(t, assert.NoError(t, err))
+	input := NewInput(act, InputParams{"arg1": "arg1"}, InputParams{"optStr": "optVal1", "opt-str": "opt-val2"}, nil)
+	input.SetValidated(true)
+	err := act.SetInput(input)
+	require.NoError(t, err)
 
 	s := "{{ .arg1 }},{{ .optStr }},{{ .opt_str }}"
 	res, err := proc.Process(ctx, []byte(s))
-	assert.True(t, assert.NoError(t, err))
+	require.NoError(t, err)
 	assert.Equal(t, "arg1,optVal1,opt-val2", string(res))
 
 	s = "{{ .opt-str }}"
@@ -72,8 +77,10 @@ func Test_YamlTplCommentsProcessor(t *testing.T) {
 		escapeYamlTplCommentsProcessor{},
 		inputProcessor{},
 	)
-	err := act.SetInput(Input{Args: TypeArgs{"arg1": "arg1"}, Opts: TypeOpts{"optStr": "optVal1"}})
-	assert.True(t, assert.NoError(t, err))
+	input := NewInput(act, InputParams{"arg1": "arg1"}, InputParams{"optStr": "optVal1"}, nil)
+	input.SetValidated(true)
+	err := act.SetInput(input)
+	require.NoError(t, err)
 	// Check the commented strings are not considered.
 	s := `
 t: "{{ .arg1 }} # {{ .optStr }}"
@@ -82,7 +89,7 @@ t: {{ .arg1 }} # {{ .optUnd }}
 # {{ .optUnd }} {{ .arg1 }}
 	`
 	res, err := proc.Process(ctx, []byte(s))
-	assert.True(t, assert.NoError(t, err))
+	require.NoError(t, err)
 	assert.Equal(t, "t: \"arg1 # optVal1\"\nt: 'arg1 # optVal1'\nt: arg1", strings.TrimSpace(string(res)))
 	s = `t: "{{ .arg1 }} # {{ .optUnd }}""`
 	// Check we still have an error on an undefined variable.
@@ -100,10 +107,12 @@ func Test_PipeProcessor(t *testing.T) {
 	)
 
 	_ = os.Setenv("TEST_ENV1", "VAL1")
-	err := act.SetInput(Input{Args: TypeArgs{"arg1": "arg1"}, Opts: TypeOpts{"optStr": "optVal1"}})
-	assert.True(t, assert.NoError(t, err))
+	input := NewInput(act, InputParams{"arg1": "arg1"}, InputParams{"optStr": "optVal1"}, nil)
+	input.SetValidated(true)
+	err := act.SetInput(input)
+	require.NoError(t, err)
 	s := "$TEST_ENV1,{{ .arg1 }},{{ .optStr }}"
 	res, err := proc.Process(ctx, []byte(s))
-	assert.True(t, assert.NoError(t, err))
+	require.NoError(t, err)
 	assert.Equal(t, "VAL1,arg1,optVal1", string(res))
 }

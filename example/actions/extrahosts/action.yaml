@@ -1,6 +1,9 @@
 action:
   title: extrahosts
   description: Test passing additional entries to container's /etc/hosts
+
+runtime:
+  type: container
   image: extrahosts:latest
   extra_hosts:
     - "host.docker.internal:host-gateway"

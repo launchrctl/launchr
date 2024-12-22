@@ -1,6 +1,6 @@
 //go:build windows
 
-package action
+package driver
 
 import "os"
 

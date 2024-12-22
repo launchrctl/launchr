@@ -19,6 +19,9 @@ import (
 // The default escape key sequence: ctrl-p, ctrl-q
 var defaultEscapeKeys = []byte{16, 17}
 
+// EscapeError is an error thrown when escape sequence is input.
+type EscapeError = term.EscapeError
+
 // ContainerInOut stores container driver in/out streams.
 type ContainerInOut struct {
 	In  io.WriteCloser
@@ -132,7 +135,7 @@ func (h *hijackedIOStreamer) setupInput() (restore func(), err error) {
 	}
 
 	if err := setRawTerminal(h.streams); err != nil {
-		return nil, fmt.Errorf("unable to set IO streams as raw terminal: %s", err)
+		return nil, fmt.Errorf("unable to set io streams as raw terminal: %s", err)
 	}
 
 	// Use sync.Once so we may call restore multiple times but ensure we
@@ -207,7 +210,7 @@ func (h *hijackedIOStreamer) beginInputStream(restoreInput func()) (doneC <-chan
 			restoreInput()
 
 			launchr.Log().Debug("[hijack] End of stdin")
-			if _, ok := err.(term.EscapeError); ok {
+			if _, ok := err.(EscapeError); ok {
 				detached <- err
 				return
 			}

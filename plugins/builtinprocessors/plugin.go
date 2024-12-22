@@ -17,15 +17,15 @@ func init() {
 	launchr.RegisterPlugin(Plugin{})
 }
 
-// Plugin is launchr plugin to provide action processors.
+// Plugin is [launchr.Plugin] to provide action processors.
 type Plugin struct{}
 
-// PluginInfo implements launchr.Plugin interface.
+// PluginInfo implements [launchr.Plugin] interface.
 func (p Plugin) PluginInfo() launchr.PluginInfo {
 	return launchr.PluginInfo{}
 }
 
-// OnAppInit implements launchr.Plugin interface.
+// OnAppInit implements [launchr.OnAppInitPlugin] interface.
 func (p Plugin) OnAppInit(app launchr.App) error {
 	// Get services.
 	var cfg launchr.Config

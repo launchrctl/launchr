@@ -11,14 +11,69 @@ import (
 	"golang.org/x/mod/sumdb/dirhash"
 
 	"github.com/launchrctl/launchr/internal/launchr"
+	"github.com/launchrctl/launchr/pkg/types"
 )
 
 const sumFilename = "actions.sum"
 
+// ConfigImagesKey is a field name in [launchr.Config] file.
+const ConfigImagesKey = "images"
+
+// ImageBuildResolver is an interface to resolve image build info from its source.
+type ImageBuildResolver interface {
+	// ImageBuildInfo takes image as name and provides build definition for that.
+	ImageBuildInfo(image string) *types.BuildDefinition
+}
+
+// ChainImageBuildResolver is a image build resolver that takes first available image in the chain.
+type ChainImageBuildResolver []ImageBuildResolver
+
+// ImageBuildInfo implements [ImageBuildResolver].
+func (r ChainImageBuildResolver) ImageBuildInfo(image string) *types.BuildDefinition {
+	for i := 0; i < len(r); i++ {
+		if b := r[i].ImageBuildInfo(image); b != nil {
+			return b
+		}
+	}
+	return nil
+}
+
+// ConfigImages is a container to parse [launchr.Config] in yaml format.
+type ConfigImages map[string]*types.BuildDefinition
+
+// LaunchrConfigImageBuildResolver is a resolver of image build in [launchr.Config] file.
+type LaunchrConfigImageBuildResolver struct {
+	cfg launchr.Config
+}
+
+// ImageBuildInfo implements [ImageBuildResolver].
+func (r LaunchrConfigImageBuildResolver) ImageBuildInfo(image string) *types.BuildDefinition {
+	if r.cfg == nil {
+		return nil
+	}
+	var images ConfigImages
+	err := r.cfg.Get(ConfigImagesKey, &images)
+	if err != nil {
+		launchr.Term().Warning().Printfln("configuration file field %q is malformed", ConfigImagesKey)
+		return nil
+	}
+	if b, ok := images[image]; ok {
+		return b.ImageBuildInfo(image, r.cfg.DirPath())
+	}
+	for _, b := range images {
+		for _, t := range b.Tags {
+			if t == image {
+				return b.ImageBuildInfo(image, r.cfg.DirPath())
+			}
+		}
+	}
+	return nil
+}
+
 // ImageBuildCacheResolver is responsible for checking image build hash sums to rebuild images.
 type ImageBuildCacheResolver struct {
 	fname         string
-	file          *lockedFile
+	file          *launchr.LockedFile
 	items         map[string]string
 	requireUpdate bool
 	cfg           launchr.Config
@@ -30,7 +85,7 @@ func NewImageBuildCacheResolver(cfg launchr.Config) *ImageBuildCacheResolver {
 	return &ImageBuildCacheResolver{
 		cfg:   cfg,
 		fname: fname,
-		file:  &lockedFile{fname: fname},
+		file:  launchr.NewLockedFile(fname),
 		items: nil,
 	}
 }
@@ -58,7 +113,7 @@ func (r *ImageBuildCacheResolver) readSums() (map[string]string, error) {
 		return nil, err
 	}
 
-	items, err := parseSums(r.file.fname, r.file)
+	items, err := parseSums(r.file.Filename(), r.file)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +216,7 @@ func parseSums(fname string, file io.Reader) (map[string]string, error) {
 			continue
 		}
 		if len(f) > 2 {
-			return nil, fmt.Errorf("malformed %s:\nline %d: wrong number of fields %v", fname, lineno, len(f))
+			return nil, fmt.Errorf("malformed %s:\nline %d: wrong number of fields %d", fname, lineno, len(f))
 		}
 
 		items[f[0]] = f[1]

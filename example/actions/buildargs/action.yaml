@@ -1,6 +1,9 @@
 action:
   title: buildargs
   description: Test passing args to Dockerfile
+
+runtime:
+  type: container
   image: buildargs:latest
   build:
     context: ./

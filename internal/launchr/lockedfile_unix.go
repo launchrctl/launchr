@@ -1,14 +1,12 @@
 //go:build unix
 
-package action
+package launchr
 
 import (
 	"syscall"
-
-	"github.com/launchrctl/launchr/internal/launchr"
 )
 
-func (f *lockedFile) lock(waitToAcquire bool) (err error) {
+func (f *LockedFile) lock(waitToAcquire bool) (err error) {
 	if f.locked {
 		// If you get this error, there is racing between goroutines.
 		panic("can't lock already opened file")
@@ -26,13 +24,13 @@ func (f *lockedFile) lock(waitToAcquire bool) (err error) {
 	return nil
 }
 
-func (f *lockedFile) unlock() {
+func (f *LockedFile) unlock() {
 	if !f.locked {
 		// If we didn't lock the file, we shouldn't unlock it.
 		return
 	}
 	if err := syscall.Flock(int(f.file.Fd()), syscall.LOCK_UN); err != nil {
-		launchr.Log().Warn("unlock is called on a not locked file", "error", err)
+		Log().Warn("unlock is called on a not locked file", "error", err)
 	}
 	f.locked = false
 }
