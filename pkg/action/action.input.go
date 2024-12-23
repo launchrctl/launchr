@@ -8,8 +8,8 @@ import (
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
-// inputMapKeyPosArgs is a special map key to store positional arguments.
-const inputMapKeyPosArgs = "__pos__"
+// inputMapKeyArgsPos is a special map key to store positional arguments.
+const inputMapKeyArgsPos = "__positional_strings"
 
 type (
 	// InputParams is a type alias for action arguments/options.
@@ -41,7 +41,7 @@ func NewInput(a *Action, args InputParams, opts InputParams, io launchr.Streams)
 	// Process positional first.
 	argsPos := argsNamedToPos(args, def.Arguments)
 	// Make sure the special key doesn't leak.
-	delete(args, inputMapKeyPosArgs)
+	delete(args, inputMapKeyArgsPos)
 	return &Input{
 		action:  a,
 		args:    setParamDefaults(args, def.Arguments),
@@ -61,8 +61,8 @@ func ArgsPosToNamed(a *Action, args []string) InputParams {
 			mapped[def.Arguments[i].Name] = castArgStrToType(arg, def.Arguments[i])
 		}
 	}
-	// Store a special key
-	mapped[inputMapKeyPosArgs] = args
+	// Store a special key to have positional arguments as []string in [NewInput].
+	mapped[inputMapKeyArgsPos] = args
 	return mapped
 }
 
@@ -173,7 +173,7 @@ func argsNamedToPos(args InputParams, argsDef ParametersList) []string {
 	if args == nil {
 		return nil
 	}
-	if inpArgsPos, ok := args[inputMapKeyPosArgs]; ok {
+	if inpArgsPos, ok := args[inputMapKeyArgsPos]; ok {
 		return inpArgsPos.([]string)
 	}
 	res := make([]string, len(argsDef))
