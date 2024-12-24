@@ -53,37 +53,37 @@ func NewInput(a *Action, args InputParams, opts InputParams, io launchr.Streams)
 }
 
 // ArgsPosToNamed creates named arguments input.
-func ArgsPosToNamed(a *Action, args []string) InputParams {
+func ArgsPosToNamed(a *Action, args []string) (InputParams, error) {
 	def := a.ActionDef()
 	mapped := make(InputParams, len(args))
 	for i, arg := range args {
 		if i < len(def.Arguments) {
-			mapped[def.Arguments[i].Name] = castArgStrToType(arg, def.Arguments[i])
+			var err error
+			mapped[def.Arguments[i].Name], err = castArgStrToType(arg, def.Arguments[i])
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	// Store a special key to have positional arguments as []string in [NewInput].
 	mapped[inputMapKeyArgsPos] = args
-	return mapped
+	return mapped, nil
 }
 
-func castArgStrToType(v string, pdef *DefParameter) any {
+func castArgStrToType(v string, pdef *DefParameter) (any, error) {
 	var err error
 	if pdef.Type != jsonschema.Array {
-		res, err := jsonschema.ConvertStringToType(v, pdef.Type)
-		if err != nil {
-			return jsonschema.MustTypeDefault(pdef.Type, nil)
-		}
-		return res
+		return jsonschema.ConvertStringToType(v, pdef.Type)
 	}
 	items := strings.Split(v, ",")
 	res := make([]any, len(items))
 	for i, item := range items {
 		res[i], err = jsonschema.ConvertStringToType(item, pdef.Items.Type)
 		if err != nil {
-			return jsonschema.MustTypeDefault(pdef.Items.Type, nil)
+			return nil, err
 		}
 	}
-	return res
+	return res, nil
 }
 
 // IsValidated returns input status.

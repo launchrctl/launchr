@@ -424,7 +424,7 @@ func (p *DefParameter) UnmarshalYAML(n *yaml.Node) (err error) {
 	}
 	// Cast enum any to expected type, make sure enum is correctly filled.
 	for i := 0; i < len(p.Enum); i++ {
-		v, err := jsonschema.TypeDefault(p.Type, p.Enum[i])
+		v, err := jsonschema.EnsureType(p.Type, p.Enum[i])
 		if err != nil {
 			enumNode := yamlFindNodeByKey(n, "enum")
 			return yamlTypeErrorLine(err.Error(), enumNode.Line, enumNode.Column)
@@ -446,7 +446,7 @@ func (p *DefParameter) UnmarshalYAML(n *yaml.Node) (err error) {
 	_, okDef := p.raw["default"]
 	if okDef {
 		// Ensure default value respects the type.
-		dval, errDef := jsonschema.TypeDefault(p.Type, p.Default)
+		dval, errDef := jsonschema.EnsureType(p.Type, p.Default)
 		if errDef != nil {
 			l, c := yamlNodeLineCol(n, "default")
 			return yamlTypeErrorLine(errDef.Error(), l, c)

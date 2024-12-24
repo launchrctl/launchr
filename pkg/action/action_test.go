@@ -150,11 +150,12 @@ func Test_ActionInput(t *testing.T) {
 
 	// Test create with positional arguments of different types.
 	argsPos := []string{"42", "str", "str2", "true", "str3", "undstr", "24"}
-	argsNamed := ArgsPosToNamed(a, argsPos)
+	argsNamed, err := ArgsPosToNamed(a, argsPos)
+	require.NoError(err)
 	savedPos, posKeyOk := argsNamed[inputMapKeyArgsPos]
 	assert.True(posKeyOk)
 	assert.Equal(argsPos, savedPos)
-	input = NewInput(a, ArgsPosToNamed(a, argsPos), nil, nil)
+	input = NewInput(a, argsNamed, nil, nil)
 	expArgs := InputParams{
 		"arg_int":     42,
 		"arg_str":     "str",
@@ -186,8 +187,10 @@ func Test_ActionInputValidate(t *testing.T) {
 	}
 
 	setPosArgs := func(args ...string) inputProcessFn {
-		return func(_ *testing.T, a *Action, input *Input) {
-			*input = *NewInput(a, ArgsPosToNamed(a, args), input.OptsChanged(), input.Streams())
+		return func(t *testing.T, a *Action, input *Input) {
+			argsPos, err := ArgsPosToNamed(a, args)
+			require.NoError(t, err)
+			*input = *NewInput(a, argsPos, input.OptsChanged(), input.Streams())
 		}
 	}
 
@@ -303,8 +306,8 @@ func Test_ActionInputValidate(t *testing.T) {
 		)},
 		{"valid format and pattern - email and uppercase given", validPatternFormat, InputParams{"arg_email": "my@example.com", "arg_pattern": "UPPER"}, nil, nil, nil},
 		{"invalid format and pattern - wrong email and lowercase given", validPatternFormat, InputParams{"arg_email": "not_email", "arg_pattern": "lower"}, nil, nil, schemaErr(
-			newError(arg("arg_email"), "'incorrect' is not valid email: missing @"),
-			newError(arg("arg_pattern"), "'example' does not match pattern '^[A-Z]+$'"),
+			newError(arg("arg_email"), "'not_email' is not valid email: missing @"),
+			newError(arg("arg_pattern"), "'lower' does not match pattern '^[A-Z]+$'"),
 		)},
 	}
 

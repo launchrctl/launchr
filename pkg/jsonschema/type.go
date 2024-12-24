@@ -38,39 +38,31 @@ func TypeFromString(t string) Type {
 	}
 }
 
-// TypeDefault returns a default value for a json schema type t if v is not defined.
-// Error is returned on type mismatch.
-func TypeDefault(t Type, v any) (any, error) {
+// EnsureType checks if the given value v respects json schema type t.
+// Returns a type default value if v is nil.
+// Error is returned on type mismatch or type not implemented.
+func EnsureType(t Type, v any) (any, error) {
 	switch t {
 	case String:
-		return defaultVal(v, "")
+		return useValueOrDefault(v, "")
 	case Integer:
-		return defaultVal(v, 0)
+		return useValueOrDefault(v, 0)
 	case Number:
-		return defaultVal(v, .0)
+		return useValueOrDefault(v, .0)
 	case Boolean:
-		return defaultVal(v, false)
+		return useValueOrDefault(v, false)
 	case Array:
-		return defaultVal(v, []any{})
+		return useValueOrDefault(v, []any{})
 	case Object:
-		return defaultVal(v, map[string]any{})
+		return useValueOrDefault(v, map[string]any{})
 	case Null:
-		return nil, nil
+		return useValueOrDefault[any](v, nil)
 	default:
-		return nil, fmt.Errorf("default value for json schema type %q is not implemented", t)
+		return nil, fmt.Errorf("json schema type %q is not implemented", t)
 	}
 }
 
-// MustTypeDefault returns a default value to a type.
-func MustTypeDefault(t Type, v any) any {
-	res, err := TypeDefault(t, v)
-	if err != nil {
-		panic(err)
-	}
-	return res
-}
-
-func defaultVal[T any](val any, d T) (T, error) {
+func useValueOrDefault[T any](val any, d T) (T, error) {
 	// User default value is not defined, use type default.
 	if val == nil {
 		return d, nil
@@ -99,7 +91,7 @@ func ConvertStringToType(s string, t Type) (any, error) {
 	case Null:
 		return nil, nil
 	default:
-		return nil, fmt.Errorf("cast to json schema type %q is not implemented", t)
+		return nil, fmt.Errorf("convert to json schema type %q is not implemented", t)
 	}
 }
 

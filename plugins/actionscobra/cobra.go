@@ -42,7 +42,10 @@ func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, err
 			}
 
 			// Set action input.
-			argsNamed := action.ArgsPosToNamed(a, args)
+			argsNamed, errPos := action.ArgsPosToNamed(a, args)
+			if errPos != nil {
+				return errPos
+			}
 			optsChanged := derefOpts(filterChangedFlags(cmd, options))
 			input := action.NewInput(a, argsNamed, optsChanged, streams)
 			// Pass to the runtime its flags.
@@ -195,7 +198,7 @@ func setFlag(cmd *launchr.Command, opt *action.DefParameter) (any, error) {
 	var val any
 	desc := getDesc(opt.Title, opt.Description)
 	// Get default value if it's not set.
-	dval, err := jsonschema.TypeDefault(opt.Type, opt.Default)
+	dval, err := jsonschema.EnsureType(opt.Type, opt.Default)
 	if err != nil {
 		return nil, err
 	}
