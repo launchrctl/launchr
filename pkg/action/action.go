@@ -264,7 +264,12 @@ func (a *Action) ValidateInput(input *Input) error {
 	if argsPosLen > argsDefLen {
 		return fmt.Errorf("accepts %d arg(s), received %d", argsDefLen, argsPosLen)
 	}
-	return validateJSONSchema(a, input)
+	err := validateJSONSchema(a, input)
+	if err != nil {
+		return err
+	}
+	input.SetValidated(true)
+	return nil
 }
 
 // Execute runs action in the specified environment.
