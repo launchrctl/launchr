@@ -180,13 +180,13 @@ func (a *Action) SetInput(input *Input) (err error) {
 	}
 
 	// Process arguments.
-	err = a.processInputParams(def.Action.Arguments, input.ArgsNamed())
+	err = a.processInputParams(def.Action.Arguments, input.ArgsNamed(), nil)
 	if err != nil {
 		return err
 	}
 
 	// Process options.
-	err = a.processInputParams(def.Action.Options, input.OptsAll())
+	err = a.processInputParams(def.Action.Options, input.OptsAll(), input.OptsChanged())
 	if err != nil {
 		return err
 	}
@@ -202,10 +202,16 @@ func (a *Action) SetInput(input *Input) (err error) {
 	return a.EnsureLoaded()
 }
 
-func (a *Action) processInputParams(def ParametersList, inp InputParams) error {
+func (a *Action) processInputParams(def ParametersList, inp InputParams, changed InputParams) error {
 	for _, p := range def {
 		if _, ok := inp[p.Name]; !ok {
 			continue
+		}
+
+		if changed != nil {
+			if _, ok := changed[p.Name]; ok {
+				continue
+			}
 		}
 
 		value := inp[p.Name]

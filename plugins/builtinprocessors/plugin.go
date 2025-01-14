@@ -54,12 +54,6 @@ func addValueProcessors(m action.Manager, cfg launchr.Config) {
 }
 
 func getByKeyProcessor(value any, options map[string]any, cfg launchr.Config) (any, error) {
-	if value != nil {
-		launchr.Term().Warning().Printfln("Skipping processor %q, value is not empty. Value will remain unchanged", getConfigValue)
-		launchr.Log().Warn("skipping processor, value is not empty", "processor", getConfigValue)
-		return value, nil
-	}
-
 	path, ok := options["path"].(string)
 	if !ok {
 		return value, fmt.Errorf(`option "path" is required for %q processor`, getConfigValue)
