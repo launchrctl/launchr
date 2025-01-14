@@ -145,25 +145,41 @@ func (a *Action) EnsureLoaded() (err error) {
 	if a.def != nil {
 		return err
 	}
+	// Load raw definition as well.
+	_, err = a.Raw()
+	if err != nil {
+		return err
+	}
+	// Load with replacements.
 	a.def, err = a.loader.Load(LoadContext{Action: a})
 	return err
 }
 
-func (a *Action) assertLoaded() {
-	if a.def == nil {
-		panic("action data is not available, call \"EnsureLoaded\" method first to load the data")
-	}
-}
-
-// ActionDef returns action definition with replaced variables.
+// ActionDef returns action definition.
 func (a *Action) ActionDef() *DefAction {
-	a.assertLoaded()
-	return a.def.Action
+	raw, err := a.Raw()
+	if err != nil {
+		// All discovered actions are checked for error.
+		// It means that normally by this time you shouldn't receive this panic.
+		// Please, review your code.
+		// The error may occur if there is a new flow for action.
+		// You may need to manually check the error of Action.Raw() or Action.EnsureLoaded().
+		panic(fmt.Errorf("load error must be checked first: %w", err))
+	}
+	return raw.Action
 }
 
-// RuntimeDef returns runtime definition.
+// RuntimeDef returns runtime definition with replaced variables.
 func (a *Action) RuntimeDef() *DefRuntime {
-	a.assertLoaded()
+	err := a.EnsureLoaded()
+	if err != nil {
+		// The error may appear if the action is incorrectly defined.
+		// Normally EnsureLoaded is called when user input is set and variables are recalculated.
+		// It means that by this time you shouldn't receive this panic.
+		// Please, review your code.
+		// Call SetInput or EnsureLoaded to check for the error before accessing this data.
+		panic(fmt.Errorf("load error must be checked first: %w", err))
+	}
 	return a.def.Runtime
 }
 
@@ -174,19 +190,16 @@ func (a *Action) ImageBuildInfo(image string) *types.BuildDefinition {
 
 // SetInput saves arguments and options for later processing in run, templates, etc.
 func (a *Action) SetInput(input *Input) (err error) {
-	def, err := a.Raw()
-	if err != nil {
-		return err
-	}
+	def := a.ActionDef()
 
 	// Process arguments.
-	err = a.processInputParams(def.Action.Arguments, input.ArgsNamed(), nil)
+	err = a.processInputParams(def.Arguments, input.ArgsNamed(), nil)
 	if err != nil {
 		return err
 	}
 
 	// Process options.
-	err = a.processInputParams(def.Action.Options, input.OptsAll(), input.OptsChanged())
+	err = a.processInputParams(def.Options, input.OptsAll(), input.OptsChanged())
 	if err != nil {
 		return err
 	}

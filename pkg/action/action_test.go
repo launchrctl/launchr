@@ -26,8 +26,6 @@ func Test_Action(t *testing.T) {
 	require.NoError(err)
 	require.NotEmpty(actions)
 	act := actions[0]
-	err = act.EnsureLoaded()
-	require.NoError(err)
 	runDef := act.RuntimeDef()
 	// Test image name.
 	assert.Equal("my/image:v1", runDef.Container.Image)
@@ -53,6 +51,7 @@ func Test_Action(t *testing.T) {
 		"opt6":   "unexpectedOpt",
 	}
 	input := NewInput(act, inputArgs, inputOpts, nil)
+	require.NotNil(input)
 	input.SetValidated(true)
 	err = act.SetInput(input)
 	require.NoError(err)
@@ -77,8 +76,6 @@ func Test_Action(t *testing.T) {
 		fmt.Sprintf("%v ", envVar1),
 	}
 	act.Reset()
-	err = act.EnsureLoaded()
-	require.NoError(err)
 	runDef = act.RuntimeDef()
 	assert.Equal(execExp, []string(runDef.Container.Command))
 	assert.NotNil(act.def)
@@ -100,10 +97,9 @@ func Test_ActionInput(t *testing.T) {
 	assert := assert.New(t)
 	require := require.New(t)
 	a := NewFromYAML("input_test", []byte(validMultipleArgsAndOpts))
-	require.NoError(a.EnsureLoaded())
 	// Create empty input.
 	input := NewInput(a, nil, nil, nil)
-	assert.True(assert.NotNil(input))
+	require.NotNil(input)
 
 	// Test validated.
 	assert.False(input.IsValidated())
@@ -132,6 +128,7 @@ func Test_ActionInput(t *testing.T) {
 	// Test user changed input.
 	// Check argument is changed.
 	input = NewInput(a, InputParams{"arg_str": "my_string"}, nil, nil)
+	require.NotNil(input)
 	changed := input.ArgsNamed()
 	assert.Equal(InputParams{"arg_str": "my_string", "arg_default": "my_default_string"}, changed)
 	assert.True(input.IsArgChanged("arg_str"))
@@ -139,6 +136,7 @@ func Test_ActionInput(t *testing.T) {
 	assert.False(input.IsArgChanged("arg_str2"))
 	// Check option is changed.
 	input = NewInput(a, nil, InputParams{"opt_str": "my_string"}, nil)
+	require.NotNil(input)
 	changed = input.OptsChanged()
 	assert.Equal(InputParams{"opt_str": "my_string"}, changed)
 	assert.True(input.IsOptChanged("opt_str"))
@@ -316,8 +314,8 @@ func Test_ActionInputValidate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			a := NewFromYAML(tt.name, []byte(tt.yaml))
-			require.NoError(t, a.EnsureLoaded())
 			input := NewInput(a, tt.args, tt.opts, nil)
+			require.NotNil(t, input)
 			if tt.fnInit != nil {
 				tt.fnInit(t, a, input)
 			}

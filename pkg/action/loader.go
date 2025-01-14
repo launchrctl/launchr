@@ -93,17 +93,14 @@ func (p inputProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
 		return b, nil
 	}
 	a := ctx.Action
-	def, err := ctx.Action.Raw()
-	if err != nil {
-		return nil, err
-	}
+	def := ctx.Action.ActionDef()
 	// Collect template variables.
-	data := ConvertInputToTplVars(a.Input(), def.Action)
+	data := ConvertInputToTplVars(a.Input(), def)
 	addPredefinedVariables(data, a)
 
 	// Parse action without variables to validate
 	tpl := template.New(a.ID)
-	_, err = tpl.Parse(string(b))
+	_, err := tpl.Parse(string(b))
 	if err != nil {
 		// Check if variables have dashes to show the error properly.
 		hasDash := false

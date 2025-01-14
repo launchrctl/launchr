@@ -32,7 +32,6 @@ func testLoaderAction() *Action {
 		ID:     "my_actions",
 		loader: af,
 	}
-	_ = a.EnsureLoaded()
 	return a
 }
 

@@ -74,7 +74,12 @@ func (p *Plugin) discoverActions() (err error) {
 
 	// Add discovered actions.
 	for _, a := range discovered {
-		p.am.Add(a)
+		err = p.am.Add(a)
+		if err != nil {
+			launchr.Log().Warn("action was skipped due to error", "action_id", a.ID, "error", err)
+			launchr.Term().Warning().Printfln("Action %q was skipped:\n%v", a.ID, err)
+			continue
+		}
 	}
 
 	// Alter all registered actions.

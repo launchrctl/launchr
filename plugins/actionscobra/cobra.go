@@ -14,12 +14,8 @@ import (
 
 // CobraImpl returns cobra command implementation for an action command.
 func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, error) {
-	def, err := a.Raw()
-	if err != nil {
-		return nil, err
-	}
-	actConf := def.Action
-	argsDef := actConf.Arguments
+	def := a.ActionDef()
+	argsDef := def.Arguments
 	use := a.ID
 	for _, p := range argsDef {
 		use += " " + p.Name
@@ -30,21 +26,16 @@ func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, err
 		Use: use,
 		// @todo: maybe we need a long template for arguments description
 		// @todo: have aliases documented in help
-		Short:   getDesc(actConf.Title, actConf.Description),
-		Aliases: actConf.Aliases,
-		RunE: func(cmd *launchr.Command, args []string) error {
+		Short:   getDesc(def.Title, def.Description),
+		Aliases: def.Aliases,
+		RunE: func(cmd *launchr.Command, args []string) (err error) {
 			// Don't show usage help on a runtime error.
 			cmd.SilenceUsage = true
 
-			err = a.EnsureLoaded()
+			// Set action input.
+			argsNamed, err := action.ArgsPosToNamed(a, args)
 			if err != nil {
 				return err
-			}
-
-			// Set action input.
-			argsNamed, errPos := action.ArgsPosToNamed(a, args)
-			if errPos != nil {
-				return errPos
 			}
 			optsChanged := derefOpts(filterChangedFlags(cmd, options))
 			input := action.NewInput(a, argsNamed, optsChanged, streams)
@@ -71,7 +62,7 @@ func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, err
 	}
 
 	// Collect action flags.
-	err = setCommandOptions(cmd, actConf.Options, options)
+	err := setCommandOptions(cmd, def.Options, options)
 	if err != nil {
 		return nil, err
 	}

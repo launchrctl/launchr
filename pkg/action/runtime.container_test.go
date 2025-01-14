@@ -82,7 +82,6 @@ func testContainerAction(cdef *DefRuntimeContainer) *Action {
 		fpath: "my/action/test/action.yaml",
 		wd:    launchr.MustAbs("test"),
 	}
-	_ = a.EnsureLoaded()
 	return a
 }
 
@@ -107,8 +106,6 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 			Context: ".",
 		},
 	})
-	err := actLoc.EnsureLoaded()
-	require.NoError(t, err)
 	type testCase struct {
 		name     string
 		action   *DefRuntimeContainer
@@ -193,14 +190,12 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 			ctx := context.Background()
 			act := testContainerAction(tt.action)
 			act.input = NewInput(act, nil, nil, launchr.NoopStreams())
-			err = act.EnsureLoaded()
-			require.NoError(t, err)
 			run := act.RuntimeDef().Container
 			imgOpts := types.ImageOptions{Name: run.Image, Build: tt.expBuild}
 			d.EXPECT().
 				ImageEnsure(ctx, eqImageOpts{imgOpts}).
 				Return(tt.ret...)
-			err = r.imageEnsure(ctx, act)
+			err := r.imageEnsure(ctx, act)
 			assert.Equal(tt.ret[1], err)
 		})
 	}
@@ -215,8 +210,6 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 			Context: ".",
 		},
 	})
-	err := actLoc.EnsureLoaded()
-	require.NoError(t, err)
 	type testCase struct {
 		name     string
 		action   *DefRuntimeContainer
@@ -253,15 +246,12 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 			act := testContainerAction(tt.action)
 			act.input = NewInput(act, nil, nil, launchr.NoopStreams())
 
-			err := act.EnsureLoaded()
-			require.NoError(t, err)
-
 			run := act.RuntimeDef().Container
 			imgOpts := types.ImageRemoveOptions{Force: true, PruneChildren: false}
 			d.EXPECT().
 				ImageRemove(ctx, run.Image, gomock.Eq(imgOpts)).
 				Return(tt.ret...)
-			err = r.imageRemove(ctx, act)
+			err := r.imageRemove(ctx, act)
 
 			assert.Equal(err, tt.ret[1])
 		})
@@ -275,7 +265,6 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 	defer r.Close()
 
 	a := testContainerAction(nil)
-	require.NoError(t, a.EnsureLoaded())
 	run := a.RuntimeDef()
 
 	runCfg := &types.ContainerCreateOptions{
@@ -525,7 +514,6 @@ func Test_ContainerExec(t *testing.T) {
 
 	cid := "cid"
 	act := testContainerAction(nil)
-	require.NoError(t, act.EnsureLoaded())
 	runConf := act.RuntimeDef().Container
 	imgBuild := &types.ImageStatusResponse{Status: types.ImageExists}
 	cio := testContainerIO()
@@ -711,11 +699,9 @@ func Test_ContainerExec(t *testing.T) {
 			resCh, errCh := make(chan types.ContainerWaitResponse, 1), make(chan error, 1)
 			assert, ctrl, d, r := prepareContainerTestSuite(t)
 			a := act.Clone()
-			err := a.EnsureLoaded()
-			require.NoError(t, err)
 			input := NewInput(a, nil, nil, launchr.NoopStreams())
 			input.SetValidated(true)
-			err = a.SetInput(input)
+			err := a.SetInput(input)
 			require.NoError(t, err)
 			defer ctrl.Finish()
 			defer r.Close()

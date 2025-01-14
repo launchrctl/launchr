@@ -18,7 +18,7 @@ type Manager interface {
 	// Get returns a copy of an action from the manager with default decorators.
 	Get(id string) (*Action, bool)
 	// Add saves an action in the manager.
-	Add(*Action)
+	Add(*Action) error
 	// Delete deletes the action from the manager.
 	Delete(id string)
 	// Decorate decorates an action with given behaviors and returns its copy.
@@ -94,24 +94,25 @@ func (m *actionManagerMap) ServiceInfo() launchr.ServiceInfo {
 	return launchr.ServiceInfo{}
 }
 
-func (m *actionManagerMap) Add(a *Action) {
+func (m *actionManagerMap) Add(a *Action) error {
 	m.mx.Lock()
 	defer m.mx.Unlock()
-	m.actionStore[a.ID] = a
 
-	// Collect action aliases.
+	// Check action loads properly.
 	def, err := a.Raw()
 	if err != nil {
-		return
+		return err
 	}
+	// Collect action aliases.
 	for _, alias := range def.Action.Aliases {
 		id, ok := m.actionAliases[alias]
 		if ok {
-			launchr.Term().Warning().Printfln("Alias %q is already defined by %q", alias, id)
-		} else {
-			m.actionAliases[alias] = a.ID
+			return fmt.Errorf("alias %q is already defined by %q", alias, id)
 		}
+		m.actionAliases[alias] = a.ID
 	}
+	m.actionStore[a.ID] = a
+	return nil
 }
 
 func (m *actionManagerMap) AllUnsafe() map[string]*Action {
