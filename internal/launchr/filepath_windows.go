@@ -1,7 +1,6 @@
 //go:build windows
 
-// Package action provides implementations of discovering and running actions.
-package action
+package launchr
 
 import (
 	"path/filepath"

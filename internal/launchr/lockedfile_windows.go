@@ -1,18 +1,16 @@
 //go:build windows
 
-package action
+package launchr
 
 import (
 	"golang.org/x/sys/windows"
-
-	"github.com/launchrctl/launchr/internal/launchr"
 )
 
 const (
 	allBytes = ^uint32(0)
 )
 
-func (f *lockedFile) lock(waitToAcquire bool) (err error) {
+func (f *LockedFile) lock(waitToAcquire bool) (err error) {
 	lt := windows.LOCKFILE_EXCLUSIVE_LOCK
 	if !waitToAcquire {
 		lt = lt | windows.LOCKFILE_FAIL_IMMEDIATELY
@@ -25,7 +23,7 @@ func (f *lockedFile) lock(waitToAcquire bool) (err error) {
 	return nil
 }
 
-func (f *lockedFile) unlock() {
+func (f *LockedFile) unlock() {
 	if !f.locked {
 		// If we didn't lock the file, we shouldn't unlock it.
 		return
@@ -33,7 +31,7 @@ func (f *lockedFile) unlock() {
 	ol := new(windows.Overlapped)
 	err := windows.UnlockFileEx(windows.Handle(f.file.Fd()), 0, allBytes, allBytes, ol)
 	if err != nil {
-		launchr.Log().Warn("unlock is called on a not locked file: %s", err)
+		Log().Warn("unlock is called on a not locked file: %s", err)
 	}
 	f.locked = false
 }

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"regexp"
 
 	"gopkg.in/yaml.v3"
@@ -14,19 +13,23 @@ import (
 )
 
 const (
-	sErrFieldMustBeArr       = "field must be an array"
-	sErrArrElMustBeObj       = "array element must be an object"
-	sErrArrEl                = "element must be an array of strings"
-	sErrArrOrStrEl           = "element must be an array of strings or a string"
-	sErrArrOrMapEl           = "element must be an array of strings or a key-value object"
-	sErrEmptyActionImg       = "image field cannot be empty"
-	sErrEmptyActionCmd       = "command field cannot be empty"
-	sErrEmptyActionArgName   = "action argument name is required"
-	sErrEmptyActionOptName   = "action option name is required"
-	sErrInvalidActionArgName = "argument name %q is not valid"
-	sErrInvalidActionOptName = "option name %q is not valid"
-	sErrDupActionVarName     = "argument or option name %q is already defined, a variable name must be unique in the action definition"
-	sErrActionDefMissing     = "action definition is missing in the declaration"
+	sErrFieldMustBeArr = "field must be an array"
+	sErrArrElMustBeObj = "array element must be an object"
+	sErrArrEl          = "element must be an array of strings"
+	sErrArrOrStrEl     = "element must be an array of strings or a string"
+	sErrArrOrMapEl     = "element must be an array of strings or a key-value object"
+
+	sErrEmptyRuntimeImg        = "image field cannot be empty"
+	sErrEmptyRuntimeCmd        = "command field cannot be empty"
+	sErrEmptyActionParamName   = "parameter name is required"
+	sErrInvalidActionParamName = "parameter name %q is not valid"
+	sErrDupActionParamName     = "parameter name %q is already defined, a variable name must be unique in the action definition"
+	sErrActionDefMissing       = "action definition is missing in the declaration"
+	sErrEmptyProcessorID       = "invalid configuration, processor ID is required"
+
+	// Runtime types.
+	runtimeTypePlugin    DefRuntimeType = "plugin"
+	runtimeTypeContainer DefRuntimeType = "container"
 )
 
 type errUnsupportedActionVersion struct {
@@ -51,10 +54,11 @@ var (
 	rgxVarName     = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_\\-]*$`)
 )
 
-// CreateFromYaml creates an action file definition from yaml configuration.
+// NewDefFromYaml creates an action file definition from yaml configuration.
 // It returns pointer to [Definition] or nil on error.
-func CreateFromYaml(r io.Reader) (*Definition, error) {
+func NewDefFromYaml(b []byte) (*Definition, error) {
 	d := Definition{}
+	r := bytes.NewReader(b)
 	decoder := yaml.NewDecoder(r)
 	err := decoder.Decode(&d)
 	if err != nil {
@@ -73,22 +77,22 @@ func CreateFromYaml(r io.Reader) (*Definition, error) {
 	return &d, nil
 }
 
-// CreateFromYamlTpl creates an action file definition from yaml configuration
-// as [CreateFromYaml] but considers that it has unescaped template values.
-func CreateFromYamlTpl(b []byte) (*Definition, error) {
+// NewDefFromYamlTpl creates an action file definition from yaml configuration
+// as [NewDefFromYaml] but considers that it has unescaped template values.
+func NewDefFromYamlTpl(b []byte) (*Definition, error) {
 	// Find unescaped occurrences of template elements.
 	bufRaw := rgxUnescTplRow.ReplaceAllFunc(b, func(match []byte) []byte {
 		return rgxTplRow.ReplaceAll(match, []byte(`"$1"`))
 	})
-	r := bytes.NewReader(bufRaw)
-	return CreateFromYaml(r)
+	return NewDefFromYaml(bufRaw)
 }
 
 // Definition is a representation of an action file.
 type Definition struct {
-	Version string     `yaml:"version"`
-	WD      string     `yaml:"working_directory"`
-	Action  *DefAction `yaml:"action"`
+	Version string      `yaml:"version"`
+	WD      string      `yaml:"working_directory"`
+	Action  *DefAction  `yaml:"action"`
+	Runtime *DefRuntime `yaml:"runtime"`
 }
 
 // Content implements [Loader] interface.
@@ -124,6 +128,34 @@ func (d *Definition) UnmarshalYAML(node *yaml.Node) (err error) {
 	if d.Version == "" {
 		d.Version = "1"
 	}
+	if d.Runtime == nil {
+		err = setOldDefRuntime(d)
+		if err != nil {
+			return yamlTypeErrorLine("missing runtime configuration", node.Line, node.Column)
+		}
+	}
+	return nil
+}
+
+// Deprecated: remove when all actions are migrated to the new schema.
+func setOldDefRuntime(d *Definition) error {
+	if d.Action.Image == "" {
+		return yamlTypeErrorLine(sErrEmptyRuntimeImg, 0, 0)
+	}
+	if len((*d).Action.Command) == 0 {
+		return yamlTypeErrorLine(sErrEmptyRuntimeCmd, 0, 0)
+	}
+	d.Runtime = &DefRuntime{
+		Type: runtimeTypeContainer,
+		Container: &DefRuntimeContainer{
+			Command:    d.Action.Command,
+			Image:      d.Action.Image,
+			Build:      d.Action.Build,
+			ExtraHosts: d.Action.ExtraHosts,
+			Env:        d.Action.Env,
+			User:       d.Action.User,
+		},
+	}
 	return nil
 }
 
@@ -137,17 +169,19 @@ func validateV1(d *Definition) error {
 
 // DefAction holds action configuration.
 type DefAction struct {
-	Title       string                 `yaml:"title"`
-	Description string                 `yaml:"description"`
-	Aliases     []string               `yaml:"alias"`
-	Arguments   ArgumentsList          `yaml:"arguments"`
-	Options     OptionsList            `yaml:"options"`
-	Command     StrSliceOrStr          `yaml:"command"`
-	Image       string                 `yaml:"image"`
-	Build       *types.BuildDefinition `yaml:"build"`
-	ExtraHosts  StrSlice               `yaml:"extra_hosts"`
-	Env         EnvSlice               `yaml:"env"`
-	User        string                 `yaml:"user"`
+	Title       string         `yaml:"title"`
+	Description string         `yaml:"description"`
+	Aliases     []string       `yaml:"alias"`
+	Arguments   ParametersList `yaml:"arguments"`
+	Options     ParametersList `yaml:"options"`
+
+	// @todo remove deprecated
+	Command    StrSliceOrStr          `yaml:"command"`     // Deprecated: use [Definition.Runtime]
+	Image      string                 `yaml:"image"`       // Deprecated: use [Definition.Runtime]
+	Build      *types.BuildDefinition `yaml:"build"`       // Deprecated: use [Definition.Runtime]
+	ExtraHosts StrSlice               `yaml:"extra_hosts"` // Deprecated: use [Definition.Runtime]
+	Env        EnvSlice               `yaml:"env"`         // Deprecated: use [Definition.Runtime]
+	User       string                 `yaml:"user"`        // Deprecated: use [Definition.Runtime]
 }
 
 // UnmarshalYAML implements [yaml.Unmarshaler] to parse action definition.
@@ -158,16 +192,98 @@ func (a *DefAction) UnmarshalYAML(n *yaml.Node) (err error) {
 		return err
 	}
 	*a = DefAction(y)
-
-	if a.Image == "" {
-		l, c := yamlNodeLineCol(n, "image")
-		return yamlTypeErrorLine(sErrEmptyActionImg, l, c)
-	}
-	if len(a.Command) == 0 {
-		l, c := yamlNodeLineCol(n, "command")
-		return yamlTypeErrorLine(sErrEmptyActionCmd, l, c)
-	}
 	return nil
+}
+
+// DefRuntimeType is a runtime type.
+type DefRuntimeType string
+
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse runtime type.
+func (r *DefRuntimeType) UnmarshalYAML(n *yaml.Node) (err error) {
+	var s string
+	if err = n.Decode(&s); err != nil {
+		return err
+	}
+	*r = DefRuntimeType(s)
+	switch *r {
+	case runtimeTypePlugin, runtimeTypeContainer:
+		return nil
+	case "":
+		return yamlTypeErrorLine("empty runtime type", n.Line, n.Column)
+	default:
+		return yamlTypeErrorLine(fmt.Sprintf("unknown runtime type %q", *r), n.Line, n.Column)
+	}
+}
+
+// DefRuntimeContainer has container-specific runtime configuration.
+type DefRuntimeContainer struct {
+	Command    StrSliceOrStr          `yaml:"command"`
+	Image      string                 `yaml:"image"`
+	Build      *types.BuildDefinition `yaml:"build"`
+	ExtraHosts StrSlice               `yaml:"extra_hosts"`
+	Env        EnvSlice               `yaml:"env"`
+	User       string                 `yaml:"user"`
+}
+
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse runtime container definition.
+func (r *DefRuntimeContainer) UnmarshalYAML(n *yaml.Node) (err error) {
+	type yamlT DefRuntimeContainer
+	var y yamlT
+	if err = n.Decode(&y); err != nil {
+		return err
+	}
+	*r = DefRuntimeContainer(y)
+	if r.Image == "" {
+		l, c := yamlNodeLineCol(n, "image")
+		return yamlTypeErrorLine(sErrEmptyRuntimeImg, l, c)
+	}
+	if len(r.Command) == 0 {
+		l, c := yamlNodeLineCol(n, "command")
+		return yamlTypeErrorLine(sErrEmptyRuntimeCmd, l, c)
+	}
+	return err
+}
+
+// DefRuntime contains action runtime configuration.
+type DefRuntime struct {
+	Type      DefRuntimeType `yaml:"type"`
+	Container *DefRuntimeContainer
+}
+
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse runtime definition.
+func (r *DefRuntime) UnmarshalYAML(n *yaml.Node) (err error) {
+	// If node was defined as a string, example "plugin"
+	var rtype DefRuntimeType
+	if n.Kind == yaml.ScalarNode {
+		err = n.Decode(&rtype)
+		r.Type = rtype
+		if r.Type != runtimeTypePlugin {
+			return yamlTypeErrorLine("missing runtime configuration", n.Line, n.Column)
+		}
+		return err
+	}
+
+	// Preparse type to proceed parsing.
+	ntype := yamlFindNodeByKey(n, "type")
+	if ntype == nil {
+		return yamlTypeErrorLine("missing runtime type definition", n.Line, n.Column)
+	}
+	if err = ntype.Decode(&rtype); err != nil {
+		return err
+	}
+
+	// Parse runtime configuration.
+	r.Type = rtype
+	switch r.Type {
+	case runtimeTypePlugin:
+		return nil
+	case runtimeTypeContainer:
+		err = n.Decode(&r.Container)
+		return err
+	default:
+		// Error is already returned on runtime type parsing.
+		panic(fmt.Sprintf("runtime type not implemented: %s", r.Type))
+	}
 }
 
 // StrSlice is an array of strings for command execution.
@@ -208,10 +324,10 @@ func (l *StrSliceOrStr) UnmarshalYAML(n *yaml.Node) (err error) {
 	return err
 }
 
-// EnvSlice is an array of env vars or key-value.
+// EnvSlice is an array of runtime vars or key-value.
 type EnvSlice []string
 
-// UnmarshalYAML implements [yaml.Unmarshaler] to parse env []string or map[string]string.
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse runtime []string or map[string]string.
 func (l *EnvSlice) UnmarshalYAML(n *yaml.Node) (err error) {
 	if n.Kind == yaml.MappingNode {
 		var m map[string]string
@@ -241,146 +357,125 @@ func (l *EnvSlice) UnmarshalYAML(n *yaml.Node) (err error) {
 	return yamlTypeErrorLine(sErrArrOrMapEl, n.Line, n.Column)
 }
 
-// ArgumentsList is used for custom yaml parsing of arguments list.
-type ArgumentsList []*Argument
+// ParametersList is used for custom yaml parsing of arguments list.
+type ParametersList []*DefParameter
 
-// UnmarshalYAML implements [yaml.Unmarshaler] to parse for [ArgumentsList].
-func (l *ArgumentsList) UnmarshalYAML(nodeList *yaml.Node) (err error) {
-	*l, err = unmarshalListYaml[*Argument](nodeList)
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse for [ParametersList].
+func (l *ParametersList) UnmarshalYAML(nodeList *yaml.Node) (err error) {
+	*l, err = unmarshalParamListYaml(nodeList)
 	return err
 }
 
-// Argument stores command arguments declaration.
-type Argument struct {
-	Name        string            `yaml:"name"`
-	Title       string            `yaml:"title"`
-	Description string            `yaml:"description"`
-	Type        jsonschema.Type   `yaml:"type"`
-	Process     []ValueProcessDef `yaml:"process"`
-	RawMap      map[string]any
+// DefParameter stores command argument or option declaration.
+type DefParameter struct {
+	Title       string          `yaml:"title"`
+	Description string          `yaml:"description"`
+	Type        jsonschema.Type `yaml:"type"`
+	Default     any             `yaml:"default"`
+	Enum        []any           `yaml:"enum"`
+	Items       *DefArrayItems  `yaml:"items"`
+
+	// Action specific behavior for parameters.
+	// Name is an action unique parameter name used.
+	Name string `yaml:"name"`
+	// Shorthand is a short name 1 syllable name used in Console.
+	// @todo test definition, validate, catch panic if overlay, add to readme.
+	Shorthand string `yaml:"shorthand"`
+	// Required indicates if the parameter is mandatory.
+	// It's not correct json schema, and it's processed to a correct place later.
+	Required bool `yaml:"required"`
+	// Process is an array of [ValueProcessor] to a value.
+	Process []DefValueProcessor `yaml:"process"`
+	// raw is a raw parameter declaration to support all JSON Schema features.
+	raw map[string]any
 }
 
-// UnmarshalYAML implements [yaml.Unmarshaler] to parse [Argument].
-func (a *Argument) UnmarshalYAML(node *yaml.Node) (err error) {
-	type yamlT Argument
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse [DefParameter].
+func (p *DefParameter) UnmarshalYAML(n *yaml.Node) (err error) {
+	type yamlT DefParameter
 	var y yamlT
-	errStr := []string{sErrEmptyActionArgName, sErrInvalidActionArgName, sErrDupActionVarName}
-	if err = unmarshalVarYaml(node, &y, errStr); err != nil {
+	errStr := []string{sErrEmptyActionParamName, sErrInvalidActionParamName, sErrDupActionParamName}
+
+	if err = n.Decode(&y); err != nil {
 		return err
 	}
-	*a = Argument(y)
-	return nil
-}
 
-// OptionsList is used for custom yaml parsing of options list.
-type OptionsList []*Option
-
-// UnmarshalYAML implements [yaml.Unmarshaler] to parse [OptionsList].
-func (l *OptionsList) UnmarshalYAML(nodeList *yaml.Node) (err error) {
-	*l, err = unmarshalListYaml[*Option](nodeList)
-	return err
-}
-
-// Option stores command options declaration.
-type Option struct {
-	Name        string            `yaml:"name"`
-	Shorthand   string            `yaml:"shorthand"` // @todo test definition, validate, catch panic if overlay, add to readme.
-	Title       string            `yaml:"title"`
-	Description string            `yaml:"description"`
-	Type        jsonschema.Type   `yaml:"type"`
-	Default     any               `yaml:"default"`
-	Required    bool              `yaml:"required"` // @todo that conflicts with json schema object definition
-	Process     []ValueProcessDef `yaml:"process"`
-	RawMap      map[string]any
-}
-
-// ValueProcessDef stores information about processor and options that should be applied to processor.
-type ValueProcessDef struct {
-	Processor string         `yaml:"processor"`
-	Options   map[string]any `yaml:"options"`
-}
-
-// UnmarshalYAML implements [yaml.Unmarshaler] to parse [Option].
-func (o *Option) UnmarshalYAML(node *yaml.Node) (err error) {
-	type yamlT Option
-	var y yamlT
-	errStr := []string{sErrEmptyActionOptName, sErrInvalidActionOptName, sErrDupActionVarName}
-	if err = unmarshalVarYaml(node, &y, errStr); err != nil {
-		return err
-	}
-	*o = Option(y)
-	dval := getDefaultByType(o)
-	if errDef, ok := dval.(error); ok {
-		return yamlTypeErrorLine(errDef.Error(), node.Line, node.Column)
-	}
-	o.Default = dval
-	o.RawMap["default"] = o.Default
-	return nil
-}
-
-func unmarshalVarYaml(n *yaml.Node, v any, errStr []string) (err error) {
-	if err = n.Decode(v); err != nil {
-		return err
-	}
-	vname := reflectValRef(v, "Name").(*string)
-	vtype := reflectValRef(v, "Type").(*jsonschema.Type)
-	vtitle := reflectValRef(v, "Title").(*string)
-	vraw := reflectValRef(v, "RawMap").(*map[string]any)
-
-	if *vname == "" {
+	*p = DefParameter(y)
+	if p.Name == "" {
 		return yamlTypeErrorLine(errStr[0], n.Line, n.Column)
 	}
-	if !rgxVarName.MatchString(*vname) {
+	if !rgxVarName.MatchString(p.Name) {
 		l, c := yamlNodeLineCol(n, "name")
-		return yamlTypeErrorLine(fmt.Sprintf(errStr[1], *vname), l, c)
+		return yamlTypeErrorLine(fmt.Sprintf(errStr[1], p.Name), l, c)
 	}
 	dups := yamlTree.dupsByNode(n)
-	if !dups.isUnique(*vname) {
+	if !dups.isUnique(p.Name) {
 		l, c := yamlNodeLineCol(n, "name")
-		return yamlTypeErrorLine(fmt.Sprintf(errStr[2], *vname), l, c)
+		return yamlTypeErrorLine(fmt.Sprintf(errStr[2], p.Name), l, c)
 	}
-	if err = n.Decode(vraw); err != nil {
+	if err = n.Decode(&p.raw); err != nil {
 		return err
 	}
-	if *vtype == "" {
-		*vtype = jsonschema.String
+	if p.Type == "" {
+		p.Type = jsonschema.String
 	}
-	if *vtitle == "" {
-		*vtitle = *vname
+	if p.Title == "" {
+		p.Title = p.Name
 	}
-	(*vraw)["type"] = *vtype
-	// @todo review hardcoded array elements types when array is properly implemented.
-	if *vtype == jsonschema.Array {
-		items, ok := (*vraw)["items"].(map[string]any)
-		if !ok {
-			items = map[string]any{}
+	// Cast enum any to expected type, make sure enum is correctly filled.
+	for i := 0; i < len(p.Enum); i++ {
+		v, err := jsonschema.EnsureType(p.Type, p.Enum[i])
+		if err != nil {
+			enumNode := yamlFindNodeByKey(n, "enum")
+			return yamlTypeErrorLine(err.Error(), enumNode.Line, enumNode.Column)
 		}
-
-		items["type"] = jsonschema.String
-
-		// Override if enum is specified
-		if enum, ok := items["enum"]; ok {
-			items["enum"] = enum
-		}
-
-		(*vraw)["items"] = items
+		p.Enum[i] = v
 	}
+	p.raw["type"] = p.Type
+	if p.Type == jsonschema.Array {
+		// Force default array's "items" type declaration if not specified.
+		if p.Items == nil {
+			p.Items = &DefArrayItems{Type: jsonschema.String}
+			p.raw["items"] = map[string]any{
+				"type": jsonschema.String,
+			}
+		}
+	}
+
+	// Set default values.
+	_, okDef := p.raw["default"]
+	if okDef {
+		// Ensure default value respects the type.
+		dval, errDef := jsonschema.EnsureType(p.Type, p.Default)
+		if errDef != nil {
+			l, c := yamlNodeLineCol(n, "default")
+			return yamlTypeErrorLine(errDef.Error(), l, c)
+		}
+		p.Default = dval
+		p.raw["default"] = p.Default
+	}
+
+	// Not JSONSchema properties.
+	delete(p.raw, "name")
+	delete(p.raw, "shorthand")
+	delete(p.raw, "required")
+	delete(p.raw, "process")
 
 	return nil
 }
 
-func unmarshalListYaml[T any](nl *yaml.Node) ([]T, error) {
+func unmarshalParamListYaml(nl *yaml.Node) ([]*DefParameter, error) {
 	if nl.Kind != yaml.SequenceNode {
 		return nil, yamlTypeErrorLine(sErrFieldMustBeArr, nl.Line, nl.Column)
 	}
-	l := make([]T, 0, len(nl.Content))
+	l := make([]*DefParameter, 0, len(nl.Content))
 	var errs *yaml.TypeError
 	for _, node := range nl.Content {
 		if node.Kind != yaml.MappingNode {
 			errs = yamlMergeErrors(errs, yamlTypeErrorLine(sErrArrElMustBeObj, node.Line, node.Column))
 			continue
 		}
-		var v T
+		var v *DefParameter
 		if err := node.Decode(&v); err != nil {
 			if errType, ok := err.(*yaml.TypeError); ok {
 				errs = yamlMergeErrors(errs, errType)
@@ -395,4 +490,29 @@ func unmarshalListYaml[T any](nl *yaml.Node) ([]T, error) {
 	}
 
 	return l, nil
+}
+
+// DefArrayItems stores array type related information.
+type DefArrayItems struct {
+	Type jsonschema.Type `yaml:"type"`
+}
+
+// DefValueProcessor stores information about processor and options that should be applied to processor.
+type DefValueProcessor struct {
+	ID      string         `yaml:"processor"`
+	Options map[string]any `yaml:"options"`
+}
+
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse [DefValueProcessor].
+func (p *DefValueProcessor) UnmarshalYAML(n *yaml.Node) (err error) {
+	type yamlT DefValueProcessor
+	var y yamlT
+	if err = n.Decode(&y); err != nil {
+		return err
+	}
+	*p = DefValueProcessor(y)
+	if p.ID == "" {
+		return yamlTypeErrorLine(sErrEmptyProcessorID, n.Line, n.Column)
+	}
+	return nil
 }

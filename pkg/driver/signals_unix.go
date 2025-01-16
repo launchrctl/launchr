@@ -1,6 +1,6 @@
-//go:build !windows
+//go:build unix
 
-package action
+package driver
 
 import (
 	"os"

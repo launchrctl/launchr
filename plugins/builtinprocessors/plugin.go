@@ -17,15 +17,15 @@ func init() {
 	launchr.RegisterPlugin(Plugin{})
 }
 
-// Plugin is launchr plugin to provide action processors.
+// Plugin is [launchr.Plugin] to provide action processors.
 type Plugin struct{}
 
-// PluginInfo implements launchr.Plugin interface.
+// PluginInfo implements [launchr.Plugin] interface.
 func (p Plugin) PluginInfo() launchr.PluginInfo {
 	return launchr.PluginInfo{}
 }
 
-// OnAppInit implements launchr.Plugin interface.
+// OnAppInit implements [launchr.OnAppInitPlugin] interface.
 func (p Plugin) OnAppInit(app launchr.App) error {
 	// Get services.
 	var cfg launchr.Config
@@ -54,12 +54,6 @@ func addValueProcessors(m action.Manager, cfg launchr.Config) {
 }
 
 func getByKeyProcessor(value any, options map[string]any, cfg launchr.Config) (any, error) {
-	if value != nil {
-		launchr.Term().Warning().Printfln("Skipping processor %q, value is not empty. Value will remain unchanged", getConfigValue)
-		launchr.Log().Warn("skipping processor, value is not empty", "processor", getConfigValue)
-		return value, nil
-	}
-
 	path, ok := options["path"].(string)
 	if !ok {
 		return value, fmt.Errorf(`option "path" is required for %q processor`, getConfigValue)

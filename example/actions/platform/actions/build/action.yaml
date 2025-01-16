@@ -9,11 +9,11 @@ action:
     - name: arg2
       title: Argument 2
       description: Some additional info for arg
-  options: # TODO Use json schema. By default string. Do not allow complex data.
+  options:
     - name: opt1
       title: Option 1
       description: Some additional info for option
-      default: 
+      default: ""
     - name: opt2
       title: Option 2
       description: Some additional info for option
@@ -30,6 +30,22 @@ action:
       title: Option 4
       description: Some additional info for option
       type: array
+    - name: optenum
+      title: Option 5
+      type: string
+      enum: [enum1, enum2]
+    - name: optarrbool
+      title: Option 6
+      type: array
+      items:
+        type: boolean
+    - name: optip
+      title: Option 7
+      type: string
+      format: "ipv4"
+
+runtime:
+  type: container
 #  image: python:3.7-slim
   image: ubuntu
 #  command: python3 {{ .opt4 }}

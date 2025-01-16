@@ -1,11 +1,10 @@
 package action
 
 const validEmptyVersionYaml = `
+runtime: plugin
 action:
   title: Title
   description: Description
-  image: python:3.7-slim
-  command: python3 {{ .Arg0 }}
 `
 
 const validFullYaml = `
@@ -27,33 +26,36 @@ action:
     - name: arg_12
       title: Argument 1
       description: Argument 1 description
+      enum: [arg_12_enum1, arg_12_enum2]
     - name: arg2
       title: Argument 2
       description: Argument 2 description
   options:
     - name: opt1
-      title: Option 1
+      title: Option 1 String
       description: Option 1 description
     - name: opt-1
-      title: Option 1
+      title: Option 1 String with dash
       description: Option 1 description
     - name: opt2
-      title: Option 2
+      title: Option 2 Boolean
       description: Option 2 description
       type: boolean
       required: true
     - name: opt3
-      title: Option 3
+      title: Option 3 Integer
       description: Option 3 description
       type: integer
     - name: opt4
-      title: Option 4
+      title: Option 4 Number
       description: Option 4 description
       type: number
     - name: optarr
-      title: Option 5
+      title: Option 5 Array
       description: Option 5 description
       type: array
+runtime:
+  type: container
   image: my/image:v1
   build:
     context: ./
@@ -83,6 +85,8 @@ action:
 const validCmdArrYaml = `
 action:
   title: Title
+runtime:
+  type: container
   image: python:3.7-slim
   command:
     - /bin/sh
@@ -93,6 +97,8 @@ action:
 const invalidCmdObjYaml = `
 action:
   title: Title
+runtime:
+  type: container
   image: python:3.7-slim
   command:
     line1: /bin/sh
@@ -103,6 +109,8 @@ action:
 const invalidCmdArrVarYaml = `
 action:
   title: Title
+runtime:
+  type: container
   image: python:3.7-slim
   command:
     - /bin/sh
@@ -112,10 +120,9 @@ action:
 
 const unsupportedVersionYaml = `
 version: "2"
+runtime: plugin
 action:
   title: Title
-  image: python:3.7-slim
-  command: python3
 `
 
 const invalidEmptyImgYaml = `
@@ -123,12 +130,16 @@ version:
 action:
   title: Title
   command: python3
+runtime:
+  type: container
 `
 
 const invalidEmptyStrImgYaml = `
 version:
 action:
   title: Title
+runtime:
+  type: container
   command: python3
   image: ""
 `
@@ -137,6 +148,8 @@ const invalidEmptyCmdYaml = `
 version: "1"
 action:
   title: Title
+runtime:
+  type: container
   image: python:3.7-slim
 `
 
@@ -144,6 +157,8 @@ const invalidEmptyArrCmdYaml = `
 version: "1"
 action:
   title: Title
+runtime:
+  type: container
   image: python:3.7-slim
   command: []
 `
@@ -151,115 +166,115 @@ action:
 // Arguments definition.
 const invalidArgsStringYaml = `
 version: "1"
+runtime: plugin
 action:
   title: Title
   arguments: "invalid"
-  image: python:3.7-slim
-  command: ls
 `
 
 const invalidArgsStringArrYaml = `
 version: "1"
+runtime: plugin
 action:
   title: Title
   arguments: ["invalid"]
-  image: python:3.7-slim
-  command: ls
 `
 
 const invalidArgsObjYaml = `
 version: "1"
+runtime: plugin
 action:
   title: Title
   arguments:
     objKey: "invalid"
-  image: python:3.7-slim
-  command: ls
 `
 
 const invalidArgsEmptyNameYaml = `
 version: "1"
+runtime: plugin
 action:
   title: Title
   arguments:
     - title: arg1
-  image: python:3.7-slim
-  command: ls
 `
 
 const invalidArgsNameYaml = `
 version: "1"
+runtime: plugin
 action:
   title: Title
   arguments:
     - name: 0arg
-  image: python:3.7-slim
-  command: ls
+`
+
+const invalidArgsDefaultMismatch = `
+version: "1"
+runtime: plugin
+action:
+  title: Title
+  arguments:
+    - name: arg
+      default: 1
 `
 
 // Options definition.
 const invalidOptsStrYaml = `
 version: "1"
+runtime: plugin
 action:
   title: Title
   options: "invalid"
-  image: python:3.7-slim
-  command: ls
 `
 
 const invalidOptsStrArrYaml = `
 version: "1"
+runtime: plugin
 action:
   title: Title
   options: ["invalid"]
-  image: python:3.7-slim
-  command: ls
 `
 
 const invalidOptsObjYaml = `
 version: "1"
+runtime: plugin
 action:
   title: Verb
   options:
     objKey: "invalid"
-  image: python:3.7-slim
-  command: ls
 `
 
 const invalidOptsEmptyNameYaml = `
 version: "1"
+runtime: plugin
 action:
   title: Title
   options:
     - title: opt
-  image: python:3.7-slim
-  command: ls
 `
 
 const invalidOptsNameYaml = `
 version: "1"
+runtime: plugin
 action:
   title: Title
   options:
     - name: opt+name
-  image: python:3.7-slim
-  command: ls
 `
 
 const invalidDupArgsOptsNameYaml = `
 version: "1"
+runtime: plugin
 action:
   title: Title
   arguments:
     - name: dupName
   options:
     - name: dupName
-  image: python:3.7-slim
-  command: ls
 `
 
 const invalidMultipleErrYaml = `
 version: "1"
+runtime: plugin
 action:
   title: Title
   arguments:
@@ -267,36 +282,24 @@ action:
   options:
     - name: dupName
     - title: otherTitle
-  image: python:3.7-slim
-  command: ls
 `
 
 const invalidJSONSchemaTypeYaml = `
 version: "1"
+runtime: plugin
 action:
   title: Title
   arguments:
     - name: dupName
       type: unsup
-  image: python:3.7-slim
-  command: ls
-`
-
-const invalidJSONSchemaDefaultYaml = `
-version: "1"
-action:
-  title: Title
-  options:
-    - name: dupName
-      type: object
-      default:
-  image: python:3.7-slim
-  command: ls
 `
 
 // Build image key.
 const validBuildImgShortYaml = `
 action:
+  title: Title
+runtime:
+  type: container
   image: python:3.7-slim
   build: ./
   command: ls
@@ -304,6 +307,9 @@ action:
 
 const validBuildImgLongYaml = `
 action:
+  title: Title
+runtime:
+  type: container
   image: python:3.7-slim
   build:
     context: ./
@@ -320,6 +326,9 @@ action:
 // Extra hosts key.
 const validExtraHostsYaml = `
 action:
+  title: Title
+runtime:
+  type: container
   image: python:3.7-slim
   extra_hosts:
     - "host.docker.internal:host-gateway"
@@ -329,6 +338,9 @@ action:
 
 const invalidExtraHostsYaml = `
 action:
+  title: Title
+runtime:
+  type: container
   image: python:3.7-slim
   extra_hosts: "host.docker.internal:host-gateway"
   command: ls
@@ -337,6 +349,9 @@ action:
 // Environmental variables.
 const validEnvArr = `
 action:
+  title: Title
+runtime:
+  type: container
   image: my/image:v1
   command: ls
   env:
@@ -346,6 +361,9 @@ action:
 
 const validEnvObj = `
 action:
+  title: Title
+runtime:
+  type: container
   image: my/image:v1
   command: ls
   env:
@@ -355,6 +373,9 @@ action:
 
 const invalidEnv = `
 action:
+  title: Title
+runtime:
+  type: container
   image: my/image:v1
   command: ls
   env:
@@ -364,6 +385,9 @@ action:
 
 const invalidEnvStr = `
 action:
+  title: Title
+runtime:
+  type: container
   image: my/image:v1
   command: ls
   env: MY_ENV_1=test1
@@ -371,6 +395,9 @@ action:
 
 const invalidEnvObj = `
 action:
+  title: Title
+runtime:
+  type: container
   image: my/image:v1
   command: ls
   env:
@@ -380,6 +407,9 @@ action:
 // Unescaped template strings.
 const validUnescTplStr = `
 action:
+  title: Title
+runtime:
+  type: container
   image: {{ .A1 }}
   command:    {{ .A1 }}
   env:
@@ -389,12 +419,172 @@ action:
 
 const invalidUnescUnsupKeyTplStr = `
 action:
+  title: Title
+runtime:
+  type: container
   image: {{ .A1 }}:latest
   {{ .A1 }}: ls
 `
 
 const invalidUnescUnsupArrTplStr = `
 action:
+  title: Title
+runtime:
+  type: container
   image: {{ .A1 }}
   command: [{{ .A1 }}, {{ .A1 }}]
+`
+
+const validArgString = `
+runtime: plugin
+action:
+  title: Title
+  arguments:
+    - name: arg_string
+      required: true
+`
+
+const validArgStringOptional = `
+runtime: plugin
+action:
+  title: Title
+  arguments:
+    - name: arg_string
+      required: false
+`
+
+const validArgStringEnum = `
+runtime: plugin
+action:
+  title: Title
+  arguments:
+    - name: arg_enum
+      enum: [enum1, enum2]
+      required: true
+`
+
+const validArgBoolean = `
+runtime: plugin
+action:
+  title: Title
+  arguments:
+    - name: arg_boolean
+      type: boolean
+      required: true
+`
+
+const validArgDefault = `
+runtime: plugin
+action:
+  title: Title
+  arguments:
+    - name: arg_default
+      type: string
+      default: "default_string"
+      required: true
+`
+
+const validOptBoolean = `
+runtime: plugin
+action:
+  title: Title
+  options:
+    - name: opt_boolean
+      type: boolean
+      required: true
+`
+
+const validOptArrayImplicitString = `
+runtime: plugin
+action:
+  title: Title
+  options:
+    - name: opt_array_str
+      type: array
+      required: true
+`
+
+const validOptArrayStringEnum = `
+runtime: plugin
+action:
+  title: Title
+  options:
+    - name: opt_array_enum
+      type: array
+      items:
+        type: string
+        enum: [enum_arr1, enum_arr2]
+      required: true
+`
+
+const validOptArrayInt = `
+runtime: plugin
+action:
+  title: Title
+  options:
+    - name: opt_array_int
+      type: array
+      items:
+        type: integer
+      required: true
+`
+
+const validOptArrayIntDefault = `
+runtime: plugin
+action:
+  title: Title
+  options:
+    - name: opt_array_int
+      type: array
+      items:
+        type: integer
+      default: [1, 2, 3]
+`
+
+const validMultipleArgsAndOpts = `
+runtime: plugin
+action:
+  title: Title
+  arguments:
+    - name: arg_int
+      type: integer
+      required: true
+    - name: arg_str
+      type: string
+      required: true
+    - name: arg_str2
+      type: string
+      required: true
+    - name: arg_bool
+      type: boolean
+      required: true
+    - name: arg_default
+      default: "my_default_string"
+  options:
+    - name: opt_str
+      type: string
+    - name: opt_int
+      type: integer
+      default: 42
+    - name: opt_str_default
+      type: string
+      default: "optdefault"
+    - name: opt_str_required
+      type: string
+      required: true
+`
+
+const validPatternFormat = `
+runtime: plugin
+action:
+  title: Title
+  arguments:
+    - name: arg_email
+      type: string
+      required: true
+      format: email
+    - name: arg_pattern
+      type: string
+      required: true
+      pattern: "^[A-Z]+$"
 `

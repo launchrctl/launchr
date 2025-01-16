@@ -3,7 +3,6 @@ package action
 
 import (
 	"context"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -22,7 +21,7 @@ var actionsSubdir = strings.Join([]string{"", actionsDirname, ""}, string(filepa
 // DiscoveryPlugin is a launchr plugin to discover actions.
 type DiscoveryPlugin interface {
 	launchr.Plugin
-	DiscoverActions(ctx context.Context, fs launchr.ManagedFS, idp IDProvider) ([]*Action, error)
+	DiscoverActions(ctx context.Context) ([]*Action, error)
 }
 
 // AlterActionsPlugin is a launchr plugin to alter registered actions.
@@ -41,12 +40,19 @@ type DiscoveryFS struct {
 // and wd - working directory for an action, leave empty for current path.
 func NewDiscoveryFS(fs fs.FS, wd string) DiscoveryFS { return DiscoveryFS{fs, wd} }
 
-// FS implements launchr.ManagedFS.
+// FS implements [launchr.ManagedFS].
 func (f DiscoveryFS) FS() fs.FS { return f.fs }
 
-// Open implements fs.FS and decorates the managed fs.
+// Open implements [fs.FS] and decorates the [launchr.ManagedFS].
 func (f DiscoveryFS) Open(name string) (fs.File, error) {
 	return f.FS().Open(name)
+}
+
+// OpenCallback returns callback to FileOpen a file.
+func (f DiscoveryFS) OpenCallback(name string) FileLoadFn {
+	return func() (fs.File, error) {
+		return f.Open(name)
+	}
 }
 
 // FileLoadFn is a type for loading a file.
@@ -56,13 +62,6 @@ type FileLoadFn func() (fs.File, error)
 type DiscoveryStrategy interface {
 	IsValid(name string) bool
 	Loader(l FileLoadFn, p ...LoadProcessor) Loader
-}
-
-// IDProvider provides an ID for an action.
-// It is used to generate an ID from an action declaration.
-// [DefaultIDProvider] is the default implementation based on action filepath.
-type IDProvider interface {
-	GetID(a *Action) string
 }
 
 // Discovery defines a common functionality for discovering action files.
@@ -92,7 +91,7 @@ func (ad *Discovery) isValid(path string, d fs.DirEntry) bool {
 		// No "actions" directory in the path.
 		i == -1 ||
 		// Must not be hidden itself.
-		isHiddenPath(path) ||
+		launchr.IsHiddenPath(path) ||
 		// Count depth of directories inside actions, must be only 1, not deeper.
 		// Nested actions are not allowed.
 		// dir/actions/1/action.yaml - OK, dir/actions/1/2/action.yaml - NOK.
@@ -123,7 +122,7 @@ func (ad *Discovery) findFiles(ctx context.Context) chan string {
 			}
 			// Skip OS specific directories to prevent going too deep.
 			// Skip hidden directories.
-			if d != nil && d.IsDir() && (isHiddenPath(path) || skipSystemDirs(ad.fsDir, path)) {
+			if d != nil && d.IsDir() && (launchr.IsHiddenPath(path) || launchr.IsSystemPath(ad.fsDir, path)) {
 				return fs.SkipDir
 			}
 			if err != nil {
@@ -189,46 +188,17 @@ func (ad *Discovery) Discover(ctx context.Context) ([]*Action, error) {
 
 // parseFile parses file f and returns an action.
 func (ad *Discovery) parseFile(f string) *Action {
-	a := NewAction(absPath(ad.fs.wd), ad.fsDir, f)
-	a.Loader = ad.ds.Loader(
-		func() (fs.File, error) { return ad.fs.Open(f) },
+	loader := ad.ds.Loader(
+		ad.fs.OpenCallback(f),
 		envProcessor{},
 		inputProcessor{},
 	)
-	// Assign ID to an action.
-	a.ID = ad.idp.GetID(a)
-	if a.ID == "" {
-		panic(fmt.Errorf("action id cannot be empty, file %q", f))
-	}
-
+	a := New(ad.idp, loader, ad.fsDir, f)
+	a.SetWorkDir(launchr.MustAbs(ad.fs.wd))
 	return a
 }
 
 // SetActionIDProvider sets discovery specific action id provider.
 func (ad *Discovery) SetActionIDProvider(idp IDProvider) {
 	ad.idp = idp
-}
-
-// DefaultIDProvider is a default action id provider.
-// It generates action id by a filepath.
-type DefaultIDProvider struct{}
-
-// GetID implements [IDProvider] interface.
-// It parses action filename and returns CLI command name.
-// Empty string if the command name can't be generated.
-func (idp DefaultIDProvider) GetID(a *Action) string {
-	f := a.fpath
-	s := filepath.Dir(f)
-	i := strings.LastIndex(s, actionsSubdir)
-	if i == -1 {
-		return ""
-	}
-	s = s[:i] + strings.Replace(s[i:], actionsSubdir, ":", 1)
-	s = strings.ReplaceAll(s, string(filepath.Separator), ".")
-	if s[0] == ':' {
-		// Root paths are not allowed.
-		return ""
-	}
-	s = strings.Trim(s, ".:")
-	return s
 }

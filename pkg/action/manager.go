@@ -18,7 +18,7 @@ type Manager interface {
 	// Get returns a copy of an action from the manager with default decorators.
 	Get(id string) (*Action, bool)
 	// Add saves an action in the manager.
-	Add(*Action)
+	Add(*Action) error
 	// Delete deletes the action from the manager.
 	Delete(id string)
 	// Decorate decorates an action with given behaviors and returns its copy.
@@ -38,8 +38,8 @@ type Manager interface {
 	// GetValueProcessors returns list of available processors
 	GetValueProcessors() map[string]ValueProcessor
 
-	// DefaultRunEnvironment provides the default action run environment.
-	DefaultRunEnvironment() RunEnvironment
+	// DefaultRuntime provides the default action runtime.
+	DefaultRuntime() Runtime
 	// Run executes an action in foreground.
 	Run(ctx context.Context, a *Action) (RunInfo, error)
 	// RunBackground executes an action in background.
@@ -94,24 +94,25 @@ func (m *actionManagerMap) ServiceInfo() launchr.ServiceInfo {
 	return launchr.ServiceInfo{}
 }
 
-func (m *actionManagerMap) Add(a *Action) {
+func (m *actionManagerMap) Add(a *Action) error {
 	m.mx.Lock()
 	defer m.mx.Unlock()
-	m.actionStore[a.ID] = a
 
-	// Collect action aliases.
+	// Check action loads properly.
 	def, err := a.Raw()
 	if err != nil {
-		return
+		return err
 	}
+	// Collect action aliases.
 	for _, alias := range def.Action.Aliases {
 		id, ok := m.actionAliases[alias]
 		if ok {
-			launchr.Term().Warning().Printfln("Alias %q is already defined by %q", alias, id)
-		} else {
-			m.actionAliases[alias] = a.ID
+			return fmt.Errorf("alias %q is already defined by %q", alias, id)
 		}
+		m.actionAliases[alias] = a.ID
 	}
+	m.actionStore[a.ID] = a
+	return nil
 }
 
 func (m *actionManagerMap) AllUnsafe() map[string]*Action {
@@ -202,8 +203,8 @@ func (m *actionManagerMap) SetActionIDProvider(p IDProvider) {
 	m.idProvider = p
 }
 
-func (m *actionManagerMap) DefaultRunEnvironment() RunEnvironment {
-	return NewDockerEnvironment()
+func (m *actionManagerMap) DefaultRuntime() Runtime {
+	return NewContainerRuntimeDocker()
 }
 
 // RunInfo stores information about a running action.
@@ -283,17 +284,19 @@ func (m *actionManagerMap) RunInfoByID(id string) (RunInfo, bool) {
 	return ri, ok
 }
 
-// WithDefaultRunEnvironment adds a default [RunEnvironment] for an action.
-func WithDefaultRunEnvironment(m Manager, a *Action) {
-	a.SetRunEnvironment(m.DefaultRunEnvironment())
+// WithDefaultRuntime adds a default [Runtime] for an action.
+func WithDefaultRuntime(m Manager, a *Action) {
+	if a.Runtime() == nil {
+		a.SetRuntime(m.DefaultRuntime())
+	}
 }
 
-// WithContainerRunEnvironmentConfig configures a [ContainerRunEnvironment].
-func WithContainerRunEnvironmentConfig(cfg launchr.Config, prefix string) DecorateWithFn {
+// WithContainerRuntimeConfig configures a [ContainerRuntime].
+func WithContainerRuntimeConfig(cfg launchr.Config, prefix string) DecorateWithFn {
 	r := LaunchrConfigImageBuildResolver{cfg}
 	ccr := NewImageBuildCacheResolver(cfg)
 	return func(_ Manager, a *Action) {
-		if env, ok := a.env.(ContainerRunEnvironment); ok {
+		if env, ok := a.Runtime().(ContainerRuntime); ok {
 			env.AddImageBuildResolver(r)
 			env.SetImageBuildCacheResolver(ccr)
 			env.SetContainerNameProvider(ContainerNameProvider{Prefix: prefix, RandomSuffix: true})

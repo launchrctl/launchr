@@ -6,13 +6,20 @@ import (
 	"reflect"
 
 	"github.com/pterm/pterm"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
 )
 
-var defaultPrinter *Terminal
+var defaultTerm *Terminal
+
+// DefaultTextPrinter is a printer with a context of language.
+// Currently only used in [jsonschema] package and not exported outside the repo.
+// Looks promising in the future for translations.
+var DefaultTextPrinter = message.NewPrinter(language.English)
 
 func init() {
 	// Initialize the default printer.
-	defaultPrinter = &Terminal{
+	defaultTerm = &Terminal{
 		p: []TextPrinter{
 			printerBasic:   newPTermBasicPrinter(pterm.DefaultBasicText),
 			printerInfo:    newPTermPrefixPrinter(pterm.Info),
@@ -22,6 +29,8 @@ func init() {
 		},
 		enabled: true,
 	}
+	// Do not output anything when not in the app, e.g. in tests.
+	defaultTerm.DisableOutput()
 }
 
 // Predefined keys of terminal printers.
@@ -88,7 +97,7 @@ type Terminal struct {
 
 // Term returns default [Terminal] to print application messages to the console.
 func Term() *Terminal {
-	return defaultPrinter
+	return defaultTerm
 }
 
 // EnableOutput enables the output.

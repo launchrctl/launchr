@@ -1,4 +1,4 @@
-package action
+package actionscobra
 
 import (
 	"fmt"
@@ -8,60 +8,50 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/launchrctl/launchr/internal/launchr"
+	"github.com/launchrctl/launchr/pkg/action"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 // CobraImpl returns cobra command implementation for an action command.
-func CobraImpl(a *Action, streams launchr.Streams) (*launchr.Command, error) {
-	def, err := a.Raw()
-	if err != nil {
-		return nil, err
-	}
-	actConf := def.Action
-	argsDef := actConf.Arguments
+func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, error) {
+	def := a.ActionDef()
+	argsDef := def.Arguments
 	use := a.ID
 	for _, p := range argsDef {
 		use += " " + p.Name
 	}
-	options := make(TypeOpts)
-	runOpts := make(TypeOpts)
+	options := make(action.InputParams)
+	runOpts := make(action.InputParams)
 	cmd := &launchr.Command{
 		Use: use,
-		// Using custom args validation in [action.ValidateInput].
 		// @todo: maybe we need a long template for arguments description
 		// @todo: have aliases documented in help
-		Short:   getDesc(actConf.Title, actConf.Description),
-		Aliases: actConf.Aliases,
-		RunE: func(cmd *launchr.Command, args []string) error {
-			err = a.EnsureLoaded()
+		Short:   getDesc(def.Title, def.Description),
+		Aliases: def.Aliases,
+		RunE: func(cmd *launchr.Command, args []string) (err error) {
+			// Don't show usage help on a runtime error.
+			cmd.SilenceUsage = true
+
+			// Set action input.
+			argsNamed, err := action.ArgsPosToNamed(a, args)
 			if err != nil {
 				return err
 			}
-			// Pass to the run environment its flags.
-			if env, ok := a.env.(RunEnvironmentFlags); ok {
-				runOpts = filterFlags(cmd, runOpts)
-				err = env.UseFlags(derefOpts(runOpts))
+			optsChanged := derefOpts(filterChangedFlags(cmd, options))
+			input := action.NewInput(a, argsNamed, optsChanged, streams)
+			// Pass to the runtime its flags.
+			if r, ok := a.Runtime().(action.RuntimeFlags); ok {
+				runOpts = derefOpts(filterChangedFlags(cmd, runOpts))
+				err = r.UseFlags(runOpts)
 				if err != nil {
 					return err
 				}
-			}
-
-			// Set action input.
-			input := Input{
-				Args:    argsToMap(args, argsDef),
-				ArgsRaw: args,
-				Opts:    derefOpts(options),
-				OptsRaw: derefOpts(filterFlags(cmd, options)),
-				IO:      streams,
-			}
-			if runEnv, ok := a.env.(RunEnvironmentFlags); ok {
-				if err = runEnv.ValidateInput(a, input.Args); err != nil {
+				if err = r.ValidateInput(a, input); err != nil {
 					return err
 				}
 			}
 
-			cmd.SilenceUsage = true // Don't show usage help on a runtime error.
-
+			// Set and validate input.
 			if err = a.SetInput(input); err != nil {
 				return err
 			}
@@ -72,14 +62,14 @@ func CobraImpl(a *Action, streams launchr.Streams) (*launchr.Command, error) {
 	}
 
 	// Collect action flags.
-	err = setCommandOptions(cmd, actConf.Options, options)
+	err := setCommandOptions(cmd, def.Options, options)
 	if err != nil {
 		return nil, err
 	}
-	// Collect run environment flags.
+	// Collect runtime flags.
 	globalFlags := []string{"help"}
 
-	if env, ok := a.env.(RunEnvironmentFlags); ok {
+	if env, ok := a.Runtime().(action.RuntimeFlags); ok {
 		err = setCommandOptions(cmd, env.FlagsDefinition(), runOpts)
 		if err != nil {
 			return nil, err
@@ -162,8 +152,8 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 `
 }
 
-func filterFlags(cmd *launchr.Command, opts TypeOpts) TypeOpts {
-	filtered := make(TypeOpts)
+func filterChangedFlags(cmd *launchr.Command, opts action.InputParams) action.InputParams {
+	filtered := make(action.InputParams)
 	for name, flag := range opts {
 		// Filter options not set.
 		if opts[name] != nil && cmd.Flags().Changed(name) {
@@ -173,7 +163,7 @@ func filterFlags(cmd *launchr.Command, opts TypeOpts) TypeOpts {
 	return filtered
 }
 
-func setCommandOptions(cmd *launchr.Command, defs OptionsList, opts TypeOpts) error {
+func setCommandOptions(cmd *launchr.Command, defs action.ParametersList, opts action.InputParams) error {
 	for _, opt := range defs {
 		v, err := setFlag(cmd, opt)
 		if err != nil {
@@ -182,16 +172,6 @@ func setCommandOptions(cmd *launchr.Command, defs OptionsList, opts TypeOpts) er
 		opts[opt.Name] = v
 	}
 	return nil
-}
-
-func argsToMap(args []string, argsDef ArgumentsList) TypeArgs {
-	mapped := make(TypeArgs, len(args))
-	for i, a := range args {
-		if i < len(argsDef) {
-			mapped[argsDef[i].Name] = a
-		}
-	}
-	return mapped
 }
 
 func getDesc(title string, desc string) string {
@@ -205,21 +185,38 @@ func getDesc(title string, desc string) string {
 	return strings.Join(parts, ": ")
 }
 
-func setFlag(cmd *launchr.Command, opt *Option) (any, error) {
+func setFlag(cmd *launchr.Command, opt *action.DefParameter) (any, error) {
 	var val any
 	desc := getDesc(opt.Title, opt.Description)
+	// Get default value if it's not set.
+	dval, err := jsonschema.EnsureType(opt.Type, opt.Default)
+	if err != nil {
+		return nil, err
+	}
 	switch opt.Type {
 	case jsonschema.String:
-		val = cmd.Flags().StringP(opt.Name, opt.Shorthand, opt.Default.(string), desc)
+		val = cmd.Flags().StringP(opt.Name, opt.Shorthand, dval.(string), desc)
 	case jsonschema.Integer:
-		val = cmd.Flags().IntP(opt.Name, opt.Shorthand, opt.Default.(int), desc)
+		val = cmd.Flags().IntP(opt.Name, opt.Shorthand, dval.(int), desc)
 	case jsonschema.Number:
-		val = cmd.Flags().Float64P(opt.Name, opt.Shorthand, opt.Default.(float64), desc)
+		val = cmd.Flags().Float64P(opt.Name, opt.Shorthand, dval.(float64), desc)
 	case jsonschema.Boolean:
-		val = cmd.Flags().BoolP(opt.Name, opt.Shorthand, opt.Default.(bool), desc)
+		val = cmd.Flags().BoolP(opt.Name, opt.Shorthand, dval.(bool), desc)
 	case jsonschema.Array:
-		// @todo use Var and define a custom value, jsonschema accepts interface{}
-		val = cmd.Flags().StringSliceP(opt.Name, opt.Shorthand, opt.Default.([]string), desc)
+		dslice := dval.([]any)
+		switch opt.Items.Type {
+		case jsonschema.String:
+			val = cmd.Flags().StringSliceP(opt.Name, opt.Shorthand, action.CastSliceAnyToTyped[string](dslice), desc)
+		case jsonschema.Integer:
+			val = cmd.Flags().IntSliceP(opt.Name, opt.Shorthand, action.CastSliceAnyToTyped[int](dslice), desc)
+		case jsonschema.Number:
+			val = cmd.Flags().Float64SliceP(opt.Name, opt.Shorthand, action.CastSliceAnyToTyped[float64](dslice), desc)
+		case jsonschema.Boolean:
+			val = cmd.Flags().BoolSliceP(opt.Name, opt.Shorthand, action.CastSliceAnyToTyped[bool](dslice), desc)
+		default:
+			// @todo use cmd.Flags().Var() and define a custom value, jsonschema accepts "any".
+			return nil, fmt.Errorf("json schema array type %q is not implemented", opt.Items.Type)
+		}
 	default:
 		return nil, fmt.Errorf("json schema type %q is not implemented", opt.Type)
 	}
@@ -229,8 +226,8 @@ func setFlag(cmd *launchr.Command, opt *Option) (any, error) {
 	return val, nil
 }
 
-func derefOpts(opts TypeOpts) TypeOpts {
-	der := make(TypeOpts, len(opts))
+func derefOpts(opts action.InputParams) action.InputParams {
+	der := make(action.InputParams, len(opts))
 	for k, v := range opts {
 		der[k] = derefOpt(v)
 	}
@@ -247,15 +244,15 @@ func derefOpt(v any) any {
 		return *v
 	case *float64:
 		return *v
+	case *[]any:
+		return *v
 	case *[]string:
-		// Cast to a slice of interface because jsonschema validator supports only such arrays.
-		toAny := make([]any, len(*v))
-		for i := 0; i < len(*v); i++ {
-			toAny[i] = (*v)[i]
-		}
-		return toAny
+		return *v
+	case *[]int:
+		return *v
+	case *[]bool:
+		return *v
 	default:
-		// @todo recheck
 		if reflect.ValueOf(v).Kind() == reflect.Ptr {
 			panic(fmt.Sprintf("error on a value dereferencing: unsupported %T", v))
 		}

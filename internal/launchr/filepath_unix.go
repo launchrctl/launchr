@@ -1,6 +1,6 @@
-//go:build !windows
+//go:build unix
 
-package action
+package launchr
 
 import (
 	"path/filepath"

@@ -93,17 +93,14 @@ func (p inputProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
 		return b, nil
 	}
 	a := ctx.Action
-	def, err := ctx.Action.Raw()
-	if err != nil {
-		return nil, err
-	}
+	def := ctx.Action.ActionDef()
 	// Collect template variables.
-	data := ConvertInputToTplVars(a.GetInput(), def.Action)
+	data := ConvertInputToTplVars(a.Input(), def)
 	addPredefinedVariables(data, a)
 
 	// Parse action without variables to validate
 	tpl := template.New(a.ID)
-	_, err = tpl.Parse(string(b))
+	_, err := tpl.Parse(string(b))
 	if err != nil {
 		// Check if variables have dashes to show the error properly.
 		hasDash := false
@@ -144,37 +141,34 @@ Action definition is correct, but dashes are not allowed in templates, replace "
 }
 
 // ConvertInputToTplVars creates a map with input variables suitable for template engine.
-func ConvertInputToTplVars(input Input, ac *DefAction) map[string]any {
-	values := make(map[string]any, len(input.Args)+len(input.Opts))
-	// Collect argument values.
-	for _, arg := range ac.Arguments {
-		key := arg.Name
-		values[key] = ""
-		values[replDashes.Replace(key)] = ""
-		if v, ok := input.Args[arg.Name]; ok {
-			// Allow usage of dashed variable names like "my-name" by replacing dashes to underscores.
-			values[key] = v
-			values[replDashes.Replace(key)] = v
-		}
-	}
+func ConvertInputToTplVars(input *Input, ac *DefAction) map[string]any {
+	args := input.ArgsNamed()
+	opts := input.OptsAll()
+	values := make(map[string]any, len(args)+len(opts))
 
-	// Collect options values.
-	for _, o := range ac.Options {
-		key := o.Name
-		// Set value default or input option.
-		values[key] = o.Default
-		values[replDashes.Replace(key)] = o.Default
-		if v, ok := input.Opts[o.Name]; ok {
-			// Allow usage of dashed variable names like "my-name" by replacing dashes to underscores.
-			values[key] = v
-			values[replDashes.Replace(key)] = v
-		}
-	}
+	// Collect arguments and options values.
+	collectInputVars(values, args, ac.Arguments)
+	collectInputVars(values, opts, ac.Options)
 
 	// @todo consider boolean, it's strange in output - "true/false"
 	// @todo handle array options
 
 	return values
+}
+
+func collectInputVars(values map[string]any, params InputParams, def ParametersList) {
+	for _, pdef := range def {
+		key := pdef.Name
+		// Set value: default or input parameter.
+		dval := fmt.Sprintf("%v", pdef.Default)
+		values[key] = dval
+		values[replDashes.Replace(key)] = dval
+		if v, ok := params[pdef.Name]; ok {
+			// Allow usage of dashed variable names like "my-name" by replacing dashes to underscores.
+			values[key] = v
+			values[replDashes.Replace(key)] = v
+		}
+	}
 }
 
 func addPredefinedVariables(data map[string]any, a *Action) {

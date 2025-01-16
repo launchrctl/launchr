@@ -1,0 +1,57 @@
+runtime: plugin
+action:
+  title: Build
+  description: >-
+    Builds application with specified configuration
+  options:
+    - name: name
+      shorthand: n
+      title: Name
+      description: Result application name
+      type: string
+      default: DEFAULT_NAME_PLACEHOLDER
+    - name: output
+      shorthand: o
+      title: Output
+      description: Build output file, by default application name is used
+      type: string
+      default: ""
+    - name: build-version
+      title: Build version
+      description: Arbitrary version of application
+      type: string
+      default: ""
+    - name: timeout
+      shorthand: t
+      title: Timeout
+      description: "Build timeout duration, example: 0, 100ms, 1h23m"
+      type: string
+      default: 120s
+    - name: tag
+      title: Tags
+      description: Go build tags
+      type: array
+      default: []
+    - name: plugin
+      shorthand: p
+      title: Plugins
+      description: Include PLUGIN into the build with an optional version
+      type: array
+      default: []
+    - name: replace
+      shorthand: r
+      title: Replace
+      description: Replace go dependency, see "go mod edit -replace"
+      type: array
+      default: []
+    - name: debug
+      shorthand: d
+      title: Debug
+      description: Include debug flags into the build to support go debugging with "delve". If not specified, debugging info is trimmed
+      type: boolean
+      default: false
+    - name: no-cache
+      title: No cache
+      description: Disable the usage of cache, e.g., when using 'go get' for dependencies.
+      type: boolean
+      default: false

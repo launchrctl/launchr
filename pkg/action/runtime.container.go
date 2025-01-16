@@ -11,10 +11,6 @@ import (
 	"strings"
 
 	"github.com/docker/docker/pkg/archive"
-	"github.com/docker/docker/pkg/jsonmessage"
-	"github.com/docker/docker/pkg/namesgenerator"
-	"github.com/moby/sys/signal"
-	"github.com/moby/term"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/driver"
@@ -35,7 +31,7 @@ const (
 	containerFlagExec        = "exec"
 )
 
-type containerEnv struct {
+type runtimeContainer struct {
 	driver  driver.ContainerRunner
 	dtype   driver.Type
 	logWith []any
@@ -65,56 +61,60 @@ func (p ContainerNameProvider) Get(name string) string {
 	var rpl = strings.NewReplacer("-", "_", ":", "_", ".", "_")
 	suffix := ""
 	if p.RandomSuffix {
-		suffix = "_" + namesgenerator.GetRandomName(0)
+		suffix = "_" + driver.GetRandomName(0)
 	}
 
 	return p.Prefix + rpl.Replace(name) + suffix
 }
 
-// NewDockerEnvironment creates a new action Docker environment.
-func NewDockerEnvironment() RunEnvironment {
-	return NewContainerEnvironment(driver.Docker)
+// NewContainerRuntimeDocker creates a new action Docker runtime.
+func NewContainerRuntimeDocker() ContainerRuntime {
+	return NewContainerRuntime(driver.Docker)
 }
 
-// NewContainerEnvironment creates a new action container run environment.
-func NewContainerEnvironment(t driver.Type) RunEnvironment {
-	return &containerEnv{
+// NewContainerRuntime creates a new action container runtime.
+func NewContainerRuntime(t driver.Type) ContainerRuntime {
+	return &runtimeContainer{
 		dtype:   t,
 		nameprv: ContainerNameProvider{Prefix: "launchr_", RandomSuffix: true},
 	}
 }
 
-func (c *containerEnv) FlagsDefinition() OptionsList {
-	return OptionsList{
-		&Option{
+func (c *runtimeContainer) Clone() Runtime {
+	return NewContainerRuntime(c.dtype)
+}
+
+func (c *runtimeContainer) FlagsDefinition() ParametersList {
+	return ParametersList{
+		&DefParameter{
 			Name:        containerFlagUseVolumeWD,
 			Title:       "Use volume as a WD",
 			Description: "Copy the working directory to a container volume and not bind local paths. Usually used with remote environments.",
 			Type:        jsonschema.Boolean,
 			Default:     false,
 		},
-		&Option{
+		&DefParameter{
 			Name:        containerFlagRemoveImage,
 			Title:       "Remove Image",
 			Description: "Remove an image after execution of action",
 			Type:        jsonschema.Boolean,
 			Default:     false,
 		},
-		&Option{
+		&DefParameter{
 			Name:        containerFlagNoCache,
 			Title:       "No cache",
 			Description: "Send command to build container without cache",
 			Type:        jsonschema.Boolean,
 			Default:     false,
 		},
-		&Option{
+		&DefParameter{
 			Name:        containerFlagEntrypoint,
 			Title:       "Image Entrypoint",
 			Description: "Overwrite the default ENTRYPOINT of the image",
 			Type:        jsonschema.String,
 			Default:     "",
 		},
-		&Option{
+		&DefParameter{
 			Name:        containerFlagExec,
 			Title:       "Exec command",
 			Description: "Overwrite CMD definition of the container",
@@ -124,7 +124,7 @@ func (c *containerEnv) FlagsDefinition() OptionsList {
 	}
 }
 
-func (c *containerEnv) UseFlags(flags TypeOpts) error {
+func (c *runtimeContainer) UseFlags(flags InputParams) error {
 	if v, ok := flags[containerFlagUseVolumeWD]; ok {
 		c.useVolWD = v.(bool)
 	}
@@ -148,19 +148,20 @@ func (c *containerEnv) UseFlags(flags TypeOpts) error {
 
 	return nil
 }
-func (c *containerEnv) ValidateInput(a *Action, args TypeArgs) error {
+func (c *runtimeContainer) ValidateInput(_ *Action, input *Input) error {
 	if c.exec {
-		return nil
+		// Mark input as validated because arguments are passed directly to exec.
+		input.SetValidated(true)
 	}
-
-	// Check arguments if no exec flag present.
-	return a.ValidateInput(args)
+	return nil
 }
-func (c *containerEnv) AddImageBuildResolver(r ImageBuildResolver)            { c.imgres = append(c.imgres, r) }
-func (c *containerEnv) SetImageBuildCacheResolver(s *ImageBuildCacheResolver) { c.imgccres = s }
-func (c *containerEnv) SetContainerNameProvider(p ContainerNameProvider)      { c.nameprv = p }
+func (c *runtimeContainer) AddImageBuildResolver(r ImageBuildResolver) {
+	c.imgres = append(c.imgres, r)
+}
+func (c *runtimeContainer) SetImageBuildCacheResolver(s *ImageBuildCacheResolver) { c.imgccres = s }
+func (c *runtimeContainer) SetContainerNameProvider(p ContainerNameProvider)      { c.nameprv = p }
 
-func (c *containerEnv) Init(_ context.Context) (err error) {
+func (c *runtimeContainer) Init(_ context.Context, _ *Action) (err error) {
 	c.logWith = nil
 	if c.driver == nil {
 		c.driver, err = driver.New(c.dtype)
@@ -168,24 +169,23 @@ func (c *containerEnv) Init(_ context.Context) (err error) {
 	return err
 }
 
-func (c *containerEnv) log(attrs ...any) *launchr.Slog {
+func (c *runtimeContainer) log(attrs ...any) *launchr.Slog {
 	if attrs != nil {
 		c.logWith = append(c.logWith, attrs...)
 	}
 	return launchr.Log().With(c.logWith...)
 }
 
-func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
+func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 	ctx, cancelFn := context.WithCancel(ctx)
 	defer cancelFn()
-	if err = c.Init(ctx); err != nil {
-		return err
+	streams := a.Input().Streams()
+	runDef := a.RuntimeDef()
+	if runDef.Container == nil {
+		return errors.New("action container configuration is not set, use different runtime")
 	}
-	streams := a.GetInput().IO
-	actConf := a.ActionDef()
-	log := c.log("run_env", c.dtype, "action_id", a.ID, "image", actConf.Image, "command", actConf.Command)
+	log := c.log("run_env", c.dtype, "action_id", a.ID, "image", runDef.Container.Image, "command", runDef.Container.Command)
 	log.Debug("starting execution of the action")
-	// @todo consider reusing the same container and run exec
 	name := c.nameprv.Get(a.ID)
 	existing := c.driver.ContainerList(ctx, types.ContainerListOptions{SearchName: name})
 	if len(existing) > 0 {
@@ -207,7 +207,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	// Create container.
 	runConfig := &types.ContainerCreateOptions{
 		ContainerName: name,
-		ExtraHosts:    actConf.ExtraHosts,
+		ExtraHosts:    runDef.Container.ExtraHosts,
 		AutoRemove:    autoRemove,
 		OpenStdin:     true,
 		StdinOnce:     true,
@@ -215,14 +215,14 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		AttachStdout:  true,
 		AttachStderr:  true,
 		Tty:           streams.In().IsTerminal(),
-		Env:           actConf.Env,
+		Env:           runDef.Container.Env,
 		User:          getCurrentUser(),
 		Entrypoint:    entrypoint,
 	}
 	log.Debug("creating a container for an action")
 	cid, err := c.containerCreate(ctx, a, runConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create a container: %w", err)
 	}
 	if cid == "" {
 		return errors.New("error on creating a container")
@@ -236,11 +236,12 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 		launchr.Term().Info().Printfln(`Flag "--%s" is set. Copying the working directory inside the container.`, containerFlagUseVolumeWD)
 		err = c.copyDirToContainer(ctx, cid, a.WorkDir(), containerHostMount)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to copy host directory to the container: %w", err)
 		}
+		// @todo copy action if the original files are in memory
 		err = c.copyDirToContainer(ctx, cid, a.Dir(), containerActionMount)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to copy action directory to the container: %w", err)
 		}
 	}
 
@@ -251,16 +252,16 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 
 	if !runConfig.Tty {
 		log.Debug("watching container signals")
-		sigc := notifyAllSignals()
-		go ForwardAllSignals(ctx, c.driver, cid, sigc)
-		defer signal.StopCatch(sigc)
+		sigc := driver.NotifyAllSignals()
+		go driver.ForwardAllSignals(ctx, c.driver, cid, sigc)
+		defer driver.StopCatchSignals(sigc)
 	}
 
 	// Attach streams to the terminal.
 	log.Debug("attaching container streams")
 	cio, errCh, err := c.attachContainer(ctx, streams, cid, runConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to attach to the container: %w", err)
 	}
 	defer func() {
 		_ = cio.Close()
@@ -291,7 +292,7 @@ func (c *containerEnv) Execute(ctx context.Context, a *Action) (err error) {
 	log.Debug("waiting execution of the container")
 	if errCh != nil {
 		if err = <-errCh; err != nil {
-			if _, ok := err.(term.EscapeError); ok {
+			if _, ok := err.(driver.EscapeError); ok {
 				// The user entered the detach escape sequence.
 				return nil
 			}
@@ -355,12 +356,12 @@ func getCurrentUser() string {
 	return curuser
 }
 
-func (c *containerEnv) Close() error {
+func (c *runtimeContainer) Close() error {
 	return c.driver.Close()
 }
 
-func (c *containerEnv) imageRemove(ctx context.Context, a *Action) error {
-	_, err := c.driver.ImageRemove(ctx, a.ActionDef().Image, types.ImageRemoveOptions{
+func (c *runtimeContainer) imageRemove(ctx context.Context, a *Action) error {
+	_, err := c.driver.ImageRemove(ctx, a.RuntimeDef().Container.Image, types.ImageRemoveOptions{
 		Force:         true,
 		PruneChildren: false,
 	})
@@ -368,7 +369,7 @@ func (c *containerEnv) imageRemove(ctx context.Context, a *Action) error {
 	return err
 }
 
-func (c *containerEnv) isRebuildRequired(bi *types.BuildDefinition) (bool, error) {
+func (c *runtimeContainer) isRebuildRequired(bi *types.BuildDefinition) (bool, error) {
 	// @todo test image cache resolution somehow.
 	if c.imgccres == nil || bi == nil {
 		return false, nil
@@ -400,9 +401,9 @@ func (c *containerEnv) isRebuildRequired(bi *types.BuildDefinition) (bool, error
 	return doRebuild, nil
 }
 
-func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
-	streams := a.GetInput().IO
-	image := a.ActionDef().Image
+func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
+	streams := a.Input().Streams()
+	image := a.RuntimeDef().Container.Image
 	// Prepend action to have the top priority in image build resolution.
 	r := ChainImageBuildResolver{append(ChainImageBuildResolver{a}, c.imgres...)}
 
@@ -436,7 +437,7 @@ func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
 		launchr.Term().Printfln("Image %q doesn't exist locally, pulling from the registry...", image)
 		log.Info("image doesn't exist locally, pulling from the registry")
 		// Output docker status only in Debug.
-		err = displayJSONMessages(status.Progress, streams)
+		err = driver.DockerDisplayJSONMessages(status.Progress, streams)
 		if err != nil {
 			launchr.Term().Error().Println("Error occurred while pulling the image %q", image)
 			log.Error("error while pulling the image", "error", err)
@@ -451,7 +452,7 @@ func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
 		launchr.Term().Printfln("Image %q doesn't exist locally, building...", image)
 		log.Info("image doesn't exist locally, building the image")
 		// Output docker status only in Debug.
-		err = displayJSONMessages(status.Progress, streams)
+		err = driver.DockerDisplayJSONMessages(status.Progress, streams)
 		if err != nil {
 			launchr.Term().Error().Println("Error occurred while building the image %q", image)
 			log.Error("error while building the image", "error", err)
@@ -461,37 +462,23 @@ func (c *containerEnv) imageEnsure(ctx context.Context, a *Action) error {
 	return err
 }
 
-func displayJSONMessages(in io.Reader, streams launchr.Streams) error {
-	err := jsonmessage.DisplayJSONMessagesToStream(in, streams.Out(), nil)
-	if err != nil {
-		if jerr, ok := err.(*jsonmessage.JSONError); ok {
-			// If no error code is set, default to 1
-			if jerr.Code == 0 {
-				jerr.Code = 1
-			}
-			return jerr
-		}
-	}
-	return err
-}
-
-func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *types.ContainerCreateOptions) (string, error) {
+func (c *runtimeContainer) containerCreate(ctx context.Context, a *Action, opts *types.ContainerCreateOptions) (string, error) {
 	if err := c.imageEnsure(ctx, a); err != nil {
 		return "", err
 	}
 
 	// Create a container
-	actConf := a.ActionDef()
+	runDef := a.RuntimeDef()
 
 	// Override Cmd with exec command.
 	if c.exec {
-		actConf.Command = a.GetInput().ArgsRaw
+		runDef.Container.Command = a.Input().ArgsPositional()
 	}
 
 	createOpts := types.ContainerCreateOptions{
 		ContainerName: opts.ContainerName,
-		Image:         actConf.Image,
-		Cmd:           actConf.Command,
+		Image:         runDef.Container.Image,
+		Cmd:           runDef.Container.Command,
 		WorkingDir:    containerHostMount,
 		NetworkMode:   types.NetworkModeHost,
 		ExtraHosts:    opts.ExtraHosts,
@@ -527,8 +514,8 @@ func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *typ
 			c.log().Warn("using selinux flags", "flags", flags)
 		}
 		createOpts.Binds = []string{
-			absPath(a.WorkDir()) + ":" + containerHostMount + flags,
-			absPath(a.Dir()) + ":" + containerActionMount + flags,
+			launchr.MustAbs(a.WorkDir()) + ":" + containerHostMount + flags,
+			launchr.MustAbs(a.Dir()) + ":" + containerActionMount + flags,
 		}
 	}
 	cid, err := c.driver.ContainerCreate(ctx, createOpts)
@@ -539,21 +526,13 @@ func (c *containerEnv) containerCreate(ctx context.Context, a *Action, opts *typ
 	return cid, nil
 }
 
-func absPath(src string) string {
-	abs, err := filepath.Abs(filepath.Clean(src))
-	if err != nil {
-		panic(err)
-	}
-	return abs
-}
-
 // copyDirToContainer copies dir content to a container.
-func (c *containerEnv) copyDirToContainer(ctx context.Context, cid, srcPath, dstPath string) error {
+func (c *runtimeContainer) copyDirToContainer(ctx context.Context, cid, srcPath, dstPath string) error {
 	return c.copyToContainer(ctx, cid, srcPath, filepath.Dir(dstPath), filepath.Base(dstPath))
 }
 
 // copyToContainer copies dir/file to a container. Directory will be copied as a subdirectory.
-func (c *containerEnv) copyToContainer(ctx context.Context, cid, srcPath, dstPath, rebaseName string) error {
+func (c *runtimeContainer) copyToContainer(ctx context.Context, cid, srcPath, dstPath, rebaseName string) error {
 	// Prepare destination copy info by stat-ing the container path.
 	dstInfo := archive.CopyInfo{Path: dstPath}
 	dstStat, err := c.driver.ContainerStatPath(ctx, cid, dstPath)
@@ -563,7 +542,7 @@ func (c *containerEnv) copyToContainer(ctx context.Context, cid, srcPath, dstPat
 	dstInfo.Exists, dstInfo.IsDir = true, dstStat.Mode.IsDir()
 
 	// Prepare source copy info.
-	srcInfo, err := archive.CopyInfoSourcePath(absPath(srcPath), false)
+	srcInfo, err := archive.CopyInfoSourcePath(launchr.MustAbs(srcPath), false)
 	if err != nil {
 		return err
 	}
@@ -595,7 +574,7 @@ func resolveLocalPath(localPath string) (absPath string, err error) {
 	return archive.PreserveTrailingDotOrSeparator(absPath, localPath), nil
 }
 
-func (c *containerEnv) copyFromContainer(ctx context.Context, cid, srcPath, dstPath, rebaseName string) (err error) {
+func (c *runtimeContainer) copyFromContainer(ctx context.Context, cid, srcPath, dstPath, rebaseName string) (err error) {
 	// Get an absolute destination path.
 	dstPath, err = resolveLocalPath(dstPath)
 	if err != nil {
@@ -624,7 +603,7 @@ func (c *containerEnv) copyFromContainer(ctx context.Context, cid, srcPath, dstP
 	return archive.CopyTo(preArchive, srcInfo, dstPath)
 }
 
-func (c *containerEnv) containerWait(ctx context.Context, cid string, opts *types.ContainerCreateOptions) <-chan int {
+func (c *runtimeContainer) containerWait(ctx context.Context, cid string, opts *types.ContainerCreateOptions) <-chan int {
 	log := c.log()
 	// Wait for the container to stop or catch error.
 	waitCond := types.WaitConditionNextExit
@@ -655,7 +634,7 @@ func (c *containerEnv) containerWait(ctx context.Context, cid string, opts *type
 	return statusC
 }
 
-func (c *containerEnv) attachContainer(ctx context.Context, streams launchr.Streams, cid string, opts *types.ContainerCreateOptions) (io.Closer, <-chan error, error) {
+func (c *runtimeContainer) attachContainer(ctx context.Context, streams launchr.Streams, cid string, opts *types.ContainerCreateOptions) (io.Closer, <-chan error, error) {
 	cio, errAttach := c.driver.ContainerAttach(ctx, cid, types.ContainerAttachOptions{
 		Stream: true,
 		Stdin:  opts.AttachStdin,
@@ -673,7 +652,7 @@ func (c *containerEnv) attachContainer(ctx context.Context, streams launchr.Stre
 	return cio, errCh, nil
 }
 
-func (c *containerEnv) isSELinuxEnabled(ctx context.Context) bool {
+func (c *runtimeContainer) isSELinuxEnabled(ctx context.Context) bool {
 	// First, we check if it's enabled at the OS level, then if it's enabled in the container runner.
 	// If the feature is not enabled in the runner environment,
 	// containers will bypass SELinux and will function as if SELinux is disabled in the OS.

@@ -51,20 +51,20 @@ type ptermOpts struct {
 	lvl   LogLevel
 }
 
-func (o ptermOpts) Level() LogLevel {
+func (o *ptermOpts) Level() LogLevel {
 	return o.lvl
 }
 
-func (o ptermOpts) SetLevel(l LogLevel) {
+func (o *ptermOpts) SetLevel(l LogLevel) {
 	o.lvl = l
 	o.pterm.Level = o.mapLevel(l)
 }
 
-func (o ptermOpts) SetOutput(w io.Writer) {
+func (o *ptermOpts) SetOutput(w io.Writer) {
 	o.pterm.Writer = w
 }
 
-func (o ptermOpts) mapLevel(l LogLevel) pterm.LogLevel {
+func (o *ptermOpts) mapLevel(l LogLevel) pterm.LogLevel {
 	switch l {
 	case LogLevelDisabled:
 		return pterm.LogLevelDisabled
@@ -121,7 +121,7 @@ func (o *slogOpts) mapLevel(l LogLevel) slog.Level {
 // NewConsoleLogger creates a default console logger.
 func NewConsoleLogger(w io.Writer) *Logger {
 	l := pterm.DefaultLogger
-	opts := ptermOpts{pterm: &l}
+	opts := &ptermOpts{pterm: &l}
 	opts.SetOutput(w)
 	return &Logger{
 		Slog:       slog.New(pterm.NewSlogHandler(opts.pterm)),

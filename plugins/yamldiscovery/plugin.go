@@ -11,30 +11,44 @@ import (
 )
 
 func init() {
-	launchr.RegisterPlugin(Plugin{})
+	launchr.RegisterPlugin(&Plugin{})
 }
 
 // Plugin is a [launchr.Plugin] to discover actions defined in yaml.
-type Plugin struct{}
+type Plugin struct {
+	am  action.Manager
+	app launchr.App
+}
 
 // PluginInfo implements [launchr.Plugin] interface.
-func (p Plugin) PluginInfo() launchr.PluginInfo {
+func (p *Plugin) PluginInfo() launchr.PluginInfo {
 	return launchr.PluginInfo{
 		Weight: math.MinInt,
 	}
 }
 
 // OnAppInit implements [launchr.Plugin] interface to provide discovered actions.
-func (p Plugin) OnAppInit(_ launchr.App) error {
+func (p *Plugin) OnAppInit(app launchr.App) error {
+	app.GetService(&p.am)
+	p.app = app
 	return nil
 }
 
 // DiscoverActions implements [action.DiscoveryPlugin] interface.
-func (p Plugin) DiscoverActions(ctx context.Context, fs launchr.ManagedFS, idp action.IDProvider) ([]*action.Action, error) {
-	if fs, ok := fs.(action.DiscoveryFS); ok {
-		d := action.NewYamlDiscovery(fs)
-		d.SetActionIDProvider(idp)
-		return d.Discover(ctx)
+func (p *Plugin) DiscoverActions(ctx context.Context) ([]*action.Action, error) {
+	var res []*action.Action
+	idp := p.am.GetActionIDProvider()
+	for _, fs := range p.app.GetRegisteredFS() {
+		if fs, ok := fs.(action.DiscoveryFS); ok {
+			d := action.NewYamlDiscovery(fs)
+			d.SetActionIDProvider(idp)
+			discovered, err := d.Discover(ctx)
+			if err != nil {
+				return nil, err
+			}
+			res = append(res, discovered...)
+		}
 	}
-	return nil, nil
+
+	return res, nil
 }
