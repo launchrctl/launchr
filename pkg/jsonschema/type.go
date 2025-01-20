@@ -72,9 +72,9 @@ func useValueOrDefault[T any](val any, d T) (T, error) {
 	switch v := val.(type) {
 	case T:
 		return v, nil
+	default:
+		return d, NewErrTypeMismatch(v, d)
 	}
-
-	return d, fmt.Errorf("value type and expected type mismatch")
 }
 
 // ConvertStringToType converts a string value to jsonschema type.

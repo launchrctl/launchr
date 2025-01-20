@@ -3,6 +3,7 @@ package action
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strconv"
 	"sync"
 	"time"
@@ -111,6 +112,12 @@ func (m *actionManagerMap) Add(a *Action) error {
 		}
 		m.actionAliases[alias] = a.ID
 	}
+	// Set action related processors.
+	err = a.SetProcessors(m.GetValueProcessors())
+	if err != nil {
+		// Skip action because the definition is not correct.
+		return err
+	}
 	m.actionStore[a.ID] = a
 	return nil
 }
@@ -118,7 +125,7 @@ func (m *actionManagerMap) Add(a *Action) error {
 func (m *actionManagerMap) AllUnsafe() map[string]*Action {
 	m.mx.Lock()
 	defer m.mx.Unlock()
-	return copyMap(m.actionStore)
+	return maps.Clone(m.actionStore)
 }
 
 func (m *actionManagerMap) GetIDFromAlias(alias string) string {
@@ -301,12 +308,5 @@ func WithContainerRuntimeConfig(cfg launchr.Config, prefix string) DecorateWithF
 			env.SetImageBuildCacheResolver(ccr)
 			env.SetContainerNameProvider(ContainerNameProvider{Prefix: prefix, RandomSuffix: true})
 		}
-	}
-}
-
-// WithValueProcessors sets processors for action from manager.
-func WithValueProcessors() DecorateWithFn {
-	return func(m Manager, a *Action) {
-		a.SetProcessors(m.GetValueProcessors())
 	}
 }

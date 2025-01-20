@@ -2,6 +2,7 @@ package action
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
@@ -17,8 +18,8 @@ func validateJSONSchema(a *Action, input *Input) error {
 	return jsonschema.Validate(
 		a.JSONSchema(),
 		map[string]any{
-			jsonschemaPropArgs: input.ArgsNamed(),
-			jsonschemaPropOpts: input.OptsAll(),
+			jsonschemaPropArgs: input.Args(),
+			jsonschemaPropOpts: input.Opts(),
 		},
 	)
 }
@@ -84,5 +85,5 @@ func (l *ParametersList) JSONSchema() (map[string]any, []string) {
 
 // JSONSchema returns json schema definition of an option.
 func (p *DefParameter) JSONSchema() map[string]any {
-	return copyMap(p.raw)
+	return maps.Clone(p.raw)
 }

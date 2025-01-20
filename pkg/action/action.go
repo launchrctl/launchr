@@ -10,8 +10,9 @@ import (
 )
 
 var (
-	errTplNotApplicableProcessor = "invalid configuration, processor can't be applied to value of type %s"
+	errTplNotApplicableProcessor = "invalid configuration, processor %q can't be applied to a parameter of type %s"
 	errTplNonExistProcessor      = "requested processor %q doesn't exist"
+	errTplErrorOnProcessor       = "failed to process parameter %q with %q: %w"
 )
 
 // Action is an action definition with a contextual id (name), working directory path
@@ -78,8 +79,18 @@ func (a *Action) Clone() *Action {
 }
 
 // SetProcessors sets the value processors for an [Action].
-func (a *Action) SetProcessors(list map[string]ValueProcessor) {
-	a.processors = list
+func (a *Action) SetProcessors(list map[string]ValueProcessor) error {
+	def := a.ActionDef()
+	for _, params := range []ParametersList{def.Arguments, def.Options} {
+		for _, p := range params {
+			err := p.InitProcessors(list)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // GetProcessors returns processors map.
@@ -193,13 +204,13 @@ func (a *Action) SetInput(input *Input) (err error) {
 	def := a.ActionDef()
 
 	// Process arguments.
-	err = a.processInputParams(def.Arguments, input.ArgsNamed(), nil)
+	err = a.processInputParams(def.Arguments, input.Args(), input.ArgsChanged())
 	if err != nil {
 		return err
 	}
 
 	// Process options.
-	err = a.processInputParams(def.Options, input.OptsAll(), input.OptsChanged())
+	err = a.processInputParams(def.Options, input.Opts(), input.OptsChanged())
 	if err != nil {
 		return err
 	}
@@ -216,61 +227,30 @@ func (a *Action) SetInput(input *Input) (err error) {
 }
 
 func (a *Action) processInputParams(def ParametersList, inp InputParams, changed InputParams) error {
+	var err error
 	for _, p := range def {
-		if _, ok := inp[p.Name]; !ok {
-			continue
-		}
-
-		if changed != nil {
-			if _, ok := changed[p.Name]; ok {
-				continue
+		_, isChanged := changed[p.Name]
+		res := inp[p.Name]
+		for i, procDef := range p.Process {
+			handler := p.processors[i]
+			res, err = handler(res, ValueProcessorContext{
+				ValOrig:   inp[p.Name],
+				IsChanged: isChanged,
+				DefParam:  p,
+				Action:    a,
+			})
+			if err != nil {
+				return fmt.Errorf(errTplErrorOnProcessor, p.Name, procDef.ID, err)
 			}
 		}
-
-		value := inp[p.Name]
-		toApply := p.Process
-
-		value, err := a.processValue(value, p.Type, toApply)
-		if err != nil {
-			return err
+		// Cast to []any slice because jsonschema validator supports only this type.
+		if p.Type == jsonschema.Array {
+			res = CastSliceTypedToAny(res)
 		}
-		// Replace the value.
-		// Check for nil not to override the default value.
-		if value != nil {
-			inp[p.Name] = value
-		}
+		inp[p.Name] = res
 	}
 
 	return nil
-}
-
-func (a *Action) processValue(v any, vtype jsonschema.Type, applyProc []DefValueProcessor) (any, error) {
-	res := v
-	processors := a.GetProcessors()
-
-	for _, procDef := range applyProc {
-		proc, ok := processors[procDef.ID]
-		if !ok {
-			return v, fmt.Errorf(errTplNonExistProcessor, procDef.ID)
-		}
-
-		if !proc.IsApplicable(vtype) {
-			return v, fmt.Errorf(errTplNotApplicableProcessor, vtype)
-		}
-
-		processedValue, err := proc.Execute(res, procDef.Options)
-		if err != nil {
-			return v, err
-		}
-
-		res = processedValue
-	}
-	// Cast to []any slice because jsonschema validator supports only this type.
-	if vtype == jsonschema.Array {
-		res = CastSliceTypedToAny(res)
-	}
-
-	return res, nil
 }
 
 // ValidateInput validates action input.

@@ -58,10 +58,10 @@ func Test_Action(t *testing.T) {
 	require.NotNil(act.input)
 	// Option is not defined, but should be there
 	// because [Action.ValidateInput] decides if the input correct or not.
-	_, okOpt := act.input.OptsAll()["opt6"]
+	_, okOpt := act.input.Opts()["opt6"]
 	assert.True(okOpt)
-	assert.Equal(inputArgs, act.input.ArgsNamed())
-	assert.Equal(inputOpts, act.input.OptsAll())
+	assert.Equal(inputArgs, act.input.Args())
+	assert.Equal(inputOpts, act.input.Opts())
 
 	// Test templating in executable.
 	envVar1 := "envval1"
@@ -129,22 +129,30 @@ func Test_ActionInput(t *testing.T) {
 	// Check argument is changed.
 	input = NewInput(a, InputParams{"arg_str": "my_string"}, nil, nil)
 	require.NotNil(input)
-	changed := input.ArgsNamed()
-	assert.Equal(InputParams{"arg_str": "my_string", "arg_default": "my_default_string"}, changed)
+	assert.Equal(InputParams{"arg_str": "my_string", "arg_default": "my_default_string"}, input.Args())
+	assert.Equal(InputParams{"arg_str": "my_string"}, input.ArgsChanged())
 	assert.True(input.IsArgChanged("arg_str"))
 	assert.False(input.IsArgChanged("arg_int"))
 	assert.False(input.IsArgChanged("arg_str2"))
+	input.SetArg("arg_str2", "my_str2")
+	assert.True(input.IsArgChanged("arg_str2"))
+	assert.Equal(InputParams{"arg_str": "my_string", "arg_str2": "my_str2"}, input.ArgsChanged())
+	input.UnsetArg("arg_str")
+	assert.Equal(InputParams{"arg_str2": "my_str2"}, input.ArgsChanged())
+	assert.False(input.IsArgChanged("arg_str"))
 	// Check option is changed.
 	input = NewInput(a, nil, InputParams{"opt_str": "my_string"}, nil)
 	require.NotNil(input)
-	changed = input.OptsChanged()
-	assert.Equal(InputParams{"opt_str": "my_string"}, changed)
+	assert.Equal(InputParams{"opt_str": "my_string"}, input.OptsChanged())
 	assert.True(input.IsOptChanged("opt_str"))
 	assert.False(input.IsOptChanged("opt_int"))
 	// Set option and check it's changed.
 	input.SetOpt("opt_int", 24)
 	assert.True(input.IsOptChanged("opt_int"))
-	assert.Equal(InputParams{"opt_str": "my_string", "opt_int": 24, "opt_str_default": "optdefault"}, input.OptsAll())
+	assert.Equal(InputParams{"opt_str": "my_string", "opt_int": 24, "opt_str_default": "optdefault"}, input.Opts())
+	input.UnsetOpt("opt_str")
+	assert.Equal(InputParams{"opt_int": 24}, input.OptsChanged())
+	assert.False(input.IsOptChanged("opt_str"))
 
 	// Test create with positional arguments of different types.
 	argsPos := []string{"42", "str", "str2", "true", "str3", "undstr", "24"}
@@ -163,7 +171,7 @@ func Test_ActionInput(t *testing.T) {
 	}
 	_, posKeyOk = input.args[inputMapKeyArgsPos]
 	assert.False(posKeyOk)
-	assert.Equal(expArgs, input.ArgsNamed())
+	assert.Equal(expArgs, input.Args())
 	assert.Equal(argsPos, input.ArgsPositional())
 }
 
@@ -320,6 +328,7 @@ func Test_ActionInputValidate(t *testing.T) {
 				tt.fnInit(t, a, input)
 			}
 			err := a.ValidateInput(input)
+			assert.Equal(t, err == nil, input.IsValidated())
 			if tt.expErr == errAny {
 				assert.True(t, assert.Error(t, err))
 			} else if assert.IsType(t, tt.expErr, err) {

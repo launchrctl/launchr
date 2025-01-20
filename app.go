@@ -114,7 +114,6 @@ func (app *appImpl) init() error {
 	actionMngr := action.NewManager(
 		action.WithDefaultRuntime,
 		action.WithContainerRuntimeConfig(config, name+"_"),
-		action.WithValueProcessors(),
 	)
 
 	// Register services for other modules.

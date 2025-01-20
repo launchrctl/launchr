@@ -10,6 +10,25 @@ import (
 	"github.com/launchrctl/launchr/internal/launchr"
 )
 
+// ErrTypeMismatch is an error when expected jsonschema type and given values mismatch.
+type ErrTypeMismatch struct {
+	act string
+	exp string
+}
+
+// NewErrTypeMismatch constructs new ErrTypeMismatch.
+func NewErrTypeMismatch(act, exp any) ErrTypeMismatch {
+	return ErrTypeMismatch{
+		act: fmt.Sprintf("%T", act),
+		exp: fmt.Sprintf("%T", exp),
+	}
+}
+
+// Error implements error interface.
+func (err ErrTypeMismatch) Error() string {
+	return fmt.Sprintf("given value type (%s) and expected type (%s) mismatch", err.act, err.exp)
+}
+
 // ErrSchemaValidationArray is an array of validation errors.
 type ErrSchemaValidationArray []ErrSchemaValidation
 
