@@ -387,7 +387,7 @@ type DefParameter struct {
 	// Process is an array of [ValueProcessor] to a value.
 	Process []DefValueProcessor `yaml:"process"`
 	// processors is an instantiated list of processor handlers.
-	processors []ValueProcessorFn
+	processors []ValueProcessorHandler
 	// raw is a raw parameter declaration to support all JSON Schema features.
 	raw map[string]any
 }
@@ -522,7 +522,7 @@ func (p *DefValueProcessor) UnmarshalYAML(n *yaml.Node) (err error) {
 
 // InitProcessors creates [ValueProcessor] handlers according to the definition.
 func (p *DefParameter) InitProcessors(list map[string]ValueProcessor) error {
-	processors := make([]ValueProcessorFn, 0, len(p.Process))
+	processors := make([]ValueProcessorHandler, 0, len(p.Process))
 	for _, procDef := range p.Process {
 		proc, ok := list[procDef.ID]
 		if !ok {

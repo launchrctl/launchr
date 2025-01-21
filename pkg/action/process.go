@@ -16,7 +16,7 @@ import (
 type ValueProcessor interface {
 	IsApplicable(valueType jsonschema.Type) bool
 	OptionsType() ValueProcessorOptions
-	Handler(opts ValueProcessorOptions) ValueProcessorFn
+	Handler(opts ValueProcessorOptions) ValueProcessorHandler
 }
 
 // ValueProcessorContext is related context data for ValueProcessor.
@@ -28,8 +28,8 @@ type ValueProcessorContext struct {
 	Action    *Action               // Action is the related action definition.
 }
 
-// ValueProcessorFn is a function signature used as a callback in processors.
-type ValueProcessorFn func(v any, ctx ValueProcessorContext) (any, error)
+// ValueProcessorHandler is an actual implementation of [ValueProcessor] that processes the incoming value.
+type ValueProcessorHandler func(v any, ctx ValueProcessorContext) (any, error)
 
 // ValueProcessorOptions is a common type for value processor options
 type ValueProcessorOptions interface {
@@ -47,11 +47,11 @@ func (o *ValueProcessorOptionsEmpty) Validate() error {
 // GenericValueProcessor is a common [ValueProcessor].
 type GenericValueProcessor[T ValueProcessorOptions] struct {
 	Types []jsonschema.Type
-	Fn    GenericValueProcessorFn[T]
+	Fn    GenericValueProcessorHandler[T]
 }
 
-// GenericValueProcessorFn is an extension of [ValueProcessorFn] to have typed [ValueProcessorOptions].
-type GenericValueProcessorFn[T ValueProcessorOptions] func(v any, opts T, ctx ValueProcessorContext) (any, error)
+// GenericValueProcessorHandler is an extension of [ValueProcessorHandler] to have typed [ValueProcessorOptions].
+type GenericValueProcessorHandler[T ValueProcessorOptions] func(v any, opts T, ctx ValueProcessorContext) (any, error)
 
 // IsApplicable implements [ValueProcessor] interface.
 func (p GenericValueProcessor[T]) IsApplicable(t jsonschema.Type) bool {
@@ -74,7 +74,7 @@ func (p GenericValueProcessor[T]) OptionsType() ValueProcessorOptions {
 }
 
 // Handler implements [ValueProcessor] interface.
-func (p GenericValueProcessor[T]) Handler(opts ValueProcessorOptions) ValueProcessorFn {
+func (p GenericValueProcessor[T]) Handler(opts ValueProcessorOptions) ValueProcessorHandler {
 	optsT, ok := opts.(T)
 	if !ok {
 		panic(fmt.Sprintf("incorrect options type, expected %T, actual %T, please ensure the code integrity", optsT, opts))
