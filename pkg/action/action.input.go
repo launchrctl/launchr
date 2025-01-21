@@ -1,6 +1,7 @@
 package action
 
 import (
+	"maps"
 	"reflect"
 	"strings"
 
@@ -30,6 +31,8 @@ type Input struct {
 
 	// argsPos contains raw positional arguments.
 	argsPos []string
+	// argsRaw contains arguments that were input by a user and without default values.
+	argsRaw InputParams
 	// optsRaw contains options that were input by a user and without default values.
 	optsRaw InputParams
 }
@@ -45,6 +48,7 @@ func NewInput(a *Action, args InputParams, opts InputParams, io launchr.Streams)
 	return &Input{
 		action:  a,
 		args:    setParamDefaults(args, def.Arguments),
+		argsRaw: args,
 		argsPos: argsPos,
 		opts:    setParamDefaults(opts, def.Options),
 		optsRaw: opts,
@@ -98,31 +102,32 @@ func (input *Input) SetValidated(v bool) {
 
 // Arg returns argument by a name.
 func (input *Input) Arg(name string) any {
-	return input.ArgsNamed()[name]
+	return input.Args()[name]
 }
 
 // SetArg sets an argument value.
 func (input *Input) SetArg(name string, val any) {
-	input.optsRaw[name] = val
-	input.opts[name] = val
+	input.argsRaw[name] = val
+	input.args[name] = val
 }
 
 // UnsetArg unsets the arguments and recalculates default and positional values.
 func (input *Input) UnsetArg(name string) {
 	delete(input.args, name)
-	input.args = setParamDefaults(input.args, input.action.ActionDef().Arguments)
-	input.argsPos = argsNamedToPos(input.args, input.action.ActionDef().Arguments)
+	delete(input.argsRaw, name)
+	input.args = setParamDefaults(input.argsRaw, input.action.ActionDef().Arguments)
+	input.argsPos = argsNamedToPos(input.argsRaw, input.action.ActionDef().Arguments)
 }
 
 // IsArgChanged checks if an argument was changed by user.
 func (input *Input) IsArgChanged(name string) bool {
-	_, ok := input.args[name]
+	_, ok := input.argsRaw[name]
 	return ok
 }
 
 // Opt returns option by a name.
 func (input *Input) Opt(name string) any {
-	return input.OptsAll()[name]
+	return input.Opts()[name]
 }
 
 // SetOpt sets an option value.
@@ -144,9 +149,14 @@ func (input *Input) IsOptChanged(name string) bool {
 	return ok
 }
 
-// ArgsNamed returns input named and processed arguments.
-func (input *Input) ArgsNamed() InputParams {
+// Args returns input named and processed arguments.
+func (input *Input) Args() InputParams {
 	return input.args
+}
+
+// ArgsChanged returns arguments that were set manually by user (not processed).
+func (input *Input) ArgsChanged() InputParams {
+	return input.argsRaw
 }
 
 // ArgsPositional returns positional arguments set by user (not processed).
@@ -154,8 +164,8 @@ func (input *Input) ArgsPositional() []string {
 	return input.argsPos
 }
 
-// OptsAll returns options with default values and processed.
-func (input *Input) OptsAll() InputParams {
+// Opts returns options with default values and processed.
+func (input *Input) Opts() InputParams {
 	return input.opts
 }
 
@@ -184,7 +194,10 @@ func argsNamedToPos(args InputParams, argsDef ParametersList) []string {
 }
 
 func setParamDefaults(params InputParams, paramDef ParametersList) InputParams {
-	res := copyMap(params)
+	res := maps.Clone(params)
+	if res == nil {
+		res = make(InputParams)
+	}
 	for _, d := range paramDef {
 		k := d.Name
 		v, ok := params[k]

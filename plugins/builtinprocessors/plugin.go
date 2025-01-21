@@ -10,7 +10,9 @@ import (
 )
 
 const (
-	getConfigValue = "launchr.GetConfigValue"
+	// Deprecated: update definitions and use procGetConfigValue
+	procGetConfigValueDeprecated = "launchr.GetConfigValue"
+	procGetConfigValue           = "config.GetValue"
 )
 
 func init() {
@@ -40,35 +42,42 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	return nil
 }
 
-// AddValueProcessors submits new ValueProcessors to action.Manager.
-func addValueProcessors(m action.Manager, cfg launchr.Config) {
-	getByKey := func(value any, options map[string]any) (any, error) {
-		return getByKeyProcessor(value, options, cfg)
-	}
-
-	proc := action.NewFuncProcessor(
-		[]jsonschema.Type{jsonschema.String, jsonschema.Integer, jsonschema.Boolean, jsonschema.Number},
-		getByKey,
-	)
-	m.AddValueProcessor(getConfigValue, proc)
+// ConfigGetProcessorOptions is an options struct for `config.GetValue`.
+type ConfigGetProcessorOptions struct {
+	Path string `yaml:"path"`
 }
 
-func getByKeyProcessor(value any, options map[string]any, cfg launchr.Config) (any, error) {
-	path, ok := options["path"].(string)
-	if !ok {
-		return value, fmt.Errorf(`option "path" is required for %q processor`, getConfigValue)
+// Validate implements [action.ValueProcessorOptions] interface.
+func (o *ConfigGetProcessorOptions) Validate() error {
+	if o.Path == "" {
+		return fmt.Errorf(`option "path" is required for %q processor`, procGetConfigValue)
+	}
+	return nil
+}
+
+// addValueProcessors submits new [action.ValueProcessor] to [action.Manager].
+func addValueProcessors(m action.Manager, cfg launchr.Config) {
+	procCfg := action.GenericValueProcessor[*ConfigGetProcessorOptions]{
+		Fn: func(v any, opts *ConfigGetProcessorOptions, ctx action.ValueProcessorContext) (any, error) {
+			return processorConfigGetByKey(v, opts, ctx, cfg)
+		},
+	}
+	m.AddValueProcessor(procGetConfigValueDeprecated, procCfg)
+	m.AddValueProcessor(procGetConfigValue, procCfg)
+}
+
+func processorConfigGetByKey(v any, opts *ConfigGetProcessorOptions, ctx action.ValueProcessorContext, cfg launchr.Config) (any, error) {
+	// If value is provided by user, do not override.
+	if ctx.IsChanged {
+		return v, nil
 	}
 
+	// Get value from the config.
 	var res any
-	err := cfg.Get(path, &res)
+	err := cfg.Get(opts.Path, &res)
 	if err != nil {
-		return value, err
+		return v, err
 	}
 
-	switch res.(type) {
-	case int, int8, int16, int32, int64, float32, float64, string, bool:
-		value = res
-	}
-
-	return value, nil
+	return jsonschema.EnsureType(ctx.DefParam.Type, res)
 }

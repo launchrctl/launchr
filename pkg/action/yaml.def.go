@@ -386,6 +386,8 @@ type DefParameter struct {
 	Required bool `yaml:"required"`
 	// Process is an array of [ValueProcessor] to a value.
 	Process []DefValueProcessor `yaml:"process"`
+	// processors is an instantiated list of processor handlers.
+	processors []ValueProcessorHandler
 	// raw is a raw parameter declaration to support all JSON Schema features.
 	raw map[string]any
 }
@@ -499,8 +501,8 @@ type DefArrayItems struct {
 
 // DefValueProcessor stores information about processor and options that should be applied to processor.
 type DefValueProcessor struct {
-	ID      string         `yaml:"processor"`
-	Options map[string]any `yaml:"options"`
+	ID      string     `yaml:"processor"`
+	optsRaw *yaml.Node // optsRaw is saved for later processing of options.
 }
 
 // UnmarshalYAML implements [yaml.Unmarshaler] to parse [DefValueProcessor].
@@ -514,5 +516,36 @@ func (p *DefValueProcessor) UnmarshalYAML(n *yaml.Node) (err error) {
 	if p.ID == "" {
 		return yamlTypeErrorLine(sErrEmptyProcessorID, n.Line, n.Column)
 	}
+	p.optsRaw = yamlFindNodeByKey(n, "options")
+	return nil
+}
+
+// InitProcessors creates [ValueProcessor] handlers according to the definition.
+func (p *DefParameter) InitProcessors(list map[string]ValueProcessor) error {
+	processors := make([]ValueProcessorHandler, 0, len(p.Process))
+	for _, procDef := range p.Process {
+		proc, ok := list[procDef.ID]
+		if !ok {
+			return fmt.Errorf(errTplNonExistProcessor, procDef.ID)
+		}
+
+		if !proc.IsApplicable(p.Type) {
+			return fmt.Errorf(errTplNotApplicableProcessor, procDef.ID, p.Type)
+		}
+
+		opts := proc.OptionsType()
+		if procDef.optsRaw != nil {
+			err := procDef.optsRaw.Decode(opts)
+			if err != nil {
+				return err
+			}
+		}
+
+		if err := opts.Validate(); err != nil {
+			return err
+		}
+		processors = append(processors, proc.Handler(opts))
+	}
+	p.processors = processors
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -620,7 +621,7 @@ func Test_ContainerExec(t *testing.T) {
 			"container create error",
 			nil,
 			append(
-				copySlice(successSteps[0:1]),
+				slices.Clone(successSteps[0:1]),
 				mockCallInfo{
 					"ContainerCreate",
 					1, 1,
@@ -633,7 +634,7 @@ func Test_ContainerExec(t *testing.T) {
 			"container create error - empty container id",
 			nil,
 			append(
-				copySlice(successSteps[0:1]),
+				slices.Clone(successSteps[0:1]),
 				mockCallInfo{
 					"ContainerCreate",
 					1, 1,
@@ -648,7 +649,7 @@ func Test_ContainerExec(t *testing.T) {
 				resCh <- types.ContainerWaitResponse{StatusCode: 0}
 			},
 			append(
-				copySlice(successSteps[0:2]),
+				slices.Clone(successSteps[0:2]),
 				mockCallInfo{
 					"ContainerAttach",
 					1, 1,
@@ -664,7 +665,7 @@ func Test_ContainerExec(t *testing.T) {
 				resCh <- types.ContainerWaitResponse{StatusCode: 0}
 			},
 			append(
-				copySlice(successSteps[0:4]),
+				slices.Clone(successSteps[0:4]),
 				mockCallInfo{
 					"ContainerStart",
 					1, 1,
@@ -680,7 +681,7 @@ func Test_ContainerExec(t *testing.T) {
 				resCh <- types.ContainerWaitResponse{StatusCode: 2}
 			},
 			append(
-				copySlice(successSteps[0:4]),
+				slices.Clone(successSteps[0:4]),
 				mockCallInfo{
 					"ContainerStart",
 					1, 1,
@@ -725,12 +726,6 @@ func Test_ContainerExec(t *testing.T) {
 			}
 		})
 	}
-}
-
-func copySlice[T any](arr []T) []T {
-	c := make([]T, len(arr))
-	copy(c, arr)
-	return c
 }
 
 func callContainerDriverMockFn(d *mockdriver.MockContainerRunner, step mockCallInfo, prev *gomock.Call) *gomock.Call {

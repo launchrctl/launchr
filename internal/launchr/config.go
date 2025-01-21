@@ -42,12 +42,12 @@ type ConfigAware interface {
 
 type cachedProps = map[string]reflect.Value
 type config struct {
-	mx       sync.Mutex
-	root     fs.FS
-	fname    fs.DirEntry
-	rootPath string
-	cached   cachedProps
-	koanf    *koanf.Koanf
+	mx       sync.Mutex   // mx is a mutex to read/cache values.
+	root     fs.FS        // root is a base dir filesystem.
+	fname    fs.DirEntry  // fname is a file storing the config.
+	rootPath string       // rootPath is a base dir path.
+	cached   cachedProps  // cached is a map of cached properties read from a file.
+	koanf    *koanf.Koanf // koanf is the driver to read the yaml config.
 }
 
 func findConfigFile(root fs.FS) fs.DirEntry {

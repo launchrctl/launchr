@@ -142,8 +142,8 @@ Action definition is correct, but dashes are not allowed in templates, replace "
 
 // ConvertInputToTplVars creates a map with input variables suitable for template engine.
 func ConvertInputToTplVars(input *Input, ac *DefAction) map[string]any {
-	args := input.ArgsNamed()
-	opts := input.OptsAll()
+	args := input.Args()
+	opts := input.Opts()
 	values := make(map[string]any, len(args)+len(opts))
 
 	// Collect arguments and options values.
