@@ -94,6 +94,16 @@ action:
               obj: str
 `
 
+const actionProcessInvalidOptions = `
+runtime: plugin
+action:
+  title: Title
+  arguments:
+    - name: arg1
+      process:
+        - processor: test.replace
+`
+
 const actionProcessReturnErr = `
 runtime: plugin
 action:
@@ -129,21 +139,14 @@ action:
         - processor: test.defaultVal
 `
 
-type procTestReplaceOptions struct {
-	O string `yaml:"old"`
+type procTestReplaceOptions = *GenericValueProcessorOptions[struct {
+	O string `yaml:"old" validate:"not-empty"`
 	N string `yaml:"new"`
-}
-
-func (o *procTestReplaceOptions) Validate() error {
-	if o.O == "" {
-		return fmt.Errorf("parameter old required")
-	}
-	return nil
-}
+}]
 
 func addTestValueProcessors(am Manager) {
-	procDefVal := GenericValueProcessor[*ValueProcessorOptionsEmpty]{
-		Fn: func(v any, _ *ValueProcessorOptionsEmpty, ctx ValueProcessorContext) (any, error) {
+	procDefVal := GenericValueProcessor[ValueProcessorOptionsEmpty]{
+		Fn: func(v any, _ ValueProcessorOptionsEmpty, ctx ValueProcessorContext) (any, error) {
 			if ctx.IsChanged {
 				return v, nil
 			}
@@ -159,14 +162,14 @@ func addTestValueProcessors(am Manager) {
 			}
 		},
 	}
-	procReplace := GenericValueProcessor[*procTestReplaceOptions]{
+	procReplace := GenericValueProcessor[procTestReplaceOptions]{
 		Types: []jsonschema.Type{jsonschema.String},
-		Fn: func(v any, opts *procTestReplaceOptions, _ ValueProcessorContext) (any, error) {
-			return strings.Replace(v.(string), opts.O, opts.N, -1), nil
+		Fn: func(v any, opts procTestReplaceOptions, _ ValueProcessorContext) (any, error) {
+			return strings.Replace(v.(string), opts.Fields.O, opts.Fields.N, -1), nil
 		},
 	}
-	procErr := GenericValueProcessor[*ValueProcessorOptionsEmpty]{
-		Fn: func(v any, _ *ValueProcessorOptionsEmpty, ctx ValueProcessorContext) (any, error) {
+	procErr := GenericValueProcessor[ValueProcessorOptionsEmpty]{
+		Fn: func(v any, _ ValueProcessorOptionsEmpty, ctx ValueProcessorContext) (any, error) {
 			return v, fmt.Errorf("my_error %q", ctx.DefParam.Name)
 		},
 	}
@@ -189,10 +192,11 @@ func Test_ActionsValueProcessor(t *testing.T) {
 		{Name: "valid processor chain - with default, no input given", Yaml: actionProcessWithDefault, ExpArgs: InputParams{"arg1": "processed_default"}, ExpOpts: InputParams{"opt1": "processed_default"}},
 		{Name: "valid processor chain - no defaults, no input given", Yaml: actionProcessNoDefault, ExpArgs: InputParams{"arg1": "processed_default"}, ExpOpts: InputParams{"opt1": "processed_default"}},
 		{Name: "valid processor - array processed and cast to []any", Yaml: actionProcessArrayType, ExpArgs: InputParams{"arg1": []any{"1", "2", "3"}}, ExpOpts: InputParams{}},
-		{Name: "wrong options", Yaml: actionProcessWrongOptions, ErrInit: yamlMergeErrors(yamlTypeError("line 10: cannot unmarshal !!seq into string"), yamlTypeError("line 12: cannot unmarshal !!map into string"))},
-		{Name: "broken processor", Yaml: actionProcessBroken, ErrInit: fmt.Errorf(errTplNonExistProcessor, "test.broken")},
-		{Name: "unsupported type", Yaml: actionProcessUnsupType, ErrInit: fmt.Errorf(errTplNotApplicableProcessor, "test.replace", jsonschema.Integer)},
-		{Name: "processor return error", Yaml: actionProcessReturnErr, ErrProc: fmt.Errorf(errTplErrorOnProcessor, "arg1", "test.error", fmt.Errorf("my_error %q", "arg1"))},
+		{Name: "unexpected empty options", Yaml: actionProcessInvalidOptions, ErrInit: ErrValueProcessorOptionsValidation{Processor: "test.replace", Err: ErrValueProcessorOptionsFieldValidation{Field: "old", Reason: "required"}}},
+		{Name: "wrong type options", Yaml: actionProcessWrongOptions, ErrInit: yamlMergeErrors(yamlTypeError("line 10: cannot unmarshal !!seq into string"), yamlTypeError("line 12: cannot unmarshal !!map into string"))},
+		{Name: "broken processor", Yaml: actionProcessBroken, ErrInit: ErrValueProcessorNotExist("test.broken")},
+		{Name: "unsupported type", Yaml: actionProcessUnsupType, ErrInit: ErrValueProcessorNotApplicable{Processor: "test.replace", Type: jsonschema.Integer}},
+		{Name: "processor return error", Yaml: actionProcessReturnErr, ErrProc: ErrValueProcessorHandler{Processor: "test.error", Param: "arg1", Err: fmt.Errorf("my_error %q", "arg1")}},
 	}
 	for _, tt := range tt {
 		tt := tt

@@ -10,7 +10,6 @@ import (
 	"github.com/moby/sys/signal"
 
 	"github.com/launchrctl/launchr/internal/launchr"
-	"github.com/launchrctl/launchr/pkg/types"
 )
 
 type resizeTtyFn func(ctx context.Context, d ContainerRunner, cli launchr.Streams, id string, isExec bool) error
@@ -21,7 +20,7 @@ func resizeTtyTo(ctx context.Context, d ContainerRunner, id string, height, widt
 		return nil
 	}
 
-	options := types.ResizeOptions{
+	options := ResizeOptions{
 		Height: height,
 		Width:  width,
 	}

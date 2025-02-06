@@ -2,8 +2,8 @@ package action
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,33 +12,28 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 func Test_Action(t *testing.T) {
 	assert := assert.New(t)
 	require := require.New(t)
+
 	// Prepare an action.
-	fs := _getFsMapActions(1, validFullYaml, genPathTypeValid)
-	ad := NewYamlDiscovery(NewDiscoveryFS(fs, ""))
+	fsys := genFsTestMapActions(1, validFullYaml, genPathTypeValid)
+	ad := NewYamlDiscovery(NewDiscoveryFS(fsys, ""))
 	ctx := context.Background()
 	actions, err := ad.Discover(ctx)
 	require.NoError(err)
 	require.NotEmpty(actions)
 	act := actions[0]
-	runDef := act.RuntimeDef()
-	// Test image name.
-	assert.Equal("my/image:v1", runDef.Container.Image)
+
 	// Test dir
 	assert.Equal(filepath.Dir(act.fpath), act.Dir())
 	act.fpath = "test/file/path/action.yaml"
 	assert.Equal("test/file/path", act.Dir())
-	// Test hosts.
-	extraHosts := StrSlice{
-		"host.docker.internal:host-gateway",
-		"example.com:127.0.0.1",
-	}
-	assert.Equal(extraHosts, runDef.Container.ExtraHosts)
+
 	// Test arguments and options.
 	inputArgs := InputParams{"arg1": "arg1", "arg2": "arg2", "arg-1": "arg-1", "arg_12": "arg_12_enum1"}
 	inputOpts := InputParams{
@@ -56,6 +51,7 @@ func Test_Action(t *testing.T) {
 	err = act.SetInput(input)
 	require.NoError(err)
 	require.NotNil(act.input)
+
 	// Option is not defined, but should be there
 	// because [Action.ValidateInput] decides if the input correct or not.
 	_, okOpt := act.input.Opts()["opt6"]
@@ -76,9 +72,18 @@ func Test_Action(t *testing.T) {
 		fmt.Sprintf("%v ", envVar1),
 	}
 	act.Reset()
-	runDef = act.RuntimeDef()
+	runDef := act.RuntimeDef()
 	assert.Equal(execExp, []string(runDef.Container.Command))
 	assert.NotNil(act.def)
+
+	// Test image name.
+	assert.Equal("my/image:v1", runDef.Container.Image)
+	// Test hosts.
+	extraHosts := StrSlice{
+		"host.docker.internal:host-gateway",
+		"example.com:127.0.0.1",
+	}
+	assert.Equal(extraHosts, runDef.Container.ExtraHosts)
 
 	// Test build info
 	b := act.ImageBuildInfo(runDef.Container.Image)
@@ -91,6 +96,40 @@ func Test_Action(t *testing.T) {
 	assert.Equal(tags, b.Tags)
 	runDef.Container.Build = nil
 	assert.Nil(nil)
+}
+
+func Test_Action_NewYAMLFromFS(t *testing.T) {
+	// Prepare FS.
+	fsys := genFsTestMapActions(1, validFullYaml, genPathTypeArbitrary)
+	// Get first key to make subdir.
+	var key string
+	for key = range fsys {
+		// There is only 1 entry, we get the only key.
+		break
+	}
+
+	// Create action.
+	subfs, _ := fs.Sub(fsys, filepath.Dir(key))
+	a, err := NewYAMLFromFS("test", subfs)
+	require.NotNil(t, a)
+	require.NoError(t, err)
+	assert.Equal(t, "test", a.ID)
+	require.NoError(t, a.EnsureLoaded())
+	assert.Equal(t, "Title", a.ActionDef().Title)
+
+	// Export from memory to disk.
+	err = a.syncToDisk()
+	require.NoError(t, err)
+
+	// Check the data is properly set for accessing.
+	assert.NotEmpty(t, a.fs.real)
+	fpath := a.Filepath()
+	assert.True(t, filepath.IsAbs(fpath))
+	assert.FileExists(t, fpath)
+
+	err = launchr.Cleanup()
+	assert.NoError(t, err)
+	assert.NoFileExists(t, fpath)
 }
 
 func Test_ActionInput(t *testing.T) {
@@ -113,17 +152,17 @@ func Test_ActionInput(t *testing.T) {
 	assert.Equal("my_default_string", arg)
 	// Get defined argument but not set.
 	arg = input.Arg("arg_int")
-	assert.True(assert.Nil(arg))
+	assert.Nil(arg)
 	// Get undefined argument.
 	arg = input.Arg("undefined")
-	assert.True(assert.Nil(arg))
+	assert.Nil(arg)
 
 	// Get defined option. Default value is not set.
 	opt := input.Opt("opt_str")
 	assert.Equal(nil, opt)
 	// Get undefined option, value is not set.
 	opt = input.Opt("undefined")
-	assert.True(assert.Nil(opt))
+	assert.Nil(opt)
 
 	// Test user changed input.
 	// Check argument is changed.
@@ -252,7 +291,6 @@ func Test_ActionInputValidate(t *testing.T) {
 		return newError(path, fmt.Sprintf(`value must be one of %s`, joinQuoted(enums, ", ")))
 	}
 
-	errAny := errors.New("any")
 	tt := []testCase{
 		{"valid arg string", validArgString, InputParams{"arg_string": "arg1"}, nil, nil, nil},
 		{"valid arg string - undefined arg and opt", validArgString, InputParams{"arg_string": "arg1", "arg_undefined": "und"}, InputParams{"opt_undefined": "und"}, nil, schemaErr(
@@ -329,13 +367,7 @@ func Test_ActionInputValidate(t *testing.T) {
 			}
 			err := a.ValidateInput(input)
 			assert.Equal(t, err == nil, input.IsValidated())
-			if tt.expErr == errAny {
-				assert.True(t, assert.Error(t, err))
-			} else if assert.IsType(t, tt.expErr, err) {
-				assert.Equal(t, tt.expErr, err)
-			} else {
-				assert.ErrorIs(t, err, tt.expErr)
-			}
+			assertIsSameError(t, tt.expErr, err)
 		})
 	}
 }

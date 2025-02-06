@@ -28,10 +28,7 @@ func testLoaderAction() *Action {
 			},
 		},
 	}
-	a := &Action{
-		ID:     "my_actions",
-		loader: af,
-	}
+	a := New(StringID("my_actions"), af, NewDiscoveryFS(nil, ""), "")
 	return a
 }
 

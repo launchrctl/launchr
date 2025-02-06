@@ -11,7 +11,7 @@ import (
 	"golang.org/x/mod/sumdb/dirhash"
 
 	"github.com/launchrctl/launchr/internal/launchr"
-	"github.com/launchrctl/launchr/pkg/types"
+	"github.com/launchrctl/launchr/pkg/driver"
 )
 
 const sumFilename = "actions.sum"
@@ -22,14 +22,14 @@ const ConfigImagesKey = "images"
 // ImageBuildResolver is an interface to resolve image build info from its source.
 type ImageBuildResolver interface {
 	// ImageBuildInfo takes image as name and provides build definition for that.
-	ImageBuildInfo(image string) *types.BuildDefinition
+	ImageBuildInfo(image string) *driver.BuildDefinition
 }
 
 // ChainImageBuildResolver is a image build resolver that takes first available image in the chain.
 type ChainImageBuildResolver []ImageBuildResolver
 
 // ImageBuildInfo implements [ImageBuildResolver].
-func (r ChainImageBuildResolver) ImageBuildInfo(image string) *types.BuildDefinition {
+func (r ChainImageBuildResolver) ImageBuildInfo(image string) *driver.BuildDefinition {
 	for i := 0; i < len(r); i++ {
 		if b := r[i].ImageBuildInfo(image); b != nil {
 			return b
@@ -39,7 +39,7 @@ func (r ChainImageBuildResolver) ImageBuildInfo(image string) *types.BuildDefini
 }
 
 // ConfigImages is a container to parse [launchr.Config] in yaml format.
-type ConfigImages map[string]*types.BuildDefinition
+type ConfigImages map[string]*driver.BuildDefinition
 
 // LaunchrConfigImageBuildResolver is a resolver of image build in [launchr.Config] file.
 type LaunchrConfigImageBuildResolver struct {
@@ -47,7 +47,7 @@ type LaunchrConfigImageBuildResolver struct {
 }
 
 // ImageBuildInfo implements [ImageBuildResolver].
-func (r LaunchrConfigImageBuildResolver) ImageBuildInfo(image string) *types.BuildDefinition {
+func (r LaunchrConfigImageBuildResolver) ImageBuildInfo(image string) *driver.BuildDefinition {
 	if r.cfg == nil {
 		return nil
 	}

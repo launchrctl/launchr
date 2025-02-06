@@ -181,7 +181,7 @@ func addPredefinedVariables(data map[string]any, a *Action) {
 		data["current_uid"] = s[0]
 		data["current_gid"] = s[1]
 	}
-	data["current_working_dir"] = a.wd // app working directory
-	data["actions_base_dir"] = a.fsdir // root directory where the action was found
-	data["action_dir"] = a.Dir()       // directory of action file
+	data["current_working_dir"] = a.wd         // app working directory
+	data["actions_base_dir"] = a.fs.Realpath() // root directory where the action was found
+	data["action_dir"] = a.Dir()               // directory of action file
 }

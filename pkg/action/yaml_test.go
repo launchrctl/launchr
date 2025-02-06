@@ -1,11 +1,8 @@
 package action
 
 import (
-	"errors"
 	"fmt"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
@@ -18,8 +15,6 @@ func Test_CreateFromYaml(t *testing.T) {
 		input  string
 		expErr error
 	}
-
-	errAny := errors.New("any")
 
 	ttYaml := []testCase{
 		// Yaml action file is valid v1.
@@ -77,25 +72,19 @@ func Test_CreateFromYaml(t *testing.T) {
 		// Env variables replacement.
 		{"env variables string array", validEnvArr, nil},
 		{"env variables map", validEnvObj, nil},
-		{"invalid env variables", invalidEnv, errAny},
+		{"invalid env variables", invalidEnv, errTestAny{}},
 		{"invalid env declaration - string", invalidEnvStr, yamlTypeErrorLine(sErrArrOrMapEl, 8, 8)},
 		{"invalid env declaration - object", invalidEnvObj, yamlTypeErrorLine(sErrArrOrMapEl, 9, 5)},
 
 		// Templating.
-		{"unescaped template val", validUnescTplStr, errAny},
+		{"unescaped template val", validUnescTplStr, errTestAny{}},
 	}
 	for _, tt := range ttYaml {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			_, err := NewDefFromYaml([]byte(tt.input))
-			if tt.expErr == errAny {
-				assert.True(t, assert.Error(t, err))
-			} else if assert.IsType(t, tt.expErr, err) {
-				assert.Equal(t, tt.expErr, err)
-			} else {
-				assert.ErrorIs(t, err, tt.expErr)
-			}
+			assertIsSameError(t, tt.expErr, err)
 		})
 	}
 
@@ -110,23 +99,18 @@ func Test_CreateFromYamlTpl(t *testing.T) {
 		input  string
 		expErr error
 	}
-	errAny := errors.New("any")
 
 	ttYaml := []testCase{
 		{"supported unescaped template val", validUnescTplStr, nil},
-		{"unsupported unescaped template key", invalidUnescUnsupKeyTplStr, errAny},
-		{"unsupported unescaped template array", invalidUnescUnsupArrTplStr, errAny},
+		{"unsupported unescaped template key", invalidUnescUnsupKeyTplStr, errTestAny{}},
+		{"unsupported unescaped template array", invalidUnescUnsupArrTplStr, errTestAny{}},
 	}
 	for _, tt := range ttYaml {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			_, err := NewDefFromYamlTpl([]byte(tt.input))
-			if tt.expErr == errAny {
-				assert.True(t, assert.Error(t, err))
-			} else {
-				assert.ErrorIs(t, tt.expErr, err)
-			}
+			assertIsSameError(t, tt.expErr, err)
 		})
 	}
 }

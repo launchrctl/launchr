@@ -13,7 +13,6 @@ import (
 	"github.com/moby/term"
 
 	"github.com/launchrctl/launchr/internal/launchr"
-	ltypes "github.com/launchrctl/launchr/pkg/types"
 )
 
 // The default escape key sequence: ctrl-p, ctrl-q
@@ -49,7 +48,7 @@ type Streamer interface {
 
 // ContainerIOStream streams in/out/err to given streams.
 // @todo consider license reference.
-func ContainerIOStream(ctx context.Context, streams launchr.Streams, cio *ContainerInOut, config *ltypes.ContainerCreateOptions) error {
+func ContainerIOStream(ctx context.Context, streams launchr.Streams, cio *ContainerInOut, config *ContainerCreateOptions) error {
 	var (
 		out, cerr io.Writer
 		in        io.ReadCloser

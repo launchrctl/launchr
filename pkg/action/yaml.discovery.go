@@ -8,21 +8,27 @@ import (
 	"sync"
 )
 
-var rgxYamlFile = regexp.MustCompile(`^action\.(yaml|yml)$`)
+var (
+	// rgxYamlFilepath is a regex for a yaml path with unix and windows support.
+	rgxYamlFilepath = regexp.MustCompile(`.*[\\/]+actions[\\/]+[^\\/]+[\\/]+action\.y(a)?ml$`)
+	// rgxYamlRootFile is a regex for a yaml file located in root dir only.
+	rgxYamlRootFile = regexp.MustCompile(`^action\.y(a)?ml$`)
+)
 
 // NewYamlDiscovery is an implementation of discovery for searching yaml files.
 func NewYamlDiscovery(fs DiscoveryFS) *Discovery {
-	return NewDiscovery(fs, YamlDiscoveryStrategy{TargetRgx: rgxYamlFile})
+	return NewDiscovery(fs, YamlDiscoveryStrategy{TargetRgx: rgxYamlFilepath})
 }
 
 // YamlDiscoveryStrategy is a yaml discovery strategy.
 type YamlDiscoveryStrategy struct {
 	TargetRgx *regexp.Regexp
+	AllowRoot bool
 }
 
 // IsValid implements [DiscoveryStrategy].
-func (y YamlDiscoveryStrategy) IsValid(name string) bool {
-	return y.TargetRgx.MatchString(name)
+func (y YamlDiscoveryStrategy) IsValid(path string) bool {
+	return y.TargetRgx.MatchString(path)
 }
 
 // Loader implements [DiscoveryStrategy].

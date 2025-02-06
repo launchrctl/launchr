@@ -59,7 +59,7 @@ type buildEnvironment struct {
 }
 
 func newBuildEnvironment(streams launchr.Streams) (*buildEnvironment, error) {
-	tmpDir, err := os.MkdirTemp(".", "build_")
+	tmpDir, err := launchr.MkdirTemp("build_")
 	if err != nil {
 		return nil, err
 	}

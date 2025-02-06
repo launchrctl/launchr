@@ -1,7 +1,6 @@
 package builtinprocessors
 
 import (
-	"fmt"
 	"testing"
 	"testing/fstest"
 
@@ -96,13 +95,11 @@ func Test_ConfigProcessor(t *testing.T) {
 		"bool":   false,
 		"array":  []any{"3", "2", "1"},
 	}
-	errType := fmt.Errorf("failed to process parameter %q with %q: %w", "string", procGetConfigValue, jsonschema.NewErrTypeMismatch(0, ""))
-	errOpts := fmt.Errorf("option %q is required for %q processor", "path", procGetConfigValue)
 	tt := []action.TestCaseValueProcessor{
 		{Name: "get config value - no input given", Yaml: testProcGetConfig, ExpOpts: expConfig},
 		{Name: "get config value - input given", Yaml: testProcGetConfig, Opts: expGiven, ExpOpts: expGiven},
-		{Name: "get config value - result type mismatch", Yaml: testProcGetConfigTypeMismatch, ErrProc: errType},
-		{Name: "get config value - wrong options", Yaml: testProcGetConfigWrongDef, ErrInit: errOpts},
+		{Name: "get config value - result type mismatch", Yaml: testProcGetConfigTypeMismatch, ErrProc: jsonschema.NewErrTypeMismatch(0, "")},
+		{Name: "get config value - wrong options", Yaml: testProcGetConfigWrongDef, ErrInit: action.ErrValueProcessorOptionsFieldValidation{Field: "path", Reason: "required"}},
 	}
 	for _, tt := range tt {
 		tt := tt

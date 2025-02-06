@@ -34,12 +34,6 @@ type Config interface {
 	Get(key string, v any) error
 }
 
-// ConfigAware provides an interface for structs to support launchr configuration setting.
-type ConfigAware interface {
-	// SetLaunchrConfig sets a launchr config to the struct.
-	SetLaunchrConfig(Config)
-}
-
 type cachedProps = map[string]reflect.Value
 type config struct {
 	mx       sync.Mutex   // mx is a mutex to read/cache values.
@@ -67,7 +61,7 @@ func findConfigFile(root fs.FS) fs.DirEntry {
 func ConfigFromFS(root fs.FS) Config {
 	return &config{
 		root:     root,
-		rootPath: GetFsAbsPath(root),
+		rootPath: FsRealpath(root),
 		cached:   make(cachedProps),
 		fname:    findConfigFile(root),
 	}

@@ -2,17 +2,13 @@
 package builtinprocessors
 
 import (
-	"fmt"
-
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/action"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 const (
-	// Deprecated: update definitions and use procGetConfigValue
-	procGetConfigValueDeprecated = "launchr.GetConfigValue"
-	procGetConfigValue           = "config.GetValue"
+	procGetConfigValue = "config.GetValue"
 )
 
 func init() {
@@ -43,30 +39,21 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 }
 
 // ConfigGetProcessorOptions is an options struct for `config.GetValue`.
-type ConfigGetProcessorOptions struct {
-	Path string `yaml:"path"`
-}
-
-// Validate implements [action.ValueProcessorOptions] interface.
-func (o *ConfigGetProcessorOptions) Validate() error {
-	if o.Path == "" {
-		return fmt.Errorf(`option "path" is required for %q processor`, procGetConfigValue)
-	}
-	return nil
-}
+type ConfigGetProcessorOptions = *action.GenericValueProcessorOptions[struct {
+	Path string `yaml:"path" validate:"not-empty"`
+}]
 
 // addValueProcessors submits new [action.ValueProcessor] to [action.Manager].
 func addValueProcessors(m action.Manager, cfg launchr.Config) {
-	procCfg := action.GenericValueProcessor[*ConfigGetProcessorOptions]{
-		Fn: func(v any, opts *ConfigGetProcessorOptions, ctx action.ValueProcessorContext) (any, error) {
+	procCfg := action.GenericValueProcessor[ConfigGetProcessorOptions]{
+		Fn: func(v any, opts ConfigGetProcessorOptions, ctx action.ValueProcessorContext) (any, error) {
 			return processorConfigGetByKey(v, opts, ctx, cfg)
 		},
 	}
-	m.AddValueProcessor(procGetConfigValueDeprecated, procCfg)
 	m.AddValueProcessor(procGetConfigValue, procCfg)
 }
 
-func processorConfigGetByKey(v any, opts *ConfigGetProcessorOptions, ctx action.ValueProcessorContext, cfg launchr.Config) (any, error) {
+func processorConfigGetByKey(v any, opts ConfigGetProcessorOptions, ctx action.ValueProcessorContext, cfg launchr.Config) (any, error) {
 	// If value is provided by user, do not override.
 	if ctx.IsChanged {
 		return v, nil
@@ -74,7 +61,7 @@ func processorConfigGetByKey(v any, opts *ConfigGetProcessorOptions, ctx action.
 
 	// Get value from the config.
 	var res any
-	err := cfg.Get(opts.Path, &res)
+	err := cfg.Get(opts.Fields.Path, &res)
 	if err != nil {
 		return v, err
 	}

@@ -3,24 +3,14 @@ package action
 import (
 	"context"
 	"io/fs"
-	"math/rand"
 	"path"
 	"testing"
 	"testing/fstest"
 
-	"github.com/docker/docker/pkg/namesgenerator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/launchrctl/launchr/internal/launchr"
-)
-
-type genPathType int
-
-const (
-	genPathTypeValid     genPathType = iota // genPathTypeValid is a valid actions path
-	genPathTypeArbitrary                    // genPathTypeArbitrary is a random string without actions directory.
-	genPathTypeGHActions                    // genPathTypeGHActions is an incorrect hidden path but with actions directory.
 )
 
 func Test_Discover(t *testing.T) {
@@ -32,15 +22,15 @@ func Test_Discover(t *testing.T) {
 		expCnt int
 	}
 
-	allValid := _getFsMapActions(7, validEmptyVersionYaml, genPathTypeValid)
-	invalidYaml := _mergeFsMaps(
-		_getFsMapActions(7, validEmptyVersionYaml, genPathTypeValid),
-		_getFsMapActions(3, invalidEmptyCmdYaml, genPathTypeValid),
+	allValid := genFsTestMapActions(7, validEmptyVersionYaml, genPathTypeValid)
+	invalidYaml := mergeFsTestMaps(
+		genFsTestMapActions(7, validEmptyVersionYaml, genPathTypeValid),
+		genFsTestMapActions(3, invalidEmptyCmdYaml, genPathTypeValid),
 	)
-	invalidPath := _mergeFsMaps(
-		_getFsMapActions(7, validEmptyVersionYaml, genPathTypeValid),
-		_getFsMapActions(3, validEmptyVersionYaml, genPathTypeArbitrary),
-		_getFsMapActions(3, validEmptyVersionYaml, genPathTypeGHActions),
+	invalidPath := mergeFsTestMaps(
+		genFsTestMapActions(7, validEmptyVersionYaml, genPathTypeValid),
+		genFsTestMapActions(3, validEmptyVersionYaml, genPathTypeArbitrary),
+		genFsTestMapActions(3, validEmptyVersionYaml, genPathTypeGHActions),
 	)
 
 	// @todo test path contains 2 actions in same dir.
@@ -73,7 +63,7 @@ func Test_Discover(t *testing.T) {
 
 func Test_Discover_ActionWD(t *testing.T) {
 	// Test if working directory is correctly set to actions on discovery.
-	tfs := _getFsMapActions(1, validEmptyVersionYaml, genPathTypeValid)
+	tfs := genFsTestMapActions(1, validEmptyVersionYaml, genPathTypeValid)
 	var expFPath string
 	for expFPath = range tfs {
 		break
@@ -174,42 +164,4 @@ func Test_Discover_IDProvider(t *testing.T) {
 			t.Errorf("expected %q, got %q", tt.exp, res)
 		}
 	}
-}
-
-func _generateActionPath(d int, pathType genPathType) string {
-	elems := make([]string, 0, d+3)
-	for i := 0; i < d; i++ {
-		elems = append(elems, namesgenerator.GetRandomName(0))
-	}
-	switch pathType {
-	case genPathTypeValid:
-		elems = append(elems, actionsDirname)
-	case genPathTypeGHActions:
-		elems = append(elems, ".github", actionsDirname)
-	case genPathTypeArbitrary:
-		fallthrough
-	default:
-		// Do nothing.
-	}
-	elems = append(elems, namesgenerator.GetRandomName(0), "action.yaml")
-	return path.Join(elems...)
-}
-
-func _getFsMapActions(num int, str string, pathType genPathType) fstest.MapFS {
-	m := make(fstest.MapFS)
-	for i := 0; i < num; i++ {
-		fa := _generateActionPath(rand.Intn(5)+1, pathType) //nolint:gosec
-		m[fa] = &fstest.MapFile{Data: []byte(str)}
-	}
-	return m
-}
-
-func _mergeFsMaps(maps ...fstest.MapFS) fstest.MapFS {
-	m := make(fstest.MapFS)
-	for _, mm := range maps {
-		for k, v := range mm {
-			m[k] = v
-		}
-	}
-	return m
 }

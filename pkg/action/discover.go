@@ -32,13 +32,24 @@ type AlterActionsPlugin interface {
 
 // DiscoveryFS is a file system to discover actions.
 type DiscoveryFS struct {
+	// fs is a filesystem where to discover actions.
 	fs fs.FS
+	// wd is a working directory for discovered actions.
+	// Discovered actions may override it with SetWorkingDir.
 	wd string
+	// real is a cached calculated real path of the fs. If virtual, it's empty string.
+	real string
 }
 
 // NewDiscoveryFS creates a [DiscoveryFS] given fs - a filesystem to discover
 // and wd - working directory for an action, leave empty for current path.
-func NewDiscoveryFS(fs fs.FS, wd string) DiscoveryFS { return DiscoveryFS{fs, wd} }
+func NewDiscoveryFS(fs fs.FS, wd string) DiscoveryFS {
+	return DiscoveryFS{
+		fs:   fs,
+		wd:   wd,
+		real: launchr.FsRealpath(fs),
+	}
+}
 
 // FS implements [launchr.ManagedFS].
 func (f DiscoveryFS) FS() fs.FS { return f.fs }
@@ -55,57 +66,52 @@ func (f DiscoveryFS) OpenCallback(name string) FileLoadFn {
 	}
 }
 
+// Realpath returns the real os path of the underlying FS.
+func (f DiscoveryFS) Realpath() string {
+	return f.real
+}
+
 // FileLoadFn is a type for loading a file.
 type FileLoadFn func() (fs.File, error)
 
 // DiscoveryStrategy is a way files will be discovered and loaded.
 type DiscoveryStrategy interface {
-	IsValid(name string) bool
+	IsValid(path string) bool
 	Loader(l FileLoadFn, p ...LoadProcessor) Loader
 }
 
 // Discovery defines a common functionality for discovering action files.
 type Discovery struct {
-	fs    DiscoveryFS
-	fsDir string
-	ds    DiscoveryStrategy
-	idp   IDProvider
+	fs  DiscoveryFS
+	ds  DiscoveryStrategy
+	idp IDProvider
 }
 
 // NewDiscovery creates an instance of action discovery.
 func NewDiscovery(fs DiscoveryFS, ds DiscoveryStrategy) *Discovery {
-	fsDir := launchr.GetFsAbsPath(fs.fs)
 	return &Discovery{
-		fs:    fs,
-		fsDir: fsDir,
-		ds:    ds,
-		idp:   DefaultIDProvider{},
+		fs:  fs,
+		ds:  ds,
+		idp: DefaultIDProvider{},
 	}
 }
 
 func (ad *Discovery) isValid(path string, d fs.DirEntry) bool {
-	i := strings.LastIndex(path, actionsSubdir)
-
 	// Invalid paths for action definition file.
 	if d.IsDir() ||
-		// No "actions" directory in the path.
-		i == -1 ||
 		// Must not be hidden itself.
-		launchr.IsHiddenPath(path) ||
-		// Count depth of directories inside actions, must be only 1, not deeper.
-		// Nested actions are not allowed.
-		// dir/actions/1/action.yaml - OK, dir/actions/1/2/action.yaml - NOK.
-		strings.Count(path[i+len(actionsSubdir):], string(filepath.Separator)) > 1 {
+		launchr.IsHiddenPath(path) {
 		return false
 	}
 
-	return ad.ds.IsValid(d.Name())
+	return ad.ds.IsValid(path)
 }
 
 // findFiles searches for a filename in a given dir.
 // Returns an array of relative file paths.
-func (ad *Discovery) findFiles(ctx context.Context) chan string {
+func (ad *Discovery) findFiles(ctx context.Context) (chan string, chan error) {
 	ch := make(chan string, 10)
+	errCh := make(chan error)
 	go func() {
 		longOpTimeout := time.After(5 * time.Second)
 		err := fs.WalkDir(ad.fs, ".", func(path string, d fs.DirEntry, err error) error {
@@ -122,7 +128,7 @@ func (ad *Discovery) findFiles(ctx context.Context) chan string {
 			}
 			// Skip OS specific directories to prevent going too deep.
 			// Skip hidden directories.
-			if d != nil && d.IsDir() && (launchr.IsHiddenPath(path) || launchr.IsSystemPath(ad.fsDir, path)) {
+			if d != nil && d.IsDir() && (launchr.IsHiddenPath(path) || launchr.IsSystemPath(ad.fs.Realpath(), path)) {
 				return fs.SkipDir
 			}
 			if err != nil {
@@ -143,14 +149,15 @@ func (ad *Discovery) findFiles(ctx context.Context) chan string {
 		})
 
 		if err != nil {
-			// @todo we shouldn't log here
-			launchr.Log().Error("Error while discovering actions", "error", err)
+			// Probably never happens since we check for permissions.
+			errCh <- err
 		}
 
 		close(ch)
+		close(errCh)
 	}()
 
-	return ch
+	return ch, errCh
 }
 
 // Discover traverses the file structure for a given discovery path.
@@ -165,7 +172,8 @@ func (ad *Discovery) Discover(ctx context.Context) ([]*Action, error) {
 	actions := make([]*Action, 0, 32)
 
 	// Traverse the FS.
-	for f := range ad.findFiles(ctx) {
+	chFiles, chErr := ad.findFiles(ctx)
+	for f := range chFiles {
 		wg.Add(1)
 		go func(f string) {
 			defer wg.Done()
@@ -178,6 +186,11 @@ func (ad *Discovery) Discover(ctx context.Context) ([]*Action, error) {
 	}
 
 	wg.Wait()
+	// Check traversing the tree didn't have error.
+	// Usually no error, because we check for permissions.
+	if err := <-chErr; err != nil {
+		return nil, err
+	}
 
 	// Sort alphabetically.
 	sort.Slice(actions, func(i, j int) bool {
@@ -193,7 +206,7 @@ func (ad *Discovery) parseFile(f string) *Action {
 		envProcessor{},
 		inputProcessor{},
 	)
-	a := New(ad.idp, loader, ad.fsDir, f)
+	a := New(ad.idp, loader, ad.fs, f)
 	a.SetWorkDir(launchr.MustAbs(ad.fs.wd))
 	return a
 }

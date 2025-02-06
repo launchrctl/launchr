@@ -8,7 +8,8 @@ import (
 type Type string
 
 const (
-	Docker Type = "docker" // Docker driver
+	Docker     Type = "docker"     // Docker runtime.
+	Kubernetes Type = "kubernetes" // Kubernetes runtime.
 )
 
 // New creates a new driver based on a type.
@@ -17,6 +18,6 @@ func New(t Type) (ContainerRunner, error) {
 	case Docker:
 		return NewDockerDriver()
 	default:
-		panic(fmt.Sprintf("driver %q is not implemented", t))
+		panic(fmt.Sprintf("container runtime %q is not implemented", t))
 	}
 }
