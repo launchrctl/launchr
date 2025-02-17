@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/driver"
@@ -150,7 +151,9 @@ func (a *Action) syncToDisk() (err error) {
 		return
 	}
 	// Export to a temporary path.
-	tmpDir, err := launchr.MkdirTemp(a.ID)
+	// Make sure the path doesn't have semicolons, because Docker bind doesn't like it.
+	tmpDirName := strings.Replace(a.ID, ":", "_", -1)
+	tmpDir, err := launchr.MkdirTemp(tmpDirName)
 	if err != nil {
 		return
 	}

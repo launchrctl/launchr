@@ -15,6 +15,7 @@ import (
 
 var configRegex = regexp.MustCompile(`^config\.(yaml|yml)$`)
 
+// Common errors.
 var (
 	ErrNoConfigFile = errors.New("config file is not found") // ErrNoConfigFile when config file doesn't exist in FS.
 )

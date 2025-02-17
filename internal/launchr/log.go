@@ -28,6 +28,7 @@ type Logger struct {
 // A LogLevel is the importance or severity of a log event.
 type LogLevel int
 
+// Log levels.
 const (
 	LogLevelDisabled LogLevel = iota // LogLevelDisabled does never print.
 	LogLevelDebug                    // LogLevelDebug is the log level for debug.

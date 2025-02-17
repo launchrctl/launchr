@@ -15,6 +15,7 @@ import (
 // Compression is the state represents if compressed or not.
 type Compression archive.Compression
 
+// Compressions types.
 const (
 	Uncompressed = Compression(archive.Uncompressed) // Uncompressed represents the uncompressed.
 	Bzip2        = Compression(archive.Bzip2)        // Bzip2 is bzip2 compression algorithm.

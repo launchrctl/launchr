@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	osuser "os/user"
 	"path/filepath"
 	"reflect"
 )
@@ -15,6 +16,15 @@ func MustAbs(path string) string {
 		panic(err)
 	}
 	return abs
+}
+
+// MustSubFS returns an [FS] corresponding to the subtree rooted at fsys's dir.
+func MustSubFS(fsys fs.FS, path string) fs.FS {
+	sub, err := fs.Sub(fsys, path)
+	if err != nil {
+		panic(err)
+	}
+	return sub
 }
 
 // FsRealpath returns absolute path for a [fs.FS] interface.
@@ -100,36 +110,54 @@ func existsInSlice[T comparable](slice []T, el T) bool {
 // MkdirTemp creates a temporary directory.
 // It tries to create a directory in memory (tmpfs).
 func MkdirTemp(pattern string) (string, error) {
+	var err error
+	u, err := osuser.Current()
+	if err != nil {
+		u = &osuser.User{}
+	}
 	baseCand := []string{
 		// Linux tmpfs paths.
-		"/run",
+		"/dev/shm",           // Should be available for all.
+		"/run/user/" + u.Uid, // User specific.
+		"/run",               // Root.
 		// Fallback to temp dir, it may not be written to disk if the files are small or deleted shortly.
+		// It will be used for Windows and macOS.
 		os.TempDir(),
 	}
 	basePath := ""
+	dirPath := ""
 	for _, cand := range baseCand {
 		// Ensure base path exists
-		if stat, err := os.Stat(cand); err == nil && stat.IsDir() {
+		var stat os.FileInfo
+		if stat, err = os.Stat(cand); err == nil && stat.IsDir() {
 			basePath = cand
+			if name != "" {
+				newBase := filepath.Join(basePath, name)
+				err = os.Mkdir(newBase, 0750)
+				if err != nil && !os.IsExist(err) {
+					// Try next candidate.
+					continue
+				}
+				basePath = newBase
+			}
+
+			// Create the directory
+			dirPath, err = os.MkdirTemp(basePath, pattern)
+			if err != nil {
+				// Try next candidate.
+				continue
+			}
+			// We found the candidate.
 			break
 		}
 	}
-	if basePath == "" {
-		return "", fmt.Errorf("no access temp directory")
-	}
-	if name != "" {
-		newBase := filepath.Join(basePath, name)
-		err := os.Mkdir(newBase, 0750)
-		if err != nil {
-			basePath = newBase
-		}
-	}
-
-	// Create the directory
-	dirPath, err := os.MkdirTemp(basePath, pattern)
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp directory '%s': %w", dirPath, err)
 	}
+	if dirPath == "" {
+		return "", fmt.Errorf("failed to create temp directory")
+	}
+
 	// Make sure the dir is cleaned on finish.
 	RegisterCleanupFn(func() error {
 		return os.RemoveAll(dirPath)

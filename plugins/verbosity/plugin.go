@@ -25,6 +25,7 @@ func (p Plugin) PluginInfo() launchr.PluginInfo {
 // LogFormat is a enum type for log output format.
 type LogFormat string
 
+// Log formats.
 const (
 	LogFormatPretty LogFormat = "pretty" // LogFormatPretty is a default logger output format.
 	LogFormatPlain  LogFormat = "plain"  // LogFormatPlain is a plain logger output format.

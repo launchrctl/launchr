@@ -102,6 +102,7 @@ type ImageRemoveOptions = typesimage.RemoveOptions
 // ImageStatus defines image status on local machine.
 type ImageStatus int64
 
+// Image statuses.
 const (
 	ImageExists          ImageStatus = iota // ImageExists - image exists locally.
 	ImageUnexpectedError                    // ImageUnexpectedError - image can't be pulled or retrieved.
@@ -157,6 +158,7 @@ type CopyToContainerOptions = typescontainer.CopyToContainerOptions
 // NetworkMode is a type alias for container Network mode.
 type NetworkMode = typescontainer.NetworkMode
 
+// Network modes.
 const (
 	NetworkModeHost NetworkMode = "host" // NetworkModeHost for host network.
 )
@@ -196,6 +198,7 @@ type ContainerWaitOptions struct {
 // WaitCondition is a type for available wait conditions.
 type WaitCondition = typescontainer.WaitCondition
 
+// Container wait conditions.
 const (
 	WaitConditionNotRunning WaitCondition = typescontainer.WaitConditionNotRunning // WaitConditionNotRunning when container exits when running.
 	WaitConditionNextExit   WaitCondition = typescontainer.WaitConditionNextExit   // WaitConditionNextExit when container exits after next start.

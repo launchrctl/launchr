@@ -231,17 +231,11 @@ func (d *dockerDriver) ContainerKill(ctx context.Context, containerID, signal st
 }
 
 func (d *dockerDriver) ContainerResize(ctx context.Context, cid string, opts ResizeOptions) error {
-	return d.cli.ContainerResize(ctx, cid, container.ResizeOptions{
-		Height: opts.Height,
-		Width:  opts.Width,
-	})
+	return d.cli.ContainerResize(ctx, cid, container.ResizeOptions(opts))
 }
 
 func (d *dockerDriver) ContainerExecResize(ctx context.Context, cid string, opts ResizeOptions) error {
-	return d.cli.ContainerExecResize(ctx, cid, container.ResizeOptions{
-		Height: opts.Height,
-		Width:  opts.Width,
-	})
+	return d.cli.ContainerExecResize(ctx, cid, container.ResizeOptions(opts))
 }
 
 // Close closes docker cli connection.

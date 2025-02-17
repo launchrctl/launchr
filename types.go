@@ -9,10 +9,11 @@ import (
 	"github.com/launchrctl/launchr/pkg/action"
 )
 
-const (
-	// PkgPath is a main module path.
-	PkgPath = launchr.PkgPath
+// PkgPath is a main module path.
+const PkgPath = launchr.PkgPath
 
+// Log levels.
+const (
 	LogLevelDisabled = launchr.LogLevelDisabled // LogLevelDisabled does never print.
 	LogLevelDebug    = launchr.LogLevelDebug    // LogLevelDebug is the log level for debug.
 	LogLevelInfo     = launchr.LogLevelInfo     // LogLevelInfo is the log level for info.
@@ -137,3 +138,9 @@ func NewExitError(code int, msg string) error { return launchr.NewExitError(code
 // RegisterCleanupFn saves a function to be executed on Cleanup.
 // It is run on the termination of the application.
 func RegisterCleanupFn(fn func() error) { launchr.RegisterCleanupFn(fn) }
+
+// MustAbs returns absolute filepath and panics on error.
+func MustAbs(path string) string { return launchr.MustAbs(path) }
+
+// MustSubFS returns an [fs.FS] corresponding to the subtree rooted at fsys's dir.
+func MustSubFS(fsys fs.FS, path string) fs.FS { return launchr.MustSubFS(fsys, path) }

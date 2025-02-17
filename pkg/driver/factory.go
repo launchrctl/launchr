@@ -7,6 +7,7 @@ import (
 // Type defines implemented driver types.
 type Type string
 
+// Available container runtime types.
 const (
 	Docker     Type = "docker"     // Docker runtime.
 	Kubernetes Type = "kubernetes" // Kubernetes runtime.

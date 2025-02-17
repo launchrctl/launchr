@@ -1,0 +1,19 @@
+runtime: plugin
+action:
+  title: Plugin example
+  arguments:
+    - name: arg
+      type: string
+      required: true
+    - name: arg_optional
+      type: string
+      default: "default"
+  options:
+    - name: opt_int
+      type: integer
+      default: 42
+    - name: opt_bool
+      type: boolean
+      default: false
+    - name: opt_no_default
+      type: string
