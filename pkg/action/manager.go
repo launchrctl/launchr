@@ -119,7 +119,11 @@ func (m *actionManagerMap) Add(a *Action) error {
 		return err
 	}
 	if dup, ok := m.actionStore[a.ID]; ok {
-		return fmt.Errorf("action with id %q has another declaration. Check the files:\n  %s\n  %s", a.ID, dup.Filepath(), a.Filepath())
+		launchr.Log().Debug("action was overridden by another declaration",
+			"action_id", a.ID,
+			"old", dup.Filepath(),
+			"new", a.Filepath(),
+		)
 	}
 	m.actionStore[a.ID] = a
 	return nil

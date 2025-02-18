@@ -71,6 +71,19 @@ func (f DiscoveryFS) Realpath() string {
 	return f.real
 }
 
+// IsExists checks if the underlying filesystem path is available for discovery.
+func (f DiscoveryFS) IsExists() bool {
+	if f.real == "" {
+		// Virtual fs is always available.
+		return true
+	}
+	// Check the path exists.
+	if stat, err := os.Stat(f.real); err != nil || !stat.IsDir() {
+		return false
+	}
+	return true
+}
+
 // FileLoadFn is a type for loading a file.
 type FileLoadFn func() (fs.File, error)
 
@@ -165,8 +178,11 @@ func (ad *Discovery) findFiles(ctx context.Context) (chan string, chan error) {
 // If an action is invalid, it's ignored.
 func (ad *Discovery) Discover(ctx context.Context) ([]*Action, error) {
 	defer launchr.EstimateTime(func(diff time.Duration) {
-		launchr.Log().Debug("action discovering estimated time", "time", diff.Round(time.Millisecond))
+		launchr.Log().Debug("action discovering elapsed time", "time", diff.Round(time.Millisecond), "path", ad.fs.Realpath())
 	})
+	if !ad.fs.IsExists() {
+		return nil, nil
+	}
 	wg := sync.WaitGroup{}
 	mx := sync.Mutex{}
 	actions := make([]*Action, 0, 32)
