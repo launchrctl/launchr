@@ -65,10 +65,38 @@ func Test_InputProcessor(t *testing.T) {
 	assert.Equal(t, "", string(res))
 
 	// Check that we have an error when missing variables are not handled.
+	errMissVars := errMissingVar{vars: map[string]struct{}{"optUnd": {}, "arg2": {}}}
 	s = "{{ .arg2 }},{{ .optUnd }}"
 	res, err = proc.Process(ctx, []byte(s))
-	assert.Equal(t, err, errMissingVar{vars: map[string]struct{}{"optUnd": {}, "arg2": {}}})
+	assert.Equal(t, errMissVars, err)
 	assert.Equal(t, "", string(res))
+
+	// Remove line if a variable not exists or is nil.
+	s = `- "{{ .arg1 | removeLineIfNil }}"
+- "{{ .optUnd | removeLineIfNil }}" # Piping with new line
+- "{{ if not (isNil .arg1) }}arg1 is not nil{{end}}"
+- "{{ if (isNil .optUnd) }}{{ removeLine }}{{ end }}" # Function call without new line`
+	res, err = proc.Process(ctx, []byte(s))
+	assert.NoError(t, err)
+	assert.Equal(t, "- \"arg1\"\n- \"arg1 is not nil\"\n", string(res))
+
+	// Remove line if a variable not exists or is nil, 1 argument is not defined and not checked.
+	s = `- "{{ .arg1 | removeLineIfNil }}"
+- "{{ .optUnd|removeLineIfNil }}" # Piping with new line
+- "{{ .arg2 }}"
+- "{{ if not (isNil .arg1) }}arg1 is not nil{{end}}"
+- "{{ if (isNil .optUnd) }}{{ removeLine }}{{ end }}" # Function call without new line`
+	_, err = proc.Process(ctx, []byte(s))
+	assert.Equal(t, errMissVars, err)
+
+	s = `- "{{ if isSet .arg1 }}arg1 is set"{{end}}
+- "{{ removeLineIfSet .arg1 }}" # Function call without new line
+- "{{ if isChanged .arg1 }}arg1 is changed{{end}}"
+- '{{ removeLineIfNotChanged "arg1" }}'
+- '{{ removeLineIfChanged "arg1" }}' # Function call without new line`
+	res, err = proc.Process(ctx, []byte(s))
+	assert.NoError(t, err)
+	assert.Equal(t, "- \"arg1 is set\"\n- \"arg1 is changed\"\n- 'arg1'\n", string(res))
 }
 
 func Test_YamlTplCommentsProcessor(t *testing.T) {
