@@ -5,15 +5,14 @@ import (
 	"errors"
 	"io"
 
+	"github.com/launchrctl/launchr/pkg/archive"
+
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/errdefs"
-	"github.com/docker/docker/pkg/archive"
-
-	"github.com/launchrctl/launchr/pkg/types"
 )
 
 type dockerDriver struct {
@@ -31,12 +30,12 @@ func NewDockerDriver() (ContainerRunner, error) {
 	return &dockerDriver{cli: c}, nil
 }
 
-func (d *dockerDriver) Info(ctx context.Context) (types.SystemInfo, error) {
+func (d *dockerDriver) Info(ctx context.Context) (SystemInfo, error) {
 	info, err := d.cli.Info(ctx)
 	if err != nil {
-		return types.SystemInfo{}, err
+		return SystemInfo{}, err
 	}
-	return types.SystemInfo{
+	return SystemInfo{
 		ID:              info.ID,
 		Name:            info.Name,
 		ServerVersion:   info.ServerVersion,
@@ -64,7 +63,7 @@ func (d *dockerDriver) IsSELinuxSupported(ctx context.Context) bool {
 	return false
 }
 
-func (d *dockerDriver) ContainerList(ctx context.Context, opts types.ContainerListOptions) []types.ContainerListResult {
+func (d *dockerDriver) ContainerList(ctx context.Context, opts ContainerListOptions) []ContainerListResult {
 	f := filters.NewArgs()
 	f.Add("name", opts.SearchName)
 	l, err := d.cli.ContainerList(ctx, container.ListOptions{
@@ -74,9 +73,9 @@ func (d *dockerDriver) ContainerList(ctx context.Context, opts types.ContainerLi
 	if err != nil {
 		return nil
 	}
-	lp := make([]types.ContainerListResult, len(l))
+	lp := make([]ContainerListResult, len(l))
 	for i, c := range l {
-		lp[i] = types.ContainerListResult{
+		lp[i] = ContainerListResult{
 			ID:     c.ID,
 			Names:  c.Names,
 			Status: c.Status,
@@ -85,7 +84,7 @@ func (d *dockerDriver) ContainerList(ctx context.Context, opts types.ContainerLi
 	return lp
 }
 
-func (d *dockerDriver) ImageEnsure(ctx context.Context, imgOpts types.ImageOptions) (*types.ImageStatusResponse, error) {
+func (d *dockerDriver) ImageEnsure(ctx context.Context, imgOpts ImageOptions) (*ImageStatusResponse, error) {
 	// Check if the image already exists.
 	insp, _, err := d.cli.ImageInspectWithRaw(ctx, imgOpts.Name)
 	if err != nil {
@@ -95,14 +94,19 @@ func (d *dockerDriver) ImageEnsure(ctx context.Context, imgOpts types.ImageOptio
 	}
 
 	if insp.ID != "" && !imgOpts.ForceRebuild && !imgOpts.NoCache {
-		return &types.ImageStatusResponse{Status: types.ImageExists}, nil
+		return &ImageStatusResponse{Status: ImageExists}, nil
 	}
 	// Build the image if it doesn't exist.
 	if imgOpts.Build != nil {
-		buildContext, errTar := archive.TarWithOptions(imgOpts.Build.Context, &archive.TarOptions{})
+		srcInfo, err := archive.CopyInfoSourcePath(imgOpts.Build.Context, false)
+		if err != nil {
+			return nil, err
+		}
+		buildContext, errTar := archive.Tar(srcInfo, archive.CopyInfo{}, nil)
 		if errTar != nil {
 			return nil, errTar
 		}
+		defer buildContext.Close()
 		resp, errBuild := d.cli.ImageBuild(ctx, buildContext, dockertypes.ImageBuildOptions{
 			Tags:       []string{imgOpts.Name},
 			BuildArgs:  imgOpts.Build.Args,
@@ -112,41 +116,41 @@ func (d *dockerDriver) ImageEnsure(ctx context.Context, imgOpts types.ImageOptio
 		if errBuild != nil {
 			return nil, errBuild
 		}
-		return &types.ImageStatusResponse{Status: types.ImageBuild, Progress: resp.Body}, nil
+		return &ImageStatusResponse{Status: ImageBuild, Progress: resp.Body}, nil
 	}
 	// Pull the specified image.
 	reader, err := d.cli.ImagePull(ctx, imgOpts.Name, image.PullOptions{})
 	if err != nil {
-		return &types.ImageStatusResponse{Status: types.ImageUnexpectedError}, err
+		return &ImageStatusResponse{Status: ImageUnexpectedError}, err
 	}
-	return &types.ImageStatusResponse{Status: types.ImagePull, Progress: reader}, nil
+	return &ImageStatusResponse{Status: ImagePull, Progress: reader}, nil
 }
 
-func (d *dockerDriver) ImageRemove(ctx context.Context, img string, options types.ImageRemoveOptions) (*types.ImageRemoveResponse, error) {
+func (d *dockerDriver) ImageRemove(ctx context.Context, img string, options ImageRemoveOptions) (*ImageRemoveResponse, error) {
 	_, err := d.cli.ImageRemove(ctx, img, image.RemoveOptions(options))
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &types.ImageRemoveResponse{Status: types.ImageRemoved}, nil
+	return &ImageRemoveResponse{Status: ImageRemoved}, nil
 }
 
-func (d *dockerDriver) CopyToContainer(ctx context.Context, cid string, path string, content io.Reader, opts types.CopyToContainerOptions) error {
+func (d *dockerDriver) CopyToContainer(ctx context.Context, cid string, path string, content io.Reader, opts CopyToContainerOptions) error {
 	return d.cli.CopyToContainer(ctx, cid, path, content, container.CopyToContainerOptions(opts))
 }
 
-func (d *dockerDriver) CopyFromContainer(ctx context.Context, cid, srcPath string) (io.ReadCloser, types.ContainerPathStat, error) {
+func (d *dockerDriver) CopyFromContainer(ctx context.Context, cid, srcPath string) (io.ReadCloser, ContainerPathStat, error) {
 	r, stat, err := d.cli.CopyFromContainer(ctx, cid, srcPath)
-	return r, types.ContainerPathStat(stat), err
+	return r, ContainerPathStat(stat), err
 }
 
-func (d *dockerDriver) ContainerStatPath(ctx context.Context, cid string, path string) (types.ContainerPathStat, error) {
+func (d *dockerDriver) ContainerStatPath(ctx context.Context, cid string, path string) (ContainerPathStat, error) {
 	res, err := d.cli.ContainerStatPath(ctx, cid, path)
-	return types.ContainerPathStat(res), err
+	return ContainerPathStat(res), err
 }
 
-func (d *dockerDriver) ContainerCreate(ctx context.Context, opts types.ContainerCreateOptions) (string, error) {
+func (d *dockerDriver) ContainerCreate(ctx context.Context, opts ContainerCreateOptions) (string, error) {
 	hostCfg := &container.HostConfig{
 		AutoRemove:  opts.AutoRemove,
 		ExtraHosts:  opts.ExtraHosts,
@@ -182,21 +186,21 @@ func (d *dockerDriver) ContainerCreate(ctx context.Context, opts types.Container
 	return resp.ID, nil
 }
 
-func (d *dockerDriver) ContainerStart(ctx context.Context, cid string, _ types.ContainerStartOptions) error {
+func (d *dockerDriver) ContainerStart(ctx context.Context, cid string, _ ContainerStartOptions) error {
 	return d.cli.ContainerStart(ctx, cid, container.StartOptions{})
 }
 
-func (d *dockerDriver) ContainerWait(ctx context.Context, cid string, opts types.ContainerWaitOptions) (<-chan types.ContainerWaitResponse, <-chan error) {
+func (d *dockerDriver) ContainerWait(ctx context.Context, cid string, opts ContainerWaitOptions) (<-chan ContainerWaitResponse, <-chan error) {
 	statusCh, errCh := d.cli.ContainerWait(ctx, cid, container.WaitCondition(opts.Condition))
 
-	wrappedStCh := make(chan types.ContainerWaitResponse)
+	wrappedStCh := make(chan ContainerWaitResponse)
 	go func() {
 		st := <-statusCh
 		var err error
 		if st.Error != nil {
 			err = errors.New(st.Error.Message)
 		}
-		wrappedStCh <- types.ContainerWaitResponse{
+		wrappedStCh <- ContainerWaitResponse{
 			StatusCode: int(st.StatusCode),
 			Error:      err,
 		}
@@ -205,7 +209,7 @@ func (d *dockerDriver) ContainerWait(ctx context.Context, cid string, opts types
 	return wrappedStCh, errCh
 }
 
-func (d *dockerDriver) ContainerAttach(ctx context.Context, containerID string, options types.ContainerAttachOptions) (*ContainerInOut, error) {
+func (d *dockerDriver) ContainerAttach(ctx context.Context, containerID string, options ContainerAttachOptions) (*ContainerInOut, error) {
 	resp, err := d.cli.ContainerAttach(ctx, containerID, container.AttachOptions(options))
 	if err != nil {
 		return nil, err
@@ -218,7 +222,7 @@ func (d *dockerDriver) ContainerStop(ctx context.Context, cid string) error {
 	return d.cli.ContainerStop(ctx, cid, container.StopOptions{})
 }
 
-func (d *dockerDriver) ContainerRemove(ctx context.Context, cid string, _ types.ContainerRemoveOptions) error {
+func (d *dockerDriver) ContainerRemove(ctx context.Context, cid string, _ ContainerRemoveOptions) error {
 	return d.cli.ContainerRemove(ctx, cid, container.RemoveOptions{})
 }
 
@@ -226,18 +230,12 @@ func (d *dockerDriver) ContainerKill(ctx context.Context, containerID, signal st
 	return d.cli.ContainerKill(ctx, containerID, signal)
 }
 
-func (d *dockerDriver) ContainerResize(ctx context.Context, cid string, opts types.ResizeOptions) error {
-	return d.cli.ContainerResize(ctx, cid, container.ResizeOptions{
-		Height: opts.Height,
-		Width:  opts.Width,
-	})
+func (d *dockerDriver) ContainerResize(ctx context.Context, cid string, opts ResizeOptions) error {
+	return d.cli.ContainerResize(ctx, cid, container.ResizeOptions(opts))
 }
 
-func (d *dockerDriver) ContainerExecResize(ctx context.Context, cid string, opts types.ResizeOptions) error {
-	return d.cli.ContainerExecResize(ctx, cid, container.ResizeOptions{
-		Height: opts.Height,
-		Width:  opts.Width,
-	})
+func (d *dockerDriver) ContainerExecResize(ctx context.Context, cid string, opts ResizeOptions) error {
+	return d.cli.ContainerExecResize(ctx, cid, container.ResizeOptions(opts))
 }
 
 // Close closes docker cli connection.

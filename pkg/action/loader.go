@@ -134,7 +134,11 @@ Action definition is correct, but dashes are not allowed in templates, replace "
 				miss[k] = struct{}{}
 			}
 		}
-		return nil, errMissingVar{miss}
+		// If we don't have parameter names, the values probably were nil.
+		// It's ok, users will be able to identify missing parameters.
+		if len(miss) != 0 {
+			return nil, errMissingVar{miss}
+		}
 	}
 
 	return res, nil
@@ -160,7 +164,7 @@ func collectInputVars(values map[string]any, params InputParams, def ParametersL
 	for _, pdef := range def {
 		key := pdef.Name
 		// Set value: default or input parameter.
-		dval := fmt.Sprintf("%v", pdef.Default)
+		dval := pdef.Default
 		values[key] = dval
 		values[replDashes.Replace(key)] = dval
 		if v, ok := params[pdef.Name]; ok {
@@ -181,7 +185,7 @@ func addPredefinedVariables(data map[string]any, a *Action) {
 		data["current_uid"] = s[0]
 		data["current_gid"] = s[1]
 	}
-	data["current_working_dir"] = a.wd // app working directory
-	data["actions_base_dir"] = a.fsdir // root directory where the action was found
-	data["action_dir"] = a.Dir()       // directory of action file
+	data["current_working_dir"] = a.wd         // app working directory
+	data["actions_base_dir"] = a.fs.Realpath() // root directory where the action was found
+	data["action_dir"] = a.Dir()               // directory of action file
 }

@@ -1,7 +1,8 @@
-// Package types contains launchr common types.
-package types
+// Package driver hold implementation for container runtimes.
+package driver
 
 import (
+	"context"
 	"io"
 	"path/filepath"
 	"time"
@@ -10,6 +11,37 @@ import (
 	typesimage "github.com/docker/docker/api/types/image"
 	"gopkg.in/yaml.v3"
 )
+
+// ContainerRunner defines common interface for container environments.
+type ContainerRunner interface {
+	Info(ctx context.Context) (SystemInfo, error)
+	CopyToContainer(ctx context.Context, cid string, path string, content io.Reader, opts CopyToContainerOptions) error
+	CopyFromContainer(ctx context.Context, cid, srcPath string) (io.ReadCloser, ContainerPathStat, error)
+	ContainerStatPath(ctx context.Context, cid string, path string) (ContainerPathStat, error)
+	ContainerList(ctx context.Context, opts ContainerListOptions) []ContainerListResult
+	ContainerCreate(ctx context.Context, opts ContainerCreateOptions) (string, error)
+	ContainerStart(ctx context.Context, cid string, opts ContainerStartOptions) error
+	ContainerWait(ctx context.Context, cid string, opts ContainerWaitOptions) (<-chan ContainerWaitResponse, <-chan error)
+	ContainerAttach(ctx context.Context, cid string, opts ContainerAttachOptions) (*ContainerInOut, error)
+	ContainerStop(ctx context.Context, cid string) error
+	ContainerKill(ctx context.Context, cid, signal string) error
+	ContainerRemove(ctx context.Context, cid string, opts ContainerRemoveOptions) error
+	ContainerResize(ctx context.Context, cid string, opts ResizeOptions) error
+	ContainerExecResize(ctx context.Context, cid string, opts ResizeOptions) error
+	Close() error
+}
+
+// ContainerImageBuilder is an interface for container runtime to build images.
+type ContainerImageBuilder interface {
+	ContainerRunner
+	ImageEnsure(ctx context.Context, opts ImageOptions) (*ImageStatusResponse, error)
+	ImageRemove(ctx context.Context, image string, opts ImageRemoveOptions) (*ImageRemoveResponse, error)
+}
+
+// ContainerRunnerSELinux defines a container runner with SELinux support.
+type ContainerRunnerSELinux interface {
+	IsSELinuxSupported(ctx context.Context) bool
+}
 
 // ResizeOptions is a struct for terminal resizing.
 type ResizeOptions = typescontainer.ResizeOptions
@@ -70,6 +102,7 @@ type ImageRemoveOptions = typesimage.RemoveOptions
 // ImageStatus defines image status on local machine.
 type ImageStatus int64
 
+// Image statuses.
 const (
 	ImageExists          ImageStatus = iota // ImageExists - image exists locally.
 	ImageUnexpectedError                    // ImageUnexpectedError - image can't be pulled or retrieved.
@@ -125,6 +158,7 @@ type CopyToContainerOptions = typescontainer.CopyToContainerOptions
 // NetworkMode is a type alias for container Network mode.
 type NetworkMode = typescontainer.NetworkMode
 
+// Network modes.
 const (
 	NetworkModeHost NetworkMode = "host" // NetworkModeHost for host network.
 )
@@ -164,6 +198,7 @@ type ContainerWaitOptions struct {
 // WaitCondition is a type for available wait conditions.
 type WaitCondition = typescontainer.WaitCondition
 
+// Container wait conditions.
 const (
 	WaitConditionNotRunning WaitCondition = typescontainer.WaitConditionNotRunning // WaitConditionNotRunning when container exits when running.
 	WaitConditionNextExit   WaitCondition = typescontainer.WaitConditionNextExit   // WaitConditionNextExit when container exits after next start.

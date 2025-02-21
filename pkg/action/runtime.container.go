@@ -10,12 +10,10 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/docker/docker/pkg/archive"
-
 	"github.com/launchrctl/launchr/internal/launchr"
+	"github.com/launchrctl/launchr/pkg/archive"
 	"github.com/launchrctl/launchr/pkg/driver"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
-	"github.com/launchrctl/launchr/pkg/types"
 )
 
 const (
@@ -32,17 +30,21 @@ const (
 )
 
 type runtimeContainer struct {
-	driver  driver.ContainerRunner
-	dtype   driver.Type
+	// crt is a container runtime.
+	crt driver.ContainerRunner
+	// rtype is a container runtime type string.
+	rtype driver.Type
+	// logWith contains context arguments for a structured logger.
 	logWith []any
 
 	// Container related functionality extenders
+	// @todo migrate to events/hooks for loose coupling.
 	imgres   ChainImageBuildResolver
 	imgccres *ImageBuildCacheResolver
 	nameprv  ContainerNameProvider
 
 	// Runtime flags
-	useVolWD      bool
+	useVolWD      bool // Deprecated: with no replacement.
 	removeImg     bool
 	noCache       bool
 	entrypoint    string
@@ -72,16 +74,21 @@ func NewContainerRuntimeDocker() ContainerRuntime {
 	return NewContainerRuntime(driver.Docker)
 }
 
+// NewContainerRuntimeKubernetes creates a new action Kubernetes runtime.
+func NewContainerRuntimeKubernetes() ContainerRuntime {
+	return NewContainerRuntime(driver.Kubernetes)
+}
+
 // NewContainerRuntime creates a new action container runtime.
 func NewContainerRuntime(t driver.Type) ContainerRuntime {
 	return &runtimeContainer{
-		dtype:   t,
+		rtype:   t,
 		nameprv: ContainerNameProvider{Prefix: "launchr_", RandomSuffix: true},
 	}
 }
 
 func (c *runtimeContainer) Clone() Runtime {
-	return NewContainerRuntime(c.dtype)
+	return NewContainerRuntime(c.rtype)
 }
 
 func (c *runtimeContainer) FlagsDefinition() ParametersList {
@@ -163,8 +170,8 @@ func (c *runtimeContainer) SetContainerNameProvider(p ContainerNameProvider)    
 
 func (c *runtimeContainer) Init(_ context.Context, _ *Action) (err error) {
 	c.logWith = nil
-	if c.driver == nil {
-		c.driver, err = driver.New(c.dtype)
+	if c.crt == nil {
+		c.crt, err = driver.New(c.rtype)
 	}
 	return err
 }
@@ -184,10 +191,10 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 	if runDef.Container == nil {
 		return errors.New("action container configuration is not set, use different runtime")
 	}
-	log := c.log("run_env", c.dtype, "action_id", a.ID, "image", runDef.Container.Image, "command", runDef.Container.Command)
+	log := c.log("run_env", c.rtype, "action_id", a.ID, "image", runDef.Container.Image, "command", runDef.Container.Command)
 	log.Debug("starting execution of the action")
 	name := c.nameprv.Get(a.ID)
-	existing := c.driver.ContainerList(ctx, types.ContainerListOptions{SearchName: name})
+	existing := c.crt.ContainerList(ctx, driver.ContainerListOptions{SearchName: name})
 	if len(existing) > 0 {
 		return fmt.Errorf("the action %q can't start, the container name is in use, please, try again", a.ID)
 	}
@@ -205,7 +212,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 	}
 
 	// Create container.
-	runConfig := &types.ContainerCreateOptions{
+	runConfig := &driver.ContainerCreateOptions{
 		ContainerName: name,
 		ExtraHosts:    runDef.Container.ExtraHosts,
 		AutoRemove:    autoRemove,
@@ -253,7 +260,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 	if !runConfig.Tty {
 		log.Debug("watching container signals")
 		sigc := driver.NotifyAllSignals()
-		go driver.ForwardAllSignals(ctx, c.driver, cid, sigc)
+		go driver.ForwardAllSignals(ctx, c.crt, cid, sigc)
 		defer driver.StopCatchSignals(sigc)
 	}
 
@@ -271,7 +278,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 
 	// Start the container
 	log.Debug("starting container")
-	if err = c.driver.ContainerStart(ctx, cid, types.ContainerStartOptions{}); err != nil {
+	if err = c.crt.ContainerStart(ctx, cid, driver.ContainerStartOptions{}); err != nil {
 		log.Debug("failed starting the container")
 		cancelFn()
 		<-errCh
@@ -284,7 +291,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 	// Resize TTY on window resize.
 	if runConfig.Tty {
 		log.Debug("watching TTY resize")
-		if err = driver.MonitorTtySize(ctx, c.driver, streams, cid, false); err != nil {
+		if err = driver.MonitorTtySize(ctx, c.crt, streams, cid, false); err != nil {
 			log.Error("error monitoring tty size", "error", err)
 		}
 	}
@@ -314,9 +321,9 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 	if c.useVolWD {
 		path := a.WorkDir()
 		launchr.Term().Info().Printfln(`Flag "--%s" is set. Copying back the result of the action run.`, containerFlagUseVolumeWD)
-		err = c.copyFromContainer(ctx, cid, containerHostMount, filepath.Dir(path), filepath.Base(path))
+		err = c.copyFromContainer(ctx, cid, containerHostMount, filepath.Dir(path), filepath.Base(path)+"/result")
 		defer func() {
-			err = c.driver.ContainerRemove(ctx, cid, types.ContainerRemoveOptions{})
+			err = c.crt.ContainerRemove(ctx, cid, driver.ContainerRemoveOptions{})
 			if err != nil {
 				log.Error("error on cleaning the running environment", "error", err)
 			}
@@ -357,19 +364,22 @@ func getCurrentUser() string {
 }
 
 func (c *runtimeContainer) Close() error {
-	return c.driver.Close()
+	return c.crt.Close()
 }
 
 func (c *runtimeContainer) imageRemove(ctx context.Context, a *Action) error {
-	_, err := c.driver.ImageRemove(ctx, a.RuntimeDef().Container.Image, types.ImageRemoveOptions{
-		Force:         true,
-		PruneChildren: false,
-	})
+	if crt, ok := c.crt.(driver.ContainerImageBuilder); ok {
+		_, err := crt.ImageRemove(ctx, a.RuntimeDef().Container.Image, driver.ImageRemoveOptions{
+			Force:         true,
+			PruneChildren: false,
+		})
+		return err
+	}
 
-	return err
+	return nil
 }
 
-func (c *runtimeContainer) isRebuildRequired(bi *types.BuildDefinition) (bool, error) {
+func (c *runtimeContainer) isRebuildRequired(bi *driver.BuildDefinition) (bool, error) {
 	// @todo test image cache resolution somehow.
 	if c.imgccres == nil || bi == nil {
 		return false, nil
@@ -402,6 +412,10 @@ func (c *runtimeContainer) isRebuildRequired(bi *types.BuildDefinition) (bool, e
 }
 
 func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
+	crt, ok := c.crt.(driver.ContainerImageBuilder)
+	if !ok {
+		return nil
+	}
 	streams := a.Input().Streams()
 	image := a.RuntimeDef().Container.Image
 	// Prepend action to have the top priority in image build resolution.
@@ -413,7 +427,7 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 		return err
 	}
 
-	status, err := c.driver.ImageEnsure(ctx, types.ImageOptions{
+	status, err := crt.ImageEnsure(ctx, driver.ImageOptions{
 		Name:         image,
 		Build:        buildInfo,
 		NoCache:      c.noCache,
@@ -425,9 +439,9 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 
 	log := c.log()
 	switch status.Status {
-	case types.ImageExists:
+	case driver.ImageExists:
 		log.Debug("image exists locally")
-	case types.ImagePull:
+	case driver.ImagePull:
 		if status.Progress == nil {
 			break
 		}
@@ -442,7 +456,7 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 			launchr.Term().Error().Println("Error occurred while pulling the image %q", image)
 			log.Error("error while pulling the image", "error", err)
 		}
-	case types.ImageBuild:
+	case driver.ImageBuild:
 		if status.Progress == nil {
 			break
 		}
@@ -462,8 +476,13 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 	return err
 }
 
-func (c *runtimeContainer) containerCreate(ctx context.Context, a *Action, opts *types.ContainerCreateOptions) (string, error) {
-	if err := c.imageEnsure(ctx, a); err != nil {
+func (c *runtimeContainer) containerCreate(ctx context.Context, a *Action, opts *driver.ContainerCreateOptions) (string, error) {
+	var err error
+	// Sync to disk virtual actions so the data is available in run.
+	if err = a.syncToDisk(); err != nil {
+		return "", err
+	}
+	if err = c.imageEnsure(ctx, a); err != nil {
 		return "", err
 	}
 
@@ -475,12 +494,12 @@ func (c *runtimeContainer) containerCreate(ctx context.Context, a *Action, opts 
 		runDef.Container.Command = a.Input().ArgsPositional()
 	}
 
-	createOpts := types.ContainerCreateOptions{
+	createOpts := driver.ContainerCreateOptions{
 		ContainerName: opts.ContainerName,
 		Image:         runDef.Container.Image,
 		Cmd:           runDef.Container.Command,
 		WorkingDir:    containerHostMount,
-		NetworkMode:   types.NetworkModeHost,
+		NetworkMode:   driver.NetworkModeHost,
 		ExtraHosts:    opts.ExtraHosts,
 		AutoRemove:    opts.AutoRemove,
 		OpenStdin:     opts.OpenStdin,
@@ -518,7 +537,7 @@ func (c *runtimeContainer) containerCreate(ctx context.Context, a *Action, opts 
 			launchr.MustAbs(a.Dir()) + ":" + containerActionMount + flags,
 		}
 	}
-	cid, err := c.driver.ContainerCreate(ctx, createOpts)
+	cid, err := c.crt.ContainerCreate(ctx, createOpts)
 	if err != nil {
 		return "", err
 	}
@@ -527,6 +546,7 @@ func (c *runtimeContainer) containerCreate(ctx context.Context, a *Action, opts 
 }
 
 // copyDirToContainer copies dir content to a container.
+// Helpful to have the same owner in the destination directory.
 func (c *runtimeContainer) copyDirToContainer(ctx context.Context, cid, srcPath, dstPath string) error {
 	return c.copyToContainer(ctx, cid, srcPath, filepath.Dir(dstPath), filepath.Base(dstPath))
 }
@@ -534,54 +554,41 @@ func (c *runtimeContainer) copyDirToContainer(ctx context.Context, cid, srcPath,
 // copyToContainer copies dir/file to a container. Directory will be copied as a subdirectory.
 func (c *runtimeContainer) copyToContainer(ctx context.Context, cid, srcPath, dstPath, rebaseName string) error {
 	// Prepare destination copy info by stat-ing the container path.
-	dstInfo := archive.CopyInfo{Path: dstPath}
-	dstStat, err := c.driver.ContainerStatPath(ctx, cid, dstPath)
+	dstStat, err := c.crt.ContainerStatPath(ctx, cid, dstPath)
 	if err != nil {
 		return err
 	}
-	dstInfo.Exists, dstInfo.IsDir = true, dstStat.Mode.IsDir()
 
-	// Prepare source copy info.
-	srcInfo, err := archive.CopyInfoSourcePath(launchr.MustAbs(srcPath), false)
+	arch, err := archive.Tar(
+		archive.CopyInfo{
+			Path:       srcPath,
+			RebaseName: rebaseName,
+		},
+		archive.CopyInfo{
+			Path:   dstPath,
+			Exists: true,
+			IsDir:  dstStat.Mode.IsDir(),
+		},
+		nil,
+	)
 	if err != nil {
 		return err
 	}
-	srcInfo.RebaseName = rebaseName
+	defer arch.Close()
 
-	srcArchive, err := archive.TarResource(srcInfo)
-	if err != nil {
-		return err
+	dstDir := dstPath
+	if !dstStat.Mode.IsDir() {
+		dstDir = filepath.Base(dstPath)
 	}
-	defer srcArchive.Close()
-
-	dstDir, preparedArchive, err := archive.PrepareArchiveCopy(srcArchive, srcInfo, dstInfo)
-	if err != nil {
-		return err
-	}
-	defer preparedArchive.Close()
-
-	options := types.CopyToContainerOptions{
+	options := driver.CopyToContainerOptions{
 		AllowOverwriteDirWithFile: false,
 		CopyUIDGID:                false,
 	}
-	return c.driver.CopyToContainer(ctx, cid, dstDir, preparedArchive, options)
-}
-
-func resolveLocalPath(localPath string) (absPath string, err error) {
-	if absPath, err = filepath.Abs(localPath); err != nil {
-		return
-	}
-	return archive.PreserveTrailingDotOrSeparator(absPath, localPath), nil
+	return c.crt.CopyToContainer(ctx, cid, dstDir, arch, options)
 }
 
 func (c *runtimeContainer) copyFromContainer(ctx context.Context, cid, srcPath, dstPath, rebaseName string) (err error) {
-	// Get an absolute destination path.
-	dstPath, err = resolveLocalPath(dstPath)
-	if err != nil {
-		return err
-	}
-
-	content, stat, err := c.driver.CopyFromContainer(ctx, cid, srcPath)
+	content, stat, err := c.crt.CopyFromContainer(ctx, cid, srcPath)
 	if err != nil {
 		return err
 	}
@@ -594,23 +601,17 @@ func (c *runtimeContainer) copyFromContainer(ctx context.Context, cid, srcPath, 
 		RebaseName: rebaseName,
 	}
 
-	preArchive := content
-	if len(srcInfo.RebaseName) != 0 {
-		_, srcBase := archive.SplitPathDirEntry(srcInfo.Path)
-		preArchive = archive.RebaseArchiveEntries(content, srcBase, srcInfo.RebaseName)
-	}
-
-	return archive.CopyTo(preArchive, srcInfo, dstPath)
+	return archive.Untar(content, dstPath, &archive.TarOptions{SrcInfo: srcInfo})
 }
 
-func (c *runtimeContainer) containerWait(ctx context.Context, cid string, opts *types.ContainerCreateOptions) <-chan int {
+func (c *runtimeContainer) containerWait(ctx context.Context, cid string, opts *driver.ContainerCreateOptions) <-chan int {
 	log := c.log()
 	// Wait for the container to stop or catch error.
-	waitCond := types.WaitConditionNextExit
+	waitCond := driver.WaitConditionNextExit
 	if opts.AutoRemove {
-		waitCond = types.WaitConditionRemoved
+		waitCond = driver.WaitConditionRemoved
 	}
-	resCh, errCh := c.driver.ContainerWait(ctx, cid, types.ContainerWaitOptions{Condition: waitCond})
+	resCh, errCh := c.crt.ContainerWait(ctx, cid, driver.ContainerWaitOptions{Condition: waitCond})
 	statusC := make(chan int)
 	go func() {
 		select {
@@ -634,8 +635,8 @@ func (c *runtimeContainer) containerWait(ctx context.Context, cid string, opts *
 	return statusC
 }
 
-func (c *runtimeContainer) attachContainer(ctx context.Context, streams launchr.Streams, cid string, opts *types.ContainerCreateOptions) (io.Closer, <-chan error, error) {
-	cio, errAttach := c.driver.ContainerAttach(ctx, cid, types.ContainerAttachOptions{
+func (c *runtimeContainer) attachContainer(ctx context.Context, streams launchr.Streams, cid string, opts *driver.ContainerCreateOptions) (io.Closer, <-chan error, error) {
+	cio, errAttach := c.crt.ContainerAttach(ctx, cid, driver.ContainerAttachOptions{
 		Stream: true,
 		Stdin:  opts.AttachStdin,
 		Stdout: opts.AttachStdout,
@@ -656,6 +657,6 @@ func (c *runtimeContainer) isSELinuxEnabled(ctx context.Context) bool {
 	// First, we check if it's enabled at the OS level, then if it's enabled in the container runner.
 	// If the feature is not enabled in the runner environment,
 	// containers will bypass SELinux and will function as if SELinux is disabled in the OS.
-	d, ok := c.driver.(driver.ContainerRunnerSELinux)
+	d, ok := c.crt.(driver.ContainerRunnerSELinux)
 	return ok && launchr.IsSELinuxEnabled() && d.IsSELinuxSupported(ctx)
 }

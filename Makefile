@@ -23,7 +23,7 @@ LOCAL_BIN:=$(CURDIR)/bin
 
 # Linter config.
 GOLANGCI_BIN:=$(LOCAL_BIN)/golangci-lint
-GOLANGCI_TAG:=1.61.0
+GOLANGCI_TAG:=1.64.5
 
 .PHONY: all
 all: deps test build

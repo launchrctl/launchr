@@ -20,18 +20,17 @@ import (
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/driver"
-	mockdriver "github.com/launchrctl/launchr/pkg/driver/mocks"
-	"github.com/launchrctl/launchr/pkg/types"
+	containermock "github.com/launchrctl/launchr/pkg/driver/mocks"
 )
 
 const containerNamePrefix = "test_prefix_"
 
 type eqImageOpts struct {
-	x types.ImageOptions
+	x driver.ImageOptions
 }
 
 func (e eqImageOpts) Matches(x any) bool {
-	return assert.ObjectsAreEqual(e.x, x.(types.ImageOptions))
+	return assert.ObjectsAreEqual(e.x, x.(driver.ImageOptions))
 }
 
 func (e eqImageOpts) String() string {
@@ -45,12 +44,12 @@ func launchrCfg() launchr.Config {
 	return launchr.ConfigFromFS(cfgRoot)
 }
 
-func prepareContainerTestSuite(t *testing.T) (*assert.Assertions, *gomock.Controller, *mockdriver.MockContainerRunner, *runtimeContainer) {
+func prepareContainerTestSuite(t *testing.T) (*assert.Assertions, *gomock.Controller, *containermock.MockContainerRuntime, *runtimeContainer) {
 	assert := assert.New(t)
 	ctrl := gomock.NewController(t)
-	d := mockdriver.NewMockContainerRunner(ctrl)
+	d := containermock.NewMockContainerRuntime(ctrl)
 	d.EXPECT().Close()
-	r := &runtimeContainer{driver: d, dtype: "mock"}
+	r := &runtimeContainer{crt: d, rtype: "mock"}
 	r.AddImageBuildResolver(cfgImgRes)
 	r.SetContainerNameProvider(ContainerNameProvider{Prefix: containerNamePrefix})
 
@@ -71,18 +70,18 @@ func testContainerAction(cdef *DefRuntimeContainer) *Action {
 			},
 		}
 	}
-	a := &Action{
-		ID: "test",
-		loader: &Definition{
+	a := New(
+		StringID("test"),
+		&Definition{
 			Action: &DefAction{},
 			Runtime: &DefRuntime{
 				Type:      runtimeTypeContainer,
 				Container: cdef,
 			},
 		},
-		fpath: "my/action/test/action.yaml",
-		wd:    launchr.MustAbs("test"),
-	}
+		NewDiscoveryFS(nil, launchr.MustAbs("test")),
+		"my/action/test/action.yaml",
+	)
 	return a
 }
 
@@ -103,25 +102,25 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 
 	actLoc := testContainerAction(&DefRuntimeContainer{
 		Image: "build:local",
-		Build: &types.BuildDefinition{
+		Build: &driver.BuildDefinition{
 			Context: ".",
 		},
 	})
 	type testCase struct {
 		name     string
 		action   *DefRuntimeContainer
-		expBuild *types.BuildDefinition
+		expBuild *driver.BuildDefinition
 		ret      []any
 	}
 
-	imgFn := func(s types.ImageStatus, pstr string, err error) []any {
+	imgFn := func(s driver.ImageStatus, pstr string, err error) []any {
 		var p io.ReadCloser
 		if pstr != "" {
 			p = io.NopCloser(strings.NewReader(pstr))
 		}
-		var r *types.ImageStatusResponse
+		var r *driver.ImageStatusResponse
 		if s != -1 {
-			r = &types.ImageStatusResponse{Status: s, Progress: p}
+			r = &driver.ImageStatusResponse{Status: s, Progress: p}
 		}
 		return []any{r, err}
 	}
@@ -132,20 +131,20 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 			"image exists",
 			&DefRuntimeContainer{Image: "exists"},
 			nil,
-			imgFn(types.ImageExists, "", nil),
+			imgFn(driver.ImageExists, "", nil),
 		},
 		{
 			"image pulled",
 			&DefRuntimeContainer{Image: "pull"},
 			nil,
-			imgFn(types.ImagePull, `{"stream":"Successfully pulled image\n"}`, nil),
+			imgFn(driver.ImagePull, `{"stream":"Successfully pulled image\n"}`, nil),
 		},
 		{
 			"image pulled error",
 			&DefRuntimeContainer{Image: "pull"},
 			nil,
 			imgFn(
-				types.ImagePull,
+				driver.ImagePull,
 				`{"errorDetail":{"code":1,"message":"fake pull error"},"error":"fake pull error"}`,
 				&jsonmessage.JSONError{Code: 1, Message: "fake pull error"},
 			),
@@ -154,14 +153,14 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 			"image build local",
 			aconf,
 			actLoc.ImageBuildInfo(aconf.Image),
-			imgFn(types.ImageBuild, `{"stream":"Successfully built image \"local\"\n"}`, nil),
+			imgFn(driver.ImageBuild, `{"stream":"Successfully built image \"local\"\n"}`, nil),
 		},
 		{
 			"image build local error",
 			aconf,
 			actLoc.ImageBuildInfo(aconf.Image),
 			imgFn(
-				types.ImageBuild,
+				driver.ImageBuild,
 				`{"errorDetail":{"code":1,"message":"fake build error"},"error":"fake build error"}`,
 				&jsonmessage.JSONError{Code: 1, Message: "fake build error"},
 			),
@@ -170,10 +169,10 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 			"image build config",
 			&DefRuntimeContainer{Image: "build:config"},
 			cfgImgRes.ImageBuildInfo("build:config"),
-			imgFn(types.ImageBuild, `{"stream":"Successfully built image \"config\"\n"}`, nil),
+			imgFn(driver.ImageBuild, `{"stream":"Successfully built image \"config\"\n"}`, nil),
 		},
 		{
-			"driver error",
+			"container runtime error",
 			&DefRuntimeContainer{Image: ""},
 			nil,
 			imgFn(-1, "", fmt.Errorf("incorrect image")),
@@ -192,7 +191,7 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 			act := testContainerAction(tt.action)
 			act.input = NewInput(act, nil, nil, launchr.NoopStreams())
 			run := act.RuntimeDef().Container
-			imgOpts := types.ImageOptions{Name: run.Image, Build: tt.expBuild}
+			imgOpts := driver.ImageOptions{Name: run.Image, Build: tt.expBuild}
 			d.EXPECT().
 				ImageEnsure(ctx, eqImageOpts{imgOpts}).
 				Return(tt.ret...)
@@ -207,14 +206,14 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 
 	actLoc := testContainerAction(&DefRuntimeContainer{
 		Image: "build:local",
-		Build: &types.BuildDefinition{
+		Build: &driver.BuildDefinition{
 			Context: ".",
 		},
 	})
 	type testCase struct {
 		name     string
 		action   *DefRuntimeContainer
-		expBuild *types.BuildDefinition
+		expBuild *driver.BuildDefinition
 		ret      []any
 	}
 
@@ -223,7 +222,7 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 			"image removed",
 			actLoc.RuntimeDef().Container,
 			nil,
-			[]any{&types.ImageRemoveResponse{Status: types.ImageRemoved}, nil},
+			[]any{&driver.ImageRemoveResponse{Status: driver.ImageRemoved}, nil},
 		},
 		{
 			"failed to remove",
@@ -242,13 +241,13 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 			ctx := context.Background()
 
 			defer ctrl.Finish()
-			defer r.driver.Close()
+			defer r.crt.Close()
 
 			act := testContainerAction(tt.action)
 			act.input = NewInput(act, nil, nil, launchr.NoopStreams())
 
 			run := act.RuntimeDef().Container
-			imgOpts := types.ImageRemoveOptions{Force: true, PruneChildren: false}
+			imgOpts := driver.ImageRemoveOptions{Force: true, PruneChildren: false}
 			d.EXPECT().
 				ImageRemove(ctx, run.Image, gomock.Eq(imgOpts)).
 				Return(tt.ret...)
@@ -268,9 +267,9 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 	a := testContainerAction(nil)
 	run := a.RuntimeDef()
 
-	runCfg := &types.ContainerCreateOptions{
+	runCfg := &driver.ContainerCreateOptions{
 		ContainerName: "container",
-		NetworkMode:   types.NetworkModeHost,
+		NetworkMode:   driver.NetworkModeHost,
 		ExtraHosts:    run.Container.ExtraHosts,
 		AutoRemove:    true,
 		OpenStdin:     true,
@@ -299,8 +298,8 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 	// Normal create.
 	expCid := "container_id"
 	d.EXPECT().
-		ImageEnsure(ctx, types.ImageOptions{Name: run.Container.Image}).
-		Return(&types.ImageStatusResponse{Status: types.ImageExists}, nil)
+		ImageEnsure(ctx, driver.ImageOptions{Name: run.Container.Image}).
+		Return(&driver.ImageStatusResponse{Status: driver.ImageExists}, nil)
 	d.EXPECT().
 		ContainerCreate(ctx, gomock.Eq(eqCfg)).
 		Return(expCid, nil)
@@ -317,8 +316,8 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 		launchr.MustAbs(a.Dir()) + ":" + containerActionMount,
 	}
 	d.EXPECT().
-		ImageEnsure(ctx, types.ImageOptions{Name: run.Container.Image}).
-		Return(&types.ImageStatusResponse{Status: types.ImageExists}, nil)
+		ImageEnsure(ctx, driver.ImageOptions{Name: run.Container.Image}).
+		Return(&driver.ImageStatusResponse{Status: driver.ImageExists}, nil)
 	d.EXPECT().
 		ContainerCreate(ctx, gomock.Eq(eqCfg)).
 		Return(expCid, nil)
@@ -335,8 +334,8 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 		containerActionMount: {},
 	}
 	d.EXPECT().
-		ImageEnsure(ctx, types.ImageOptions{Name: run.Container.Image}).
-		Return(&types.ImageStatusResponse{Status: types.ImageExists}, nil)
+		ImageEnsure(ctx, driver.ImageOptions{Name: run.Container.Image}).
+		Return(&driver.ImageStatusResponse{Status: driver.ImageExists}, nil)
 	d.EXPECT().
 		ContainerCreate(ctx, gomock.Eq(eqCfg)).
 		Return(expCid, nil)
@@ -348,23 +347,23 @@ func Test_ContainerExec_containerCreate(t *testing.T) {
 	// Image ensure fail.
 	errImg := fmt.Errorf("error on image ensure")
 	d.EXPECT().
-		ImageEnsure(ctx, types.ImageOptions{Name: run.Container.Image}).
+		ImageEnsure(ctx, driver.ImageOptions{Name: run.Container.Image}).
 		Return(nil, errImg)
 
 	cid, err = r.containerCreate(ctx, a, runCfg)
-	assert.True(assert.Error(err))
+	assert.Error(err)
 	assert.Equal("", cid)
 
 	// Container create fail.
-	expErr := fmt.Errorf("driver container create error")
+	expErr := fmt.Errorf("container create error")
 	d.EXPECT().
-		ImageEnsure(ctx, types.ImageOptions{Name: run.Container.Image}).
-		Return(&types.ImageStatusResponse{Status: types.ImageExists}, nil)
+		ImageEnsure(ctx, driver.ImageOptions{Name: run.Container.Image}).
+		Return(&driver.ImageStatusResponse{Status: driver.ImageExists}, nil)
 	d.EXPECT().
 		ContainerCreate(ctx, gomock.Any()).
 		Return("", expErr)
 	cid, err = r.containerCreate(ctx, a, runCfg)
-	assert.True(assert.Error(err))
+	assert.Error(err)
 	assert.Equal("", cid)
 }
 
@@ -376,50 +375,50 @@ func Test_ContainerExec_containerWait(t *testing.T) {
 
 	type testCase struct {
 		name      string
-		chanFn    func(resCh chan types.ContainerWaitResponse, errCh chan error)
-		waitCond  types.WaitCondition
+		chanFn    func(resCh chan driver.ContainerWaitResponse, errCh chan error)
+		waitCond  driver.WaitCondition
 		expStatus int
 	}
 
 	tts := []testCase{
 		{
 			"condition removed",
-			func(resCh chan types.ContainerWaitResponse, _ chan error) {
-				resCh <- types.ContainerWaitResponse{StatusCode: 0}
+			func(resCh chan driver.ContainerWaitResponse, _ chan error) {
+				resCh <- driver.ContainerWaitResponse{StatusCode: 0}
 			},
-			types.WaitConditionRemoved,
+			driver.WaitConditionRemoved,
 			0,
 		},
 		{
 			"condition next exit",
-			func(resCh chan types.ContainerWaitResponse, _ chan error) {
-				resCh <- types.ContainerWaitResponse{StatusCode: 0}
+			func(resCh chan driver.ContainerWaitResponse, _ chan error) {
+				resCh <- driver.ContainerWaitResponse{StatusCode: 0}
 			},
-			types.WaitConditionNextExit,
+			driver.WaitConditionNextExit,
 			0,
 		},
 		{
 			"return exit code",
-			func(resCh chan types.ContainerWaitResponse, _ chan error) {
-				resCh <- types.ContainerWaitResponse{StatusCode: 2}
+			func(resCh chan driver.ContainerWaitResponse, _ chan error) {
+				resCh <- driver.ContainerWaitResponse{StatusCode: 2}
 			},
-			types.WaitConditionRemoved,
+			driver.WaitConditionRemoved,
 			2,
 		},
 		{
 			"fail on container run",
-			func(resCh chan types.ContainerWaitResponse, _ chan error) {
-				resCh <- types.ContainerWaitResponse{StatusCode: 0, Error: errors.New("fail run")}
+			func(resCh chan driver.ContainerWaitResponse, _ chan error) {
+				resCh <- driver.ContainerWaitResponse{StatusCode: 0, Error: errors.New("fail run")}
 			},
-			types.WaitConditionRemoved,
+			driver.WaitConditionRemoved,
 			125,
 		},
 		{
 			"fail on wait",
-			func(_ chan types.ContainerWaitResponse, errCh chan error) {
+			func(_ chan driver.ContainerWaitResponse, errCh chan error) {
 				errCh <- errors.New("fail wait")
 			},
-			types.WaitConditionRemoved,
+			driver.WaitConditionRemoved,
 			125,
 		},
 	}
@@ -434,18 +433,18 @@ func Test_ContainerExec_containerWait(t *testing.T) {
 
 			// Prepare channels with buffer for non-blocking.
 			cid := ""
-			resCh, errCh := make(chan types.ContainerWaitResponse, 1), make(chan error, 1)
+			resCh, errCh := make(chan driver.ContainerWaitResponse, 1), make(chan error, 1)
 			tt.chanFn(resCh, errCh)
 			d.EXPECT().
-				ContainerWait(ctx, cid, types.ContainerWaitOptions{Condition: tt.waitCond}).
+				ContainerWait(ctx, cid, driver.ContainerWaitOptions{Condition: tt.waitCond}).
 				Return(resCh, errCh)
 
 			// Test waiting and status.
 			autoRemove := false
-			if tt.waitCond == types.WaitConditionRemoved {
+			if tt.waitCond == driver.WaitConditionRemoved {
 				autoRemove = true
 			}
-			runCfg := &types.ContainerCreateOptions{AutoRemove: autoRemove}
+			runCfg := &driver.ContainerCreateOptions{AutoRemove: autoRemove}
 			ch := r.containerWait(ctx, cid, runCfg)
 			assert.Equal(tt.expStatus, <-ch)
 		})
@@ -471,13 +470,13 @@ func Test_ContainerExec_containerAttach(t *testing.T) {
 	ctx := context.Background()
 	cid := ""
 	cio := testContainerIO()
-	opts := &types.ContainerCreateOptions{
+	opts := &driver.ContainerCreateOptions{
 		AttachStdin:  true,
 		AttachStdout: true,
 		AttachStderr: true,
 		Tty:          true,
 	}
-	attOpts := types.ContainerAttachOptions{
+	attOpts := driver.ContainerAttachOptions{
 		Stream: true,
 		Stdin:  opts.AttachStdin,
 		Stdout: opts.AttachStdout,
@@ -516,22 +515,22 @@ func Test_ContainerExec(t *testing.T) {
 	cid := "cid"
 	act := testContainerAction(nil)
 	runConf := act.RuntimeDef().Container
-	imgBuild := &types.ImageStatusResponse{Status: types.ImageExists}
+	imgBuild := &driver.ImageStatusResponse{Status: driver.ImageExists}
 	cio := testContainerIO()
 	nprv := ContainerNameProvider{Prefix: containerNamePrefix}
 
 	type testCase struct {
 		name   string
-		prepFn func(resCh chan types.ContainerWaitResponse, errCh chan error)
+		prepFn func(resCh chan driver.ContainerWaitResponse, errCh chan error)
 		steps  []mockCallInfo
 		expErr error
 	}
 
-	opts := types.ContainerCreateOptions{
+	opts := driver.ContainerCreateOptions{
 		ContainerName: nprv.Get(act.ID),
 		Cmd:           runConf.Command,
 		Image:         runConf.Image,
-		NetworkMode:   types.NetworkModeHost,
+		NetworkMode:   driver.NetworkModeHost,
 		ExtraHosts:    runConf.ExtraHosts,
 		Binds: []string{
 			launchr.MustAbs(act.WorkDir()) + ":" + containerHostMount,
@@ -548,7 +547,7 @@ func Test_ContainerExec(t *testing.T) {
 		Env:          runConf.Env,
 		User:         getCurrentUser(),
 	}
-	attOpts := types.ContainerAttachOptions{
+	attOpts := driver.ContainerAttachOptions{
 		Stream: true,
 		Stdin:  opts.AttachStdin,
 		Stdout: opts.AttachStdout,
@@ -557,7 +556,6 @@ func Test_ContainerExec(t *testing.T) {
 
 	errImgEns := errors.New("image ensure error")
 	errCreate := errors.New("container create error")
-	errAny := errors.New("any")
 	errAttach := errors.New("attach error")
 	errStart := errors.New("start error")
 	errExecError := launchr.NewExitError(2, fmt.Sprintf("action %q finished with exit code 2", act.ID))
@@ -566,7 +564,7 @@ func Test_ContainerExec(t *testing.T) {
 		{
 			"ImageEnsure",
 			1, 1,
-			[]any{eqImageOpts{types.ImageOptions{Name: runConf.Image}}},
+			[]any{eqImageOpts{driver.ImageOptions{Name: runConf.Image}}},
 			[]any{imgBuild, nil},
 		},
 		{
@@ -584,13 +582,13 @@ func Test_ContainerExec(t *testing.T) {
 		{
 			"ContainerWait",
 			1, 1,
-			[]any{cid, types.ContainerWaitOptions{Condition: types.WaitConditionRemoved}},
+			[]any{cid, driver.ContainerWaitOptions{Condition: driver.WaitConditionRemoved}},
 			[]any{},
 		},
 		{
 			"ContainerStart",
 			1, 1,
-			[]any{cid, types.ContainerStartOptions{}},
+			[]any{cid, driver.ContainerStartOptions{}},
 			[]any{nil},
 		},
 	}
@@ -598,8 +596,8 @@ func Test_ContainerExec(t *testing.T) {
 	tts := []testCase{
 		{
 			"successful run",
-			func(resCh chan types.ContainerWaitResponse, _ chan error) {
-				resCh <- types.ContainerWaitResponse{StatusCode: 0}
+			func(resCh chan driver.ContainerWaitResponse, _ chan error) {
+				resCh <- driver.ContainerWaitResponse{StatusCode: 0}
 			},
 			successSteps,
 			nil,
@@ -641,12 +639,12 @@ func Test_ContainerExec(t *testing.T) {
 					[]any{gomock.Any()},
 					[]any{"", nil},
 				}),
-			errAny,
+			errTestAny{},
 		},
 		{
 			"error on container attach",
-			func(resCh chan types.ContainerWaitResponse, _ chan error) {
-				resCh <- types.ContainerWaitResponse{StatusCode: 0}
+			func(resCh chan driver.ContainerWaitResponse, _ chan error) {
+				resCh <- driver.ContainerWaitResponse{StatusCode: 0}
 			},
 			append(
 				slices.Clone(successSteps[0:2]),
@@ -661,8 +659,8 @@ func Test_ContainerExec(t *testing.T) {
 		},
 		{
 			"error start container",
-			func(resCh chan types.ContainerWaitResponse, _ chan error) {
-				resCh <- types.ContainerWaitResponse{StatusCode: 0}
+			func(resCh chan driver.ContainerWaitResponse, _ chan error) {
+				resCh <- driver.ContainerWaitResponse{StatusCode: 0}
 			},
 			append(
 				slices.Clone(successSteps[0:4]),
@@ -677,8 +675,8 @@ func Test_ContainerExec(t *testing.T) {
 		},
 		{
 			"container return error",
-			func(resCh chan types.ContainerWaitResponse, _ chan error) {
-				resCh <- types.ContainerWaitResponse{StatusCode: 2}
+			func(resCh chan driver.ContainerWaitResponse, _ chan error) {
+				resCh <- driver.ContainerWaitResponse{StatusCode: 2}
 			},
 			append(
 				slices.Clone(successSteps[0:4]),
@@ -697,8 +695,8 @@ func Test_ContainerExec(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			resCh, errCh := make(chan types.ContainerWaitResponse, 1), make(chan error, 1)
-			assert, ctrl, d, r := prepareContainerTestSuite(t)
+			resCh, errCh := make(chan driver.ContainerWaitResponse, 1), make(chan error, 1)
+			_, ctrl, d, r := prepareContainerTestSuite(t)
 			a := act.Clone()
 			input := NewInput(a, nil, nil, launchr.NoopStreams())
 			input.SetValidated(true)
@@ -719,16 +717,12 @@ func Test_ContainerExec(t *testing.T) {
 			}
 			ctx := context.Background()
 			err = r.Execute(ctx, a)
-			if tt.expErr != errAny {
-				assert.ErrorIs(err, tt.expErr)
-			} else {
-				assert.True(assert.Error(err))
-			}
+			assertIsSameError(t, tt.expErr, err)
 		})
 	}
 }
 
-func callContainerDriverMockFn(d *mockdriver.MockContainerRunner, step mockCallInfo, prev *gomock.Call) *gomock.Call {
+func callContainerDriverMockFn(d *containermock.MockContainerRuntime, step mockCallInfo, prev *gomock.Call) *gomock.Call {
 	var call *gomock.Call
 	switch step.fn {
 	case "ImageEnsure":

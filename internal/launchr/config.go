@@ -15,6 +15,7 @@ import (
 
 var configRegex = regexp.MustCompile(`^config\.(yaml|yml)$`)
 
+// Common errors.
 var (
 	ErrNoConfigFile = errors.New("config file is not found") // ErrNoConfigFile when config file doesn't exist in FS.
 )
@@ -32,12 +33,6 @@ type Config interface {
 	// Get returns a value by key to a parameter v. Parameter v must be a pointer to a value.
 	// Error may be returned on decode.
 	Get(key string, v any) error
-}
-
-// ConfigAware provides an interface for structs to support launchr configuration setting.
-type ConfigAware interface {
-	// SetLaunchrConfig sets a launchr config to the struct.
-	SetLaunchrConfig(Config)
 }
 
 type cachedProps = map[string]reflect.Value
@@ -67,7 +62,7 @@ func findConfigFile(root fs.FS) fs.DirEntry {
 func ConfigFromFS(root fs.FS) Config {
 	return &config{
 		root:     root,
-		rootPath: GetFsAbsPath(root),
+		rootPath: FsRealpath(root),
 		cached:   make(cachedProps),
 		fname:    findConfigFile(root),
 	}

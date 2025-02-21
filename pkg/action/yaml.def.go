@@ -8,8 +8,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/launchrctl/launchr/pkg/driver"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
-	"github.com/launchrctl/launchr/pkg/types"
 )
 
 const (
@@ -129,32 +129,7 @@ func (d *Definition) UnmarshalYAML(node *yaml.Node) (err error) {
 		d.Version = "1"
 	}
 	if d.Runtime == nil {
-		err = setOldDefRuntime(d)
-		if err != nil {
-			return yamlTypeErrorLine("missing runtime configuration", node.Line, node.Column)
-		}
-	}
-	return nil
-}
-
-// Deprecated: remove when all actions are migrated to the new schema.
-func setOldDefRuntime(d *Definition) error {
-	if d.Action.Image == "" {
-		return yamlTypeErrorLine(sErrEmptyRuntimeImg, 0, 0)
-	}
-	if len((*d).Action.Command) == 0 {
-		return yamlTypeErrorLine(sErrEmptyRuntimeCmd, 0, 0)
-	}
-	d.Runtime = &DefRuntime{
-		Type: runtimeTypeContainer,
-		Container: &DefRuntimeContainer{
-			Command:    d.Action.Command,
-			Image:      d.Action.Image,
-			Build:      d.Action.Build,
-			ExtraHosts: d.Action.ExtraHosts,
-			Env:        d.Action.Env,
-			User:       d.Action.User,
-		},
+		return yamlTypeErrorLine("missing runtime configuration", node.Line, node.Column)
 	}
 	return nil
 }
@@ -174,14 +149,6 @@ type DefAction struct {
 	Aliases     []string       `yaml:"alias"`
 	Arguments   ParametersList `yaml:"arguments"`
 	Options     ParametersList `yaml:"options"`
-
-	// @todo remove deprecated
-	Command    StrSliceOrStr          `yaml:"command"`     // Deprecated: use [Definition.Runtime]
-	Image      string                 `yaml:"image"`       // Deprecated: use [Definition.Runtime]
-	Build      *types.BuildDefinition `yaml:"build"`       // Deprecated: use [Definition.Runtime]
-	ExtraHosts StrSlice               `yaml:"extra_hosts"` // Deprecated: use [Definition.Runtime]
-	Env        EnvSlice               `yaml:"env"`         // Deprecated: use [Definition.Runtime]
-	User       string                 `yaml:"user"`        // Deprecated: use [Definition.Runtime]
 }
 
 // UnmarshalYAML implements [yaml.Unmarshaler] to parse action definition.
@@ -217,12 +184,12 @@ func (r *DefRuntimeType) UnmarshalYAML(n *yaml.Node) (err error) {
 
 // DefRuntimeContainer has container-specific runtime configuration.
 type DefRuntimeContainer struct {
-	Command    StrSliceOrStr          `yaml:"command"`
-	Image      string                 `yaml:"image"`
-	Build      *types.BuildDefinition `yaml:"build"`
-	ExtraHosts StrSlice               `yaml:"extra_hosts"`
-	Env        EnvSlice               `yaml:"env"`
-	User       string                 `yaml:"user"`
+	Command    StrSliceOrStr           `yaml:"command"`
+	Image      string                  `yaml:"image"`
+	Build      *driver.BuildDefinition `yaml:"build"`
+	ExtraHosts StrSlice                `yaml:"extra_hosts"`
+	Env        EnvSlice                `yaml:"env"`
+	User       string                  `yaml:"user"`
 }
 
 // UnmarshalYAML implements [yaml.Unmarshaler] to parse runtime container definition.
@@ -521,31 +488,7 @@ func (p *DefValueProcessor) UnmarshalYAML(n *yaml.Node) (err error) {
 }
 
 // InitProcessors creates [ValueProcessor] handlers according to the definition.
-func (p *DefParameter) InitProcessors(list map[string]ValueProcessor) error {
-	processors := make([]ValueProcessorHandler, 0, len(p.Process))
-	for _, procDef := range p.Process {
-		proc, ok := list[procDef.ID]
-		if !ok {
-			return fmt.Errorf(errTplNonExistProcessor, procDef.ID)
-		}
-
-		if !proc.IsApplicable(p.Type) {
-			return fmt.Errorf(errTplNotApplicableProcessor, procDef.ID, p.Type)
-		}
-
-		opts := proc.OptionsType()
-		if procDef.optsRaw != nil {
-			err := procDef.optsRaw.Decode(opts)
-			if err != nil {
-				return err
-			}
-		}
-
-		if err := opts.Validate(); err != nil {
-			return err
-		}
-		processors = append(processors, proc.Handler(opts))
-	}
-	p.processors = processors
-	return nil
+func (p *DefParameter) InitProcessors(list map[string]ValueProcessor) (err error) {
+	p.processors, err = initValueProcessors(list, p)
+	return err
 }

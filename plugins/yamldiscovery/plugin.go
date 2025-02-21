@@ -38,9 +38,9 @@ func (p *Plugin) OnAppInit(app launchr.App) error {
 func (p *Plugin) DiscoverActions(ctx context.Context) ([]*action.Action, error) {
 	var res []*action.Action
 	idp := p.am.GetActionIDProvider()
-	for _, fs := range p.app.GetRegisteredFS() {
-		if fs, ok := fs.(action.DiscoveryFS); ok {
-			d := action.NewYamlDiscovery(fs)
+	for _, regfs := range p.app.GetRegisteredFS() {
+		if regfs, ok := regfs.(action.DiscoveryFS); ok {
+			d := action.NewYamlDiscovery(regfs)
 			d.SetActionIDProvider(idp)
 			discovered, err := d.Discover(ctx)
 			if err != nil {

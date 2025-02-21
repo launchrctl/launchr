@@ -55,7 +55,11 @@ func (app *appImpl) gen() error {
 
 // Generate runs generation of included plugins.
 func (app *appImpl) Generate() int {
-	// Do not discover actions on generate.
+	defer func() {
+		if err := launchr.Cleanup(); err != nil {
+			Term().Warning().Printfln("Error on application shutdown cleanup:\n %s", err)
+		}
+	}()
 	var err error
 	if err = app.init(); err != nil {
 		Term().Error().Println(err)
@@ -70,6 +74,7 @@ func (app *appImpl) Generate() int {
 
 // Gen generates application specific build files and returns os exit code.
 func Gen() int {
+	// Do not discover actions on generate.
 	launchr.IsGen = true
 	return newApp().Generate()
 }

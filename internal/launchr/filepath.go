@@ -1,33 +1,54 @@
 package launchr
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
+	osuser "os/user"
 	"path/filepath"
 	"reflect"
 )
 
 // MustAbs returns absolute filepath and panics on error.
 func MustAbs(path string) string {
-	abs, err := filepath.Abs(filepath.Clean(path))
+	abs, err := filepath.Abs(filepath.Clean(filepath.FromSlash(path)))
 	if err != nil {
 		panic(err)
 	}
 	return abs
 }
 
-// GetFsAbsPath returns absolute path for a [fs.FS] struct.
-func GetFsAbsPath(fs fs.FS) string {
-	cwd := ""
-	rval := reflect.ValueOf(fs)
+// MustSubFS returns an [FS] corresponding to the subtree rooted at fsys's dir.
+func MustSubFS(fsys fs.FS, path string) fs.FS {
+	sub, err := fs.Sub(fsys, path)
+	if err != nil {
+		panic(err)
+	}
+	return sub
+}
+
+// FsRealpath returns absolute path for a [fs.FS] interface.
+func FsRealpath(fsys fs.FS) string {
+	if fsys == nil {
+		return ""
+	}
+	fspath := ""
+	rval := reflect.ValueOf(fsys)
 	if rval.Kind() == reflect.String {
-		cwd = rval.String()
-		// @todo Rethink absolute path usage overall.
-		if !filepath.IsAbs(cwd) {
-			cwd = MustAbs(cwd)
+		fspath = rval.String()
+		if !filepath.IsAbs(fspath) {
+			return MustAbs(fspath)
 		}
 	}
-	return cwd
+	if typeString(fsys) == "*fs.subFS" {
+		pfs := privateFieldValue[fs.FS](fsys, "fsys")
+		dir := privateFieldValue[string](fsys, "dir")
+		path := FsRealpath(pfs)
+		if path != "" {
+			return filepath.Join(path, dir)
+		}
+	}
+	return fspath
 }
 
 // EnsurePath creates all directories in the path.
@@ -84,4 +105,63 @@ func existsInSlice[T comparable](slice []T, el T) bool {
 		}
 	}
 	return false
+}
+
+// MkdirTemp creates a temporary directory.
+// It tries to create a directory in memory (tmpfs).
+func MkdirTemp(pattern string) (string, error) {
+	var err error
+	u, err := osuser.Current()
+	if err != nil {
+		u = &osuser.User{}
+	}
+	baseCand := []string{
+		// Linux tmpfs paths.
+		"/dev/shm",           // Should be available for all.
+		"/run/user/" + u.Uid, // User specific.
+		"/run",               // Root.
+		// Fallback to temp dir, it may not be written to disk if the files are small or deleted shortly.
+		// It will be used for Windows and macOS.
+		os.TempDir(),
+	}
+	basePath := ""
+	dirPath := ""
+	for _, cand := range baseCand {
+		// Ensure base path exists
+		var stat os.FileInfo
+		if stat, err = os.Stat(cand); err == nil && stat.IsDir() {
+			basePath = cand
+			if name != "" {
+				newBase := filepath.Join(basePath, name)
+				err = os.Mkdir(newBase, 0750)
+				if err != nil && !os.IsExist(err) {
+					// Try next candidate.
+					continue
+				}
+				basePath = newBase
+			}
+
+			// Create the directory
+			dirPath, err = os.MkdirTemp(basePath, pattern)
+			if err != nil {
+				// Try next candidate.
+				continue
+			}
+			// We found the candidate.
+			break
+		}
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp directory '%s': %w", dirPath, err)
+	}
+	if dirPath == "" {
+		return "", fmt.Errorf("failed to create temp directory")
+	}
+
+	// Make sure the dir is cleaned on finish.
+	RegisterCleanupFn(func() error {
+		return os.RemoveAll(dirPath)
+	})
+
+	return dirPath, nil
 }

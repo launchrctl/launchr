@@ -3,16 +3,14 @@ package action
 import (
 	"context"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/launchrctl/launchr/internal/launchr"
+	"github.com/launchrctl/launchr/pkg/driver"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
-	"github.com/launchrctl/launchr/pkg/types"
-)
-
-var (
-	errTplNotApplicableProcessor = "invalid configuration, processor %q can't be applied to a parameter of type %s"
-	errTplNonExistProcessor      = "requested processor %q doesn't exist"
-	errTplErrorOnProcessor       = "failed to process parameter %q with %q: %w"
 )
 
 // Action is an action definition with a contextual id (name), working directory path
@@ -26,7 +24,7 @@ type Action struct {
 	// wd is a working directory set from app level.
 	// Usually current working directory, but may be overridden by a plugin.
 	wd     string
-	fsdir  string      // fsdir is a base directory where the action was discovered (for better ID idp).
+	fs     DiscoveryFS // fs is a filesystem where the action was discovered. May be nil if created manually.
 	fpath  string      // fpath is a path to action definition file.
 	def    *Definition // def is an action definition. Loaded by [Loader], may be nil when not initialized.
 	defRaw *Definition // defRaw is a raw action definition. Loaded by [Loader], may be nil when not initialized.
@@ -37,12 +35,12 @@ type Action struct {
 }
 
 // New creates a new action.
-func New(idp IDProvider, l Loader, fsdir string, fpath string) *Action {
+func New(idp IDProvider, l Loader, fsys DiscoveryFS, fpath string) *Action {
 	// We don't define ID here because we use [Action] object for
 	// context creation to calculate ID later.
 	a := &Action{
 		loader: l,
-		fsdir:  fsdir,
+		fs:     fsys,
 		fpath:  fpath,
 	}
 	// Assign ID to an action.
@@ -56,7 +54,26 @@ func New(idp IDProvider, l Loader, fsdir string, fpath string) *Action {
 
 // NewFromYAML creates a new action from yaml content.
 func NewFromYAML(id string, b []byte) *Action {
-	return New(StringID(id), &YamlLoader{Bytes: b}, "", "")
+	return New(StringID(id), &YamlLoader{Bytes: b}, NewDiscoveryFS(nil, ""), "")
+}
+
+// NewYAMLFromFS creates an action from the given filesystem.
+// The filesystem must have action.yaml in the root.
+func NewYAMLFromFS(id string, fsys fs.FS) (*Action, error) {
+	d := NewDiscovery(
+		NewDiscoveryFS(fsys, ""),
+		YamlDiscoveryStrategy{TargetRgx: rgxYamlRootFile},
+	)
+	d.SetActionIDProvider(StringID(id))
+	discovered, err := d.Discover(context.Background())
+	if err != nil {
+		// Normally error doesn't happen. Or we didn't check all cases.
+		return nil, err
+	}
+	if len(discovered) > 0 {
+		return discovered[0], nil
+	}
+	return nil, fmt.Errorf("no actions found in the given filesystem")
 }
 
 // Clone returns a copy of an action.
@@ -69,7 +86,7 @@ func (a *Action) Clone() *Action {
 
 		loader: a.loader,
 		wd:     a.wd,
-		fsdir:  a.fsdir,
+		fs:     a.fs,
 		fpath:  a.fpath,
 	}
 	if a.runtime != nil {
@@ -112,7 +129,7 @@ func (a *Action) Input() *Input {
 
 // SetWorkDir sets action working directory.
 func (a *Action) SetWorkDir(wd string) {
-	a.wd, _ = filepath.Abs(filepath.Clean(wd))
+	a.wd = launchr.MustAbs(wd)
 }
 
 // WorkDir returns action working directory.
@@ -126,8 +143,38 @@ func (a *Action) WorkDir() string {
 	return a.wd
 }
 
+// syncToDisk copies action fs to disk if it's virtual like embed.
+// After finish the result is cached per action run.
+func (a *Action) syncToDisk() (err error) {
+	// If there is no fs or it's already on the disk.
+	if a.fs.fs == nil || a.fs.Realpath() != "" {
+		return
+	}
+	// Export to a temporary path.
+	// Make sure the path doesn't have semicolons, because Docker bind doesn't like it.
+	tmpDirName := strings.Replace(a.ID, ":", "_", -1)
+	tmpDir, err := launchr.MkdirTemp(tmpDirName)
+	if err != nil {
+		return
+	}
+	fsys, err := fs.Sub(a.fs.fs, a.Dir())
+	if err != nil {
+		return
+	}
+	// Copy from memory to the disk.
+	err = os.CopyFS(tmpDir, fsys)
+	if err != nil {
+		return
+	}
+	// Set a new filesystem to a cached path.
+	a.fs = NewDiscoveryFS(os.DirFS(tmpDir), a.fs.wd)
+	return
+}
+
 // Filepath returns action file path.
-func (a *Action) Filepath() string { return filepath.Join(a.fsdir, a.fpath) }
+func (a *Action) Filepath() string {
+	return filepath.Join(a.fs.Realpath(), a.fpath)
+}
 
 // Dir returns an action file directory.
 func (a *Action) Dir() string { return filepath.Dir(a.Filepath()) }
@@ -195,7 +242,7 @@ func (a *Action) RuntimeDef() *DefRuntime {
 }
 
 // ImageBuildInfo implements [ImageBuildResolver].
-func (a *Action) ImageBuildInfo(image string) *types.BuildDefinition {
+func (a *Action) ImageBuildInfo(image string) *driver.BuildDefinition {
 	return a.RuntimeDef().Container.Build.ImageBuildInfo(image, a.Dir())
 }
 
@@ -240,14 +287,22 @@ func (a *Action) processInputParams(def ParametersList, inp InputParams, changed
 				Action:    a,
 			})
 			if err != nil {
-				return fmt.Errorf(errTplErrorOnProcessor, p.Name, procDef.ID, err)
+				return ErrValueProcessorHandler{
+					Processor: procDef.ID,
+					Param:     p.Name,
+					Err:       err,
+				}
 			}
 		}
 		// Cast to []any slice because jsonschema validator supports only this type.
 		if p.Type == jsonschema.Array {
 			res = CastSliceTypedToAny(res)
 		}
-		inp[p.Name] = res
+		// If the value was changed, we can safely override the value.
+		// If the value was not changed and processed is nil, do not add it.
+		if isChanged || res != nil {
+			inp[p.Name] = res
+		}
 	}
 
 	return nil

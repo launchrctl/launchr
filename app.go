@@ -149,6 +149,11 @@ func (app *appImpl) exec() error {
 
 // Execute is an entrypoint to the launchr app.
 func (app *appImpl) Execute() int {
+	defer func() {
+		if err := launchr.Cleanup(); err != nil {
+			Term().Warning().Printfln("Error on application shutdown cleanup:\n %s", err)
+		}
+	}()
 	var err error
 	if err = app.init(); err != nil {
 		Term().Error().Println(err)

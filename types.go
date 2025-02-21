@@ -9,10 +9,11 @@ import (
 	"github.com/launchrctl/launchr/pkg/action"
 )
 
-const (
-	// PkgPath is a main module path.
-	PkgPath = launchr.PkgPath
+// PkgPath is a main module path.
+const PkgPath = launchr.PkgPath
 
+// Log levels.
+const (
 	LogLevelDisabled = launchr.LogLevelDisabled // LogLevelDisabled does never print.
 	LogLevelDebug    = launchr.LogLevelDebug    // LogLevelDebug is the log level for debug.
 	LogLevelInfo     = launchr.LogLevelInfo     // LogLevelInfo is the log level for info.
@@ -82,8 +83,6 @@ type (
 	Service = launchr.Service
 	// Config handles application configuration.
 	Config = launchr.Config
-	// ConfigAware provides an interface for structs to support launchr configuration setting.
-	ConfigAware = launchr.ConfigAware
 	// ManagedFS is a File System managed by launchr.
 	ManagedFS = launchr.ManagedFS
 
@@ -97,8 +96,8 @@ func Version() *AppVersion { return launchr.Version() }
 // RegisterPlugin add a plugin to global pull.
 func RegisterPlugin(p Plugin) { launchr.RegisterPlugin(p) }
 
-// GetFsAbsPath returns absolute path for an FS struct.
-func GetFsAbsPath(fs fs.FS) string { return launchr.GetFsAbsPath(fs) }
+// FsRealpath returns absolute path for a [fs.FS] interface.
+func FsRealpath(fs fs.FS) string { return launchr.FsRealpath(fs) }
 
 // EnsurePath creates all directories in the path.
 func EnsurePath(parts ...string) error { return launchr.EnsurePath(parts...) }
@@ -135,3 +134,13 @@ func NewJSONHandlerLogger(w io.Writer) *Logger { return launchr.NewJSONHandlerLo
 
 // NewExitError creates a new ExitError.
 func NewExitError(code int, msg string) error { return launchr.NewExitError(code, msg) }
+
+// RegisterCleanupFn saves a function to be executed on Cleanup.
+// It is run on the termination of the application.
+func RegisterCleanupFn(fn func() error) { launchr.RegisterCleanupFn(fn) }
+
+// MustAbs returns absolute filepath and panics on error.
+func MustAbs(path string) string { return launchr.MustAbs(path) }
+
+// MustSubFS returns an [fs.FS] corresponding to the subtree rooted at fsys's dir.
+func MustSubFS(fsys fs.FS, path string) fs.FS { return launchr.MustSubFS(fsys, path) }

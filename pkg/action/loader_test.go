@@ -28,10 +28,7 @@ func testLoaderAction() *Action {
 			},
 		},
 	}
-	a := &Action{
-		ID:     "my_actions",
-		loader: af,
-	}
+	a := New(StringID("my_actions"), af, NewDiscoveryFS(nil, ""), "")
 	return a
 }
 
@@ -53,16 +50,19 @@ func Test_InputProcessor(t *testing.T) {
 	err := act.SetInput(input)
 	require.NoError(t, err)
 
+	// Check all available variables are replaced.
 	s := "{{ .arg1 }},{{ .optStr }},{{ .opt_str }}"
 	res, err := proc.Process(ctx, []byte(s))
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, "arg1,optVal1,opt-val2", string(res))
 
+	// Check the variable has incorrect name and correct error is returned.
 	s = "{{ .opt-str }}"
 	res, err = proc.Process(ctx, []byte(s))
 	assert.ErrorContains(t, err, "unexpected '-' symbol in a template variable.")
 	assert.Equal(t, "", string(res))
 
+	// Check that we have an error when missing variables are not handled.
 	s = "{{ .arg2 }},{{ .optUnd }}"
 	res, err = proc.Process(ctx, []byte(s))
 	assert.Equal(t, err, errMissingVar{vars: map[string]struct{}{"optUnd": {}, "arg2": {}}})

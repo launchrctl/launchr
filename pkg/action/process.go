@@ -4,10 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"strings"
 
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
@@ -21,11 +18,10 @@ type ValueProcessor interface {
 
 // ValueProcessorContext is related context data for ValueProcessor.
 type ValueProcessorContext struct {
-	ValOrig   any                   // ValOrig is the value before processing.
-	IsChanged bool                  // IsChanged indicates if the value was input by user.
-	Options   ValueProcessorOptions // Options is the [ValueProcessor] configuration.
-	DefParam  *DefParameter         // DefParam is the definition of the currently processed parameter.
-	Action    *Action               // Action is the related action definition.
+	ValOrig   any           // ValOrig is the value before processing.
+	IsChanged bool          // IsChanged indicates if the value was input by user.
+	DefParam  *DefParameter // DefParam is the definition of the currently processed parameter.
+	Action    *Action       // Action is the related action definition.
 }
 
 // ValueProcessorHandler is an actual implementation of [ValueProcessor] that processes the incoming value.
@@ -36,13 +32,62 @@ type ValueProcessorOptions interface {
 	Validate() error
 }
 
-// ValueProcessorOptionsEmpty when [ValueProcessor] doesn't have options.
-type ValueProcessorOptionsEmpty struct{}
+// ValueProcessorOptionsFields provides option fields that must be decoded.
+type ValueProcessorOptionsFields interface {
+	DecodeFields() any
+}
+
+// GenericValueProcessorOptions is a common [ValueProcessorOptions] with validation.
+type GenericValueProcessorOptions[T any] struct {
+	Fields T
+}
+
+// DecodeFields implements [ValueProcessorOptionsFields] interface.
+func (o *GenericValueProcessorOptions[T]) DecodeFields() any {
+	return &o.Fields
+}
 
 // Validate implements [ValueProcessorOptions] interface.
-func (o *ValueProcessorOptionsEmpty) Validate() error {
+func (o *GenericValueProcessorOptions[T]) Validate() error {
+	val := reflect.ValueOf(o.Fields)
+	typ := val.Type()
+
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Field(i)
+		fieldType := typ.Field(i)
+
+		for _, fnName := range tagValidateDef(fieldType) {
+			switch fnName {
+			case "not-empty":
+				if field.IsZero() {
+					return ErrValueProcessorOptionsFieldValidation{
+						Field:  tagYamlOrStructName(fieldType),
+						Reason: "required",
+					}
+				}
+			}
+		}
+	}
+
 	return nil
 }
+
+func tagYamlOrStructName(ftype reflect.StructField) string {
+	tag := ftype.Tag.Get("yaml")
+	if tag == "" {
+		return ftype.Name
+	}
+	fields := strings.Split(tag, ",")
+	return fields[0]
+}
+
+func tagValidateDef(ftype reflect.StructField) []string {
+	validations := ftype.Tag.Get("validate")
+	return strings.Split(validations, " ")
+}
+
+// ValueProcessorOptionsEmpty when [ValueProcessor] doesn't have options.
+type ValueProcessorOptionsEmpty = *GenericValueProcessorOptions[struct{}]
 
 // GenericValueProcessor is a common [ValueProcessor].
 type GenericValueProcessor[T ValueProcessorOptions] struct {
@@ -70,7 +115,7 @@ func (p GenericValueProcessor[T]) OptionsType() ValueProcessorOptions {
 	if rtype.Kind() == reflect.Ptr {
 		return reflect.New(rtype.Elem()).Interface().(T)
 	}
-	panic(fmt.Sprintf("type %T does not implement ValueProcessorOptions correctly: its method(s) must use a pointer receiver (*%T).", t, t))
+	return t
 }
 
 // Handler implements [ValueProcessor] interface.
@@ -84,42 +129,43 @@ func (p GenericValueProcessor[T]) Handler(opts ValueProcessorOptions) ValueProce
 	}
 }
 
-// TestCaseValueProcessor is a common test case behavior for [ValueProcessor].
-type TestCaseValueProcessor struct {
-	Name    string
-	Yaml    string
-	ErrInit error
-	ErrProc error
-	Args    InputParams
-	Opts    InputParams
-	ExpArgs InputParams
-	ExpOpts InputParams
-}
+func initValueProcessors(list map[string]ValueProcessor, p *DefParameter) ([]ValueProcessorHandler, error) {
+	var err error
+	processors := make([]ValueProcessorHandler, 0, len(p.Process))
+	for _, procDef := range p.Process {
+		proc, ok := list[procDef.ID]
+		if !ok {
+			return nil, ErrValueProcessorNotExist(procDef.ID)
+		}
 
-// Test runs the test for [ValueProcessor].
-func (tt TestCaseValueProcessor) Test(t *testing.T, am Manager) {
-	a := NewFromYAML(tt.Name, []byte(tt.Yaml))
-	// Init processors in the action.
-	err := a.SetProcessors(am.GetValueProcessors())
-	require.Equal(t, err, tt.ErrInit)
-	if tt.ErrInit != nil {
-		return
+		// Check type is supported by a processor.
+		if !proc.IsApplicable(p.Type) {
+			return nil, ErrValueProcessorNotApplicable{
+				Type:      p.Type,
+				Processor: procDef.ID,
+			}
+		}
+
+		// Parse value processor options.
+		opts := proc.OptionsType()
+		if procDef.optsRaw != nil {
+			if optsFields, ok := opts.(ValueProcessorOptionsFields); ok {
+				err = procDef.optsRaw.Decode(optsFields.DecodeFields())
+			} else {
+				err = procDef.optsRaw.Decode(opts)
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// Validate the options.
+		if err = opts.Validate(); err != nil {
+			return nil, ErrValueProcessorOptionsValidation{Processor: procDef.ID, Err: err}
+		}
+
+		// Add to processors.
+		processors = append(processors, proc.Handler(opts))
 	}
-	// Run processors.
-	input := NewInput(a, tt.Args, tt.Opts, nil)
-	err = a.SetInput(input)
-	require.Equal(t, err, tt.ErrProc)
-	if tt.ErrProc != nil {
-		return
-	}
-	// Test input is processed.
-	input = a.Input()
-	if tt.ExpArgs == nil {
-		tt.ExpArgs = InputParams{}
-	}
-	if tt.ExpOpts == nil {
-		tt.ExpOpts = InputParams{}
-	}
-	assert.Equal(t, tt.ExpArgs, input.Args())
-	assert.Equal(t, tt.ExpOpts, input.Opts())
+	return processors, nil
 }
