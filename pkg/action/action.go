@@ -298,7 +298,11 @@ func (a *Action) processInputParams(def ParametersList, inp InputParams, changed
 		if p.Type == jsonschema.Array {
 			res = CastSliceTypedToAny(res)
 		}
-		inp[p.Name] = res
+		// If the value was changed, we can safely override the value.
+		// If the value was not changed and processed is nil, do not add it.
+		if isChanged || res != nil {
+			inp[p.Name] = res
+		}
 	}
 
 	return nil

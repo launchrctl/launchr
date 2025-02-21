@@ -139,6 +139,15 @@ action:
         - processor: test.defaultVal
 `
 
+const actionNoProcess = `
+runtime: plugin
+action:
+  title: Title
+  arguments:
+    - name: arg1
+      type: string
+`
+
 type procTestReplaceOptions = *GenericValueProcessorOptions[struct {
 	O string `yaml:"old" validate:"not-empty"`
 	N string `yaml:"new"`
@@ -192,6 +201,7 @@ func Test_ActionsValueProcessor(t *testing.T) {
 		{Name: "valid processor chain - with default, no input given", Yaml: actionProcessWithDefault, ExpArgs: InputParams{"arg1": "processed_default"}, ExpOpts: InputParams{"opt1": "processed_default"}},
 		{Name: "valid processor chain - no defaults, no input given", Yaml: actionProcessNoDefault, ExpArgs: InputParams{"arg1": "processed_default"}, ExpOpts: InputParams{"opt1": "processed_default"}},
 		{Name: "valid processor - array processed and cast to []any", Yaml: actionProcessArrayType, ExpArgs: InputParams{"arg1": []any{"1", "2", "3"}}, ExpOpts: InputParams{}},
+		{Name: "valid no processor - param is not set", Yaml: actionNoProcess},
 		{Name: "unexpected empty options", Yaml: actionProcessInvalidOptions, ErrInit: ErrValueProcessorOptionsValidation{Processor: "test.replace", Err: ErrValueProcessorOptionsFieldValidation{Field: "old", Reason: "required"}}},
 		{Name: "wrong type options", Yaml: actionProcessWrongOptions, ErrInit: yamlMergeErrors(yamlTypeError("line 10: cannot unmarshal !!seq into string"), yamlTypeError("line 12: cannot unmarshal !!map into string"))},
 		{Name: "broken processor", Yaml: actionProcessBroken, ErrInit: ErrValueProcessorNotExist("test.broken")},
