@@ -100,9 +100,9 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 		var logger *launchr.Logger
 		switch logFormat {
 		case LogFormatPlain:
-			logger = launchr.NewJSONHandlerLogger(out)
-		case LogFormatJSON:
 			logger = launchr.NewTextHandlerLogger(out)
+		case LogFormatJSON:
+			logger = launchr.NewJSONHandlerLogger(out)
 		default:
 			logger = launchr.NewConsoleLogger(out)
 		}
