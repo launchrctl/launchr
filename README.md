@@ -1,8 +1,8 @@
 # Launchr
 
-Launchr is a CLI action runner that executes actions inside short-lived local containers.  
-Actions are defined in `action.yaml` files, which are automatically discovered in the filesystem. 
-They can be placed anywhere that makes sense semantically. You can find action examples [here](example) and in the [documentation](docs).  
+Launchr is a CLI action runner that executes actions inside short-lived local containers.
+Actions are defined in `action.yaml` files, which are automatically discovered in the filesystem.
+They can be placed anywhere that makes sense semantically. You can find action examples [here](example) and in the [documentation](docs).
 Launchr has a plugin system that allows to extend its functionality. See [core plugins](plugins), [compose](https://github.com/launchrctl/compose) and [documentation](docs).
 
 ## Table of contents
@@ -27,7 +27,7 @@ bin/launchr --help
 The documentation for `launchr` usage can be found in [docs](docs).
 
 If you face any issues with `launchr`:
-1. Open an issue in the repo. 
+1. Open an issue in the repo.
 2. Share the app version with `launchr --version`
 
 ## Installation
@@ -46,7 +46,7 @@ make install
 launchr --version
 ```
 
-The tool will be installed in `$GOPATH/bin` which is usually `~/go/bin`.  
+The tool will be installed in `$GOPATH/bin` which is usually `~/go/bin`.
 If `GOPATH` env variable is not available, make sure you have it in `~/.bashrc` or `~/.zhrc`:
 
 ```shell
@@ -80,11 +80,6 @@ Useful make commands:
 
 ## Publishing a new release
 
-1. Install [goreleaser](https://goreleaser.com/install/)
-2. Create an [Access token on GitHub](https://github.com/settings/tokens)
-3. Create a tag, build a release and push
-   ```shell
-   git tag -a v0.0.0 -m "Release notes"
-   export GITHUB_TOKEN="[TOKEN]"
-   goreleaser release --clean
-   ```
+- Just create new release [from UI](https://github.com/launchrctl/launchr/releases/new)
+- Github Action will compile new binaries using [goreleaser](https://goreleaser.com/) and attach them to release
+
