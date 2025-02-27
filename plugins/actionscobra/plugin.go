@@ -63,7 +63,6 @@ func (p *Plugin) discoverActions() (err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-discoveryLoop:
 	for _, pldisc := range launchr.GetPluginByType[action.DiscoveryPlugin](p.pm) {
 		actions, errDis := pldisc.V.DiscoverActions(ctx)
 		if errDis != nil {
@@ -85,7 +84,8 @@ discoveryLoop:
 		aid := p.am.GetIDFromAlias(early.Command)
 		if _, ok := p.am.Get(aid); ok {
 			p.reqaid = aid
-			break discoveryLoop
+			// @fixme There is an issue that we can't call other actions because they are not discovered.
+			//break discoveryLoop
 		}
 	}
 	// Failed to discover actions in reasonable time.
