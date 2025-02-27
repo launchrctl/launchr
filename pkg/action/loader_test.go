@@ -33,6 +33,7 @@ func testLoaderAction() *Action {
 }
 
 func Test_EnvProcessor(t *testing.T) {
+	t.Parallel()
 	proc := envProcessor{}
 	_ = os.Setenv("TEST_ENV1", "VAL1")
 	_ = os.Setenv("TEST_ENV2", "VAL2")
@@ -42,6 +43,7 @@ func Test_EnvProcessor(t *testing.T) {
 }
 
 func Test_InputProcessor(t *testing.T) {
+	t.Parallel()
 	act := testLoaderAction()
 	ctx := LoadContext{Action: act}
 	proc := inputProcessor{}
@@ -70,6 +72,7 @@ func Test_InputProcessor(t *testing.T) {
 }
 
 func Test_YamlTplCommentsProcessor(t *testing.T) {
+	t.Parallel()
 	act := testLoaderAction()
 	ctx := LoadContext{Action: act}
 	proc := NewPipeProcessor(
@@ -98,6 +101,7 @@ t: {{ .arg1 }} # {{ .optUnd }}
 }
 
 func Test_PipeProcessor(t *testing.T) {
+	t.Parallel()
 	act := testLoaderAction()
 	ctx := LoadContext{Action: act}
 	proc := NewPipeProcessor(

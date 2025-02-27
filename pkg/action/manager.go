@@ -39,8 +39,6 @@ type Manager interface {
 	// GetValueProcessors returns list of available processors
 	GetValueProcessors() map[string]ValueProcessor
 
-	// DefaultRuntime provides the default action runtime.
-	DefaultRuntime() Runtime
 	// Run executes an action in foreground.
 	Run(ctx context.Context, a *Action) (RunInfo, error)
 	// RunBackground executes an action in background.
@@ -217,10 +215,6 @@ func (m *actionManagerMap) SetActionIDProvider(p IDProvider) {
 	m.idProvider = p
 }
 
-func (m *actionManagerMap) DefaultRuntime() Runtime {
-	return NewContainerRuntimeDocker()
-}
-
 // RunInfo stores information about a running action.
 type RunInfo struct {
 	ID     string
@@ -299,9 +293,16 @@ func (m *actionManagerMap) RunInfoByID(id string) (RunInfo, bool) {
 }
 
 // WithDefaultRuntime adds a default [Runtime] for an action.
-func WithDefaultRuntime(m Manager, a *Action) {
-	if a.Runtime() == nil {
-		a.SetRuntime(m.DefaultRuntime())
+func WithDefaultRuntime(_ Manager, a *Action) {
+	if a.Runtime() != nil {
+		return
+	}
+	def, _ := a.Raw()
+	switch def.Runtime.Type {
+	case runtimeTypeContainer:
+		a.SetRuntime(NewContainerRuntimeDocker())
+	case runtimeTypeShell:
+		a.SetRuntime(NewShellRuntime())
 	}
 }
 

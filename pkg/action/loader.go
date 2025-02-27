@@ -8,6 +8,8 @@ import (
 	"strings"
 	"syscall"
 	"text/template"
+
+	"github.com/launchrctl/launchr/internal/launchr"
 )
 
 // Loader is an interface for loading an action file.
@@ -188,4 +190,10 @@ func addPredefinedVariables(data map[string]any, a *Action) {
 	data["current_working_dir"] = a.wd         // app working directory
 	data["actions_base_dir"] = a.fs.Realpath() // root directory where the action was found
 	data["action_dir"] = a.Dir()               // directory of action file
+	// Get the path of the executable on the host.
+	bin, err := os.Executable()
+	if err != nil {
+		bin = launchr.Version().Name
+	}
+	data["current_bin"] = bin
 }
