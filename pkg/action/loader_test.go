@@ -67,6 +67,15 @@ func Test_InputProcessor(t *testing.T) {
 	res, err = proc.Process(ctx, []byte(s))
 	assert.Equal(t, err, errMissingVar{vars: map[string]struct{}{"optUnd": {}, "arg2": {}}})
 	assert.Equal(t, "", string(res))
+
+	// Remove line if a variable not exists or is nil.
+	s = `- "{{ .arg1 | removeLineIfNil }}"
+- "{{ .optUnd | removeLineIfNil }}" # Piping with new line
+- "{{ if not (isNil .arg1) }}arg1 is not nil{{end}}"
+- "{{ if isNil .optUnd }}{{ removeLine }}{{ end }}" # Function call without new line`
+	res, err = proc.Process(ctx, []byte(s))
+	assert.NoError(t, err)
+	assert.Equal(t, "- \"arg1\"\n- \"arg1 is not nil\"\n", string(res))
 }
 
 func Test_YamlTplCommentsProcessor(t *testing.T) {

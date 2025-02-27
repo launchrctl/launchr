@@ -19,5 +19,5 @@ runtime:
   command:
     - sh
     - /action/main.sh
-    - "{{ .firstoption }}"
-    - "{{ .secondoption }}"
+    - "{{ .firstoption | removeLineIfNil }}"
+    - "{{ if not (isNil .secondoption) }}--secondoption={{ .secondoption }}{{ else }}{{ removeLine }}{{ end }}"

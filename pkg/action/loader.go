@@ -10,6 +10,10 @@ import (
 	"text/template"
 )
 
+const tokenRmLine = "<TOKEN_REMOVE_THIS_LINE>"
+
+var rgxTokenRmLine = regexp.MustCompile(`.*` + tokenRmLine + `.*\n?`)
+
 // Loader is an interface for loading an action file.
 type Loader interface {
 	// Content returns the raw file content.
@@ -88,6 +92,27 @@ func (err errMissingVar) Error() string {
 	return fmt.Sprintf("the following variables were used but never defined: %v", f)
 }
 
+// actionTplFuncs defined template functions available during parsing of an action yaml.
+func actionTplFuncs() template.FuncMap {
+	return template.FuncMap{
+		// Checks if a value is nil. Used in conditions.
+		"isNil": func(v any) bool {
+			return v == nil
+		},
+		// Removes a line if a given value is nil or pass through.
+		"removeLineIfNil": func(v any) any {
+			if v == nil {
+				return tokenRmLine
+			}
+			return v
+		},
+		// Removes current line.
+		"removeLine": func() string {
+			return tokenRmLine
+		},
+	}
+}
+
 func (p inputProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
 	if ctx.Action == nil {
 		return b, nil
@@ -99,7 +124,8 @@ func (p inputProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
 	addPredefinedVariables(data, a)
 
 	// Parse action without variables to validate
-	tpl := template.New(a.ID)
+	tpl := template.New(a.ID).Funcs(actionTplFuncs())
+
 	_, err := tpl.Parse(string(b))
 	if err != nil {
 		// Check if variables have dashes to show the error properly.
@@ -140,6 +166,9 @@ Action definition is correct, but dashes are not allowed in templates, replace "
 			return nil, errMissingVar{miss}
 		}
 	}
+
+	// Remove all lines containing [tokenRmLine].
+	res = rgxTokenRmLine.ReplaceAll(res, []byte(""))
 
 	return res, nil
 }
