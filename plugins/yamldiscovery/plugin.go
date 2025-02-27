@@ -23,7 +23,11 @@ type Plugin struct {
 // PluginInfo implements [launchr.Plugin] interface.
 func (p *Plugin) PluginInfo() launchr.PluginInfo {
 	return launchr.PluginInfo{
-		Weight: math.MinInt,
+		// Discover yaml files in fs as late as possible
+		// to allow early return in discovery if the desired command is found.
+		// Set the weight less than actionscobra plugin to run OnAppInit earlier.
+		// @todo review after introducing dependency graph.
+		Weight: math.MaxInt - 10,
 	}
 }
 

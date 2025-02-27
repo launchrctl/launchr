@@ -30,6 +30,9 @@ type Plugin struct {
 	app launchr.AppInternal
 	am  action.Manager
 	pm  launchr.PluginManager
+
+	// reqaid is a action id that was requested to run in cli.
+	reqaid string
 }
 
 // PluginInfo implements [launchr.Plugin] interface.
@@ -55,31 +58,39 @@ func (p *Plugin) discoverActions() (err error) {
 	if early.IsVersion || early.IsGen {
 		return err
 	}
-	var discovered []*action.Action
 	// @todo configure timeout from flags
 	// Define timeout for cases when we may traverse the whole FS, e.g. in / or home.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	for _, p := range launchr.GetPluginByType[action.DiscoveryPlugin](p.pm) {
-		actions, errDis := p.V.DiscoverActions(ctx)
+
+discoveryLoop:
+	for _, pldisc := range launchr.GetPluginByType[action.DiscoveryPlugin](p.pm) {
+		actions, errDis := pldisc.V.DiscoverActions(ctx)
 		if errDis != nil {
 			return errDis
 		}
-		discovered = append(discovered, actions...)
+
+		// Add discovered actions.
+		for _, a := range actions {
+			err = p.am.Add(a)
+			if err != nil {
+				launchr.Log().Warn("action was skipped due to error", "action_id", a.ID, "error", err)
+				launchr.Term().Warning().Printfln("Action %q was skipped:\n%v", a.ID, err)
+				continue
+			}
+		}
+
+		// Stop discovery if the requested command found.
+		// Check if an alias was provided to find the real action.
+		aid := p.am.GetIDFromAlias(early.Command)
+		if _, ok := p.am.Get(aid); ok {
+			p.reqaid = aid
+			break discoveryLoop
+		}
 	}
 	// Failed to discover actions in reasonable time.
 	if errCtx := ctx.Err(); errCtx != nil {
 		return errors.New(errDiscoveryTimeout)
-	}
-
-	// Add discovered actions.
-	for _, a := range discovered {
-		err = p.am.Add(a)
-		if err != nil {
-			launchr.Log().Warn("action was skipped due to error", "action_id", a.ID, "error", err)
-			launchr.Term().Warning().Printfln("Action %q was skipped:\n%v", a.ID, err)
-			continue
-		}
 	}
 
 	// Alter all registered actions.
@@ -100,17 +111,16 @@ func (p *Plugin) CobraAddCommands(rootCmd *launchr.Command) error {
 	// Convert actions to cobra commands.
 	// Check the requested command to see what actions we must actually load.
 	var actions map[string]*action.Action
-	if early.Command != "" {
-		// Check if an alias was provided to find the real action.
-		early.Command = p.am.GetIDFromAlias(early.Command)
-		a, ok := p.am.Get(early.Command)
-		if ok {
-			// Use only the requested action.
-			actions = map[string]*action.Action{a.ID: a}
-		} else {
-			// Action was not requested, no need to load them.
-			return nil
+	if p.reqaid != "" {
+		// Use only the requested action.
+		a, ok := p.am.Get(p.reqaid)
+		if !ok {
+			panic("unexpected action id provided")
 		}
+		actions = map[string]*action.Action{p.reqaid: a}
+	} else if early.Command != "" {
+		// Action was not requested, no need to load them.
+		return nil
 	} else {
 		// Load all.
 		actions = p.am.All()
