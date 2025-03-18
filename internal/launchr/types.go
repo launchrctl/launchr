@@ -19,8 +19,12 @@ const (
 	EnvVarRootParentPID = EnvVar("root_ppid")
 	// EnvVarActionsPath defines path where to search for actions.
 	EnvVarActionsPath = EnvVar("actions_path")
-	// EnvVarLogLevel defines currently set log level.
+	// EnvVarLogLevel defines currently set log level, see --log-level or -v flag.
 	EnvVarLogLevel = EnvVar("log_level")
+	// EnvVarLogFormat defines currently set log format, see --log-format flag.
+	EnvVarLogFormat = EnvVar("log_format")
+	// EnvVarQuietMode defines if the application should output anything, see --quiet flag.
+	EnvVarQuietMode = EnvVar("quiet_mode")
 )
 
 // PkgPath is a main module path.

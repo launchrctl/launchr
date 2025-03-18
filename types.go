@@ -36,6 +36,10 @@ const (
 	EnvVarActionsPath = launchr.EnvVarActionsPath
 	// EnvVarLogLevel defines currently set log level.
 	EnvVarLogLevel = launchr.EnvVarLogLevel
+	// EnvVarLogFormat defines currently set log format, see --log-format flag.
+	EnvVarLogFormat = launchr.EnvVarLogFormat
+	// EnvVarQuietMode defines if the application should output anything, see --quiet flag.
+	EnvVarQuietMode = launchr.EnvVarQuietMode
 )
 
 // Re-export types aliases for usage by external modules.

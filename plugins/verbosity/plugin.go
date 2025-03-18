@@ -88,7 +88,7 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	verbosity := 0
 	quiet := false
 	var logFormat LogFormat
-	var logLevelStr logLevelStr
+	var logLvlStr logLevelStr
 
 	// Assert we are able to access internal functionality.
 	appInternal, ok := app.(launchr.AppInternal)
@@ -102,7 +102,7 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	unkFlagsBkp := pflags.ParseErrorsWhitelist.UnknownFlags
 	pflags.ParseErrorsWhitelist.UnknownFlags = true
 	pflags.CountVarP(&verbosity, "verbose", "v", "log verbosity level, use -vvvv DEBUG, -vvv INFO, -vv WARN, -v ERROR")
-	pflags.VarP(&logLevelStr, "log-level", "", "log level, same as -v, can be: DEBUG, INFO, WARN, ERROR or NONE")
+	pflags.VarP(&logLvlStr, "log-level", "", "log level, same as -v, can be: DEBUG, INFO, WARN, ERROR or NONE (default NONE)")
 	pflags.VarP(&logFormat, "log-format", "", "log format, can be: pretty, plain or json (default pretty)")
 	pflags.BoolVarP(&quiet, "quiet", "q", false, "disable output to the console")
 
@@ -116,8 +116,14 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 		panic(err)
 	}
 	pflags.ParseErrorsWhitelist.UnknownFlags = unkFlagsBkp
+
+	// Set quiet mode.
 	launchr.Term().EnableOutput()
+	if !quiet && launchr.EnvVarQuietMode.Get() == "1" {
+		quiet = true
+	}
 	if quiet {
+		_ = launchr.EnvVarQuietMode.Set("1")
 		launchr.Term().DisableOutput()
 		app.SetStreams(launchr.NoopStreams())
 	}
@@ -125,7 +131,7 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	// Select log level based on priority of definition.
 	logLevel := launchr.LogLevelDisabled
 	if pflags.Changed("log-level") {
-		logLevel = launchr.LogLevelFromString(string(logLevelStr))
+		logLevel = launchr.LogLevelFromString(string(logLvlStr))
 	} else if pflags.Changed("verbose") {
 		logLevel = logLevelFlagInt(verbosity)
 	} else if logLvlEnv := launchr.EnvVarLogLevel.Get(); logLvlEnv != "" {
@@ -138,6 +144,9 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	launchr.Term().SetOutput(out)
 	// Enable logger.
 	if logLevel != launchr.LogLevelDisabled {
+		if logFormat == "" && launchr.EnvVarLogFormat.Get() != "" {
+			logFormat = LogFormat(launchr.EnvVarLogFormat.Get())
+		}
 		var logger *launchr.Logger
 		switch logFormat {
 		case LogFormatPlain:
@@ -150,6 +159,7 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 		launchr.SetLogger(logger)
 		// Save env variable for subprocesses.
 		_ = launchr.EnvVarLogLevel.Set(logLevel.String())
+		_ = launchr.EnvVarLogFormat.Set(logFormat.String())
 	}
 	launchr.Log().SetLevel(logLevel)
 	cmd.SetOut(out)
