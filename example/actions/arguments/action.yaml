@@ -1,6 +1,14 @@
 action:
   title: arguments
   description: Test passing options to executed command
+  arguments:
+    - name: arg1
+      title: Argument 1
+      description: Some additional info for arg
+      required: true # false by default
+    - name: arg2
+      title: Argument 2
+      description: Some additional info for arg
   options:
     - name: firstoption
       title: First option
@@ -19,5 +27,7 @@ runtime:
   command:
     - sh
     - /action/main.sh
+    - "{{ .arg1 }}"
+    - "{{ .arg2 }}"
     - "{{ .firstoption }}"
     - "{{ .secondoption }}"

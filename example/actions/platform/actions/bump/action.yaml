@@ -5,6 +5,7 @@ action:
     - name: arg1
       title: Argument 1
       description: Some additional info for arg
+      required: false
     - name: arg2
       title: Argument 2
       description: Some additional info for arg
