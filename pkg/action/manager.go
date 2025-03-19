@@ -2,6 +2,7 @@ package action
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"strconv"
@@ -10,6 +11,9 @@ import (
 
 	"github.com/launchrctl/launchr/internal/launchr"
 )
+
+// DiscoverActionsFn defines a function to discover actions.
+type DiscoverActionsFn func(ctx context.Context) ([]*Action, error)
 
 // Manager handles actions and its execution.
 type Manager interface {
@@ -39,6 +43,16 @@ type Manager interface {
 	// GetValueProcessors returns list of available processors
 	GetValueProcessors() map[string]ValueProcessor
 
+	// AddDiscovery registers a discovery callback to find actions.
+	AddDiscovery(DiscoverActionsFn)
+	// SetDiscoveryTimeout sets discovery timeout to stop on long-running callbacks.
+	SetDiscoveryTimeout(timeout time.Duration)
+
+	RunManager
+}
+
+// RunManager runs actions and stores runtime information about them.
+type RunManager interface {
 	// Run executes an action in foreground.
 	Run(ctx context.Context, a *Action) (RunInfo, error)
 	// RunBackground executes an action in background.
@@ -70,12 +84,17 @@ type DecorateWithFn = func(m Manager, a *Action)
 type actionManagerMap struct {
 	actionStore   map[string]*Action
 	actionAliases map[string]string
-	runStore      map[string]RunInfo // @todo consider persistent storage
 	mx            sync.Mutex
-	mxRun         sync.Mutex
 	dwFns         []DecorateWithFn
 	processors    map[string]ValueProcessor
 	idProvider    IDProvider
+
+	// Actions discovery.
+	discoveryFns []DiscoverActionsFn
+	discoverySeq *launchr.SliceSeqStateful[DiscoverActionsFn]
+	discTimeout  time.Duration
+
+	runManagerMap
 }
 
 // NewManager constructs a new action manager.
@@ -83,9 +102,14 @@ func NewManager(withFns ...DecorateWithFn) Manager {
 	return &actionManagerMap{
 		actionStore:   make(map[string]*Action),
 		actionAliases: make(map[string]string),
-		runStore:      make(map[string]RunInfo),
 		dwFns:         withFns,
 		processors:    make(map[string]ValueProcessor),
+
+		discTimeout: 10 * time.Second,
+
+		runManagerMap: runManagerMap{
+			runStore: make(map[string]RunInfo),
+		},
 	}
 }
 
@@ -96,7 +120,10 @@ func (m *actionManagerMap) ServiceInfo() launchr.ServiceInfo {
 func (m *actionManagerMap) Add(a *Action) error {
 	m.mx.Lock()
 	defer m.mx.Unlock()
+	return m.add(a)
+}
 
+func (m *actionManagerMap) add(a *Action) error {
 	// Check action loads properly.
 	def, err := a.Raw()
 	if err != nil {
@@ -130,6 +157,9 @@ func (m *actionManagerMap) Add(a *Action) error {
 func (m *actionManagerMap) AllUnsafe() map[string]*Action {
 	m.mx.Lock()
 	defer m.mx.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), m.discTimeout)
+	defer cancel()
+	_ = m.finalizeDiscovery(ctx)
 	return maps.Clone(m.actionStore)
 }
 
@@ -169,11 +199,75 @@ func (m *actionManagerMap) Get(id string) (*Action, bool) {
 	return m.Decorate(a, m.dwFns...), ok
 }
 
-func (m *actionManagerMap) GetUnsafe(id string) (*Action, bool) {
+func (m *actionManagerMap) GetUnsafe(id string) (a *Action, ok bool) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
+
+	a, ok = m.get(id)
+	if ok {
+		return a, ok
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), m.discTimeout)
+	defer cancel()
+	for fn := range m.discoverySeq.Seq() {
+		if err := m.callDiscoveryFn(ctx, fn); err != nil {
+			continue
+		}
+
+		a, ok = m.get(id)
+		if ok {
+			return a, ok
+		}
+	}
+
+	return a, ok
+}
+
+func (m *actionManagerMap) get(id string) (*Action, bool) {
+	id = m.GetIDFromAlias(id)
 	a, ok := m.actionStore[id]
 	return a, ok
+}
+
+func (m *actionManagerMap) SetDiscoveryTimeout(timeout time.Duration) {
+	m.discTimeout = timeout
+}
+
+func (m *actionManagerMap) AddDiscovery(fn DiscoverActionsFn) {
+	if m.discoveryFns == nil {
+		m.discoveryFns = make([]DiscoverActionsFn, 0, 1)
+		m.discoverySeq = launchr.NewSliceSeqStateful(&m.discoveryFns)
+	}
+	m.discoveryFns = append(m.discoveryFns, fn)
+}
+
+func (m *actionManagerMap) finalizeDiscovery(ctx context.Context) error {
+	errs := make([]error, 0)
+	for fn := range m.discoverySeq.Seq() {
+		err := m.callDiscoveryFn(ctx, fn)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (m *actionManagerMap) callDiscoveryFn(ctx context.Context, fn DiscoverActionsFn) error {
+	actions, err := fn(ctx)
+	if err != nil {
+		return err
+	}
+	// Add discovered actions.
+	for _, a := range actions {
+		err = m.add(a)
+		if err != nil {
+			launchr.Log().Warn("action was skipped due to error", "action_id", a.ID, "error", err)
+			launchr.Term().Warning().Printfln("Action %q was skipped:\n%v", a.ID, err)
+			continue
+		}
+	}
+	return nil
 }
 
 func (m *actionManagerMap) AddValueProcessor(name string, vp ValueProcessor) {
@@ -223,10 +317,15 @@ type RunInfo struct {
 	// @todo add more info for status like error message or exit code. Or have it in output.
 }
 
-func (m *actionManagerMap) registerRun(a *Action, id string) RunInfo {
+type runManagerMap struct {
+	runStore map[string]RunInfo // @todo consider persistent storage
+	mx       sync.Mutex
+}
+
+func (m *runManagerMap) registerRun(a *Action, id string) RunInfo {
 	// @todo rethink the implementation
-	m.mxRun.Lock()
-	defer m.mxRun.Unlock()
+	m.mx.Lock()
+	defer m.mx.Unlock()
 	if id == "" {
 		id = strconv.FormatInt(time.Now().Unix(), 10) + "-" + a.ID
 	}
@@ -240,21 +339,21 @@ func (m *actionManagerMap) registerRun(a *Action, id string) RunInfo {
 	return ri
 }
 
-func (m *actionManagerMap) updateRunStatus(id string, st string) {
-	m.mxRun.Lock()
-	defer m.mxRun.Unlock()
+func (m *runManagerMap) updateRunStatus(id string, st string) {
+	m.mx.Lock()
+	defer m.mx.Unlock()
 	if ri, ok := m.runStore[id]; ok {
 		ri.Status = st
 		m.runStore[id] = ri
 	}
 }
 
-func (m *actionManagerMap) Run(ctx context.Context, a *Action) (RunInfo, error) {
+func (m *runManagerMap) Run(ctx context.Context, a *Action) (RunInfo, error) {
 	// @todo add the same status change info
 	return m.registerRun(a, ""), a.Execute(ctx)
 }
 
-func (m *actionManagerMap) RunBackground(ctx context.Context, a *Action, runID string) (RunInfo, chan error) {
+func (m *runManagerMap) RunBackground(ctx context.Context, a *Action, runID string) (RunInfo, chan error) {
 	// @todo change runID to runOptions with possibility to create filestream names in webUI.
 	ri := m.registerRun(a, runID)
 	chErr := make(chan error)
@@ -273,9 +372,9 @@ func (m *actionManagerMap) RunBackground(ctx context.Context, a *Action, runID s
 	return ri, chErr
 }
 
-func (m *actionManagerMap) RunInfoByAction(aid string) []RunInfo {
-	m.mxRun.Lock()
-	defer m.mxRun.Unlock()
+func (m *runManagerMap) RunInfoByAction(aid string) []RunInfo {
+	m.mx.Lock()
+	defer m.mx.Unlock()
 	run := make([]RunInfo, 0, len(m.runStore)/2)
 	for _, v := range m.runStore {
 		if v.Action.ID == aid {
@@ -285,9 +384,9 @@ func (m *actionManagerMap) RunInfoByAction(aid string) []RunInfo {
 	return run
 }
 
-func (m *actionManagerMap) RunInfoByID(id string) (RunInfo, bool) {
-	m.mxRun.Lock()
-	defer m.mxRun.Unlock()
+func (m *runManagerMap) RunInfoByID(id string) (RunInfo, bool) {
+	m.mx.Lock()
+	defer m.mx.Unlock()
 	ri, ok := m.runStore[id]
 	return ri, ok
 }

@@ -24,12 +24,6 @@ type DiscoveryPlugin interface {
 	DiscoverActions(ctx context.Context) ([]*Action, error)
 }
 
-// AlterActionsPlugin is a launchr plugin to alter registered actions.
-type AlterActionsPlugin interface {
-	launchr.Plugin
-	AlterActions() error
-}
-
 // DiscoveryFS is a file system to discover actions.
 type DiscoveryFS struct {
 	// fs is a filesystem where to discover actions.
