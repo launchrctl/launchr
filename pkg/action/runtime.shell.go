@@ -43,17 +43,8 @@ func (r *runtimeShell) Execute(ctx context.Context, a *Action) (err error) {
 	cmd.Dir = a.WorkDir()
 	cmd.Env = append(os.Environ(), rt.Shell.Env...)
 	cmd.Stdout = streams.Out()
-	// Attach stdin.
-	if streams.In().IsTerminal() {
-		// Pass file directly because [CommandContext] does explicit checks in case of stdin.
-		// If stdin is not passed directly, it will block forever waiting for input.
-		cmd.Stdin = streams.In().Reader()
-		// Create a new process group for the subprocess, so signals don't propagate
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			Setpgid: true,
-		}
-	}
 	cmd.Stderr = streams.Err()
+	// Do no attach stdin, as it may not work as expected.
 
 	err = cmd.Start()
 	if err != nil {
@@ -63,7 +54,7 @@ func (r *runtimeShell) Execute(ctx context.Context, a *Action) (err error) {
 	// If we attached with TTY, all signals will be processed by a child process.
 	sigc := launchr.NotifySignals()
 	go launchr.HandleSignals(ctx, sigc, func(s os.Signal, _ string) error {
-		launchr.Log().Debug("forwarding signal for action", "signal", s, "action", a.ID)
+		launchr.Log().Debug("forwarding signal for action", "sig", s, "pid", cmd.Process.Pid)
 		return syscall.Kill(-cmd.Process.Pid, s.(syscall.Signal))
 	})
 	defer launchr.StopCatchSignals(sigc)

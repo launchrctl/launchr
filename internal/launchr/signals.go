@@ -45,7 +45,7 @@ func HandleSignals(ctx context.Context, sigc <-chan os.Signal, killFn func(s os.
 		}
 
 		if err := killFn(s, sig); err != nil {
-			Log().Debug("error sending signal", "error", err)
+			Log().Debug("error sending signal", "error", err, "sig", sig)
 		}
 	}
 }

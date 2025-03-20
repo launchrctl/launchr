@@ -29,7 +29,6 @@ runtime:
     {{ .current_bin }} --help
     echo $${MY_ENV_VAR}
     {{ .action_dir }}/main.sh "{{ .firstoption }}" "{{ .secondoption }}"
-    $$SHELL -l
     echo "Running timer for 60 seconds"
     bash -c "for i in \$(seq 60); do echo \$$i; sleep 1; done"
     echo "Finish"
