@@ -1,0 +1,34 @@
+action:
+  title: arguments
+  description: Test passing options to executed command
+  options:
+    - name: firstoption
+      title: First option
+      type: string
+      default: ""
+    - name: secondoption
+      title: Second option
+      description: Option to do something
+      type: boolean
+      default: false
+
+runtime:
+  type: shell
+  env:
+    MY_ENV_VAR: "my_env_var"
+  script: |
+    date
+    pwd
+    whoami
+    env
+    echo "Current bin path: {{ .current_bin }}"
+    echo "Version:"
+    {{ .current_bin }} --version
+    echo ""
+    echo "Help:"
+    {{ .current_bin }} --help
+    echo $${MY_ENV_VAR}
+    {{ .action_dir }}/main.sh "{{ .firstoption }}" "{{ .secondoption }}"
+    echo "Running timer for 60 seconds"
+    bash -c "for i in \$(seq 60); do echo \$$i; sleep 1; done"
+    echo "Finish"

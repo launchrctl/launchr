@@ -27,9 +27,12 @@ const (
 	sErrActionDefMissing       = "action definition is missing in the declaration"
 	sErrEmptyProcessorID       = "invalid configuration, processor ID is required"
 
+	sErrEmptyScript = "script field cannot be empty"
+
 	// Runtime types.
 	runtimeTypePlugin    DefRuntimeType = "plugin"
 	runtimeTypeContainer DefRuntimeType = "container"
+	runtimeTypeShell     DefRuntimeType = "shell"
 )
 
 type errUnsupportedActionVersion struct {
@@ -173,7 +176,7 @@ func (r *DefRuntimeType) UnmarshalYAML(n *yaml.Node) (err error) {
 	}
 	*r = DefRuntimeType(s)
 	switch *r {
-	case runtimeTypePlugin, runtimeTypeContainer:
+	case runtimeTypePlugin, runtimeTypeContainer, runtimeTypeShell:
 		return nil
 	case "":
 		return yamlTypeErrorLine("empty runtime type", n.Line, n.Column)
@@ -211,10 +214,32 @@ func (r *DefRuntimeContainer) UnmarshalYAML(n *yaml.Node) (err error) {
 	return err
 }
 
+// DefRuntimeShell has shell-specific runtime configuration.
+type DefRuntimeShell struct {
+	Env    EnvSlice `yaml:"env"`
+	Script string   `yaml:"script"`
+}
+
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse runtime shell definition.
+func (r *DefRuntimeShell) UnmarshalYAML(n *yaml.Node) (err error) {
+	type yamlT DefRuntimeShell
+	var y yamlT
+	if err = n.Decode(&y); err != nil {
+		return err
+	}
+	*r = DefRuntimeShell(y)
+	if len(r.Script) == 0 {
+		l, c := yamlNodeLineCol(n, "script")
+		return yamlTypeErrorLine(sErrEmptyScript, l, c)
+	}
+	return err
+}
+
 // DefRuntime contains action runtime configuration.
 type DefRuntime struct {
 	Type      DefRuntimeType `yaml:"type"`
 	Container *DefRuntimeContainer
+	Shell     *DefRuntimeShell
 }
 
 // UnmarshalYAML implements [yaml.Unmarshaler] to parse runtime definition.
@@ -246,6 +271,9 @@ func (r *DefRuntime) UnmarshalYAML(n *yaml.Node) (err error) {
 		return nil
 	case runtimeTypeContainer:
 		err = n.Decode(&r.Container)
+		return err
+	case runtimeTypeShell:
+		err = n.Decode(&r.Shell)
 		return err
 	default:
 		// Error is already returned on runtime type parsing.

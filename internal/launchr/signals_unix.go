@@ -1,6 +1,6 @@
 //go:build unix
 
-package driver
+package launchr
 
 import (
 	"os"

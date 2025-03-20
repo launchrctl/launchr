@@ -24,12 +24,6 @@ type DiscoveryPlugin interface {
 	DiscoverActions(ctx context.Context) ([]*Action, error)
 }
 
-// AlterActionsPlugin is a launchr plugin to alter registered actions.
-type AlterActionsPlugin interface {
-	launchr.Plugin
-	AlterActions() error
-}
-
 // DiscoveryFS is a file system to discover actions.
 type DiscoveryFS struct {
 	// fs is a filesystem where to discover actions.
@@ -219,8 +213,8 @@ func (ad *Discovery) Discover(ctx context.Context) ([]*Action, error) {
 func (ad *Discovery) parseFile(f string) *Action {
 	loader := ad.ds.Loader(
 		ad.fs.OpenCallback(f),
-		envProcessor{},
 		inputProcessor{},
+		envProcessor{},
 	)
 	a := New(ad.idp, loader, ad.fs, f)
 	a.SetWorkDir(launchr.MustAbs(ad.fs.wd))

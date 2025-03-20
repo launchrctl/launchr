@@ -3,16 +3,11 @@ package actionscobra
 
 import (
 	"context"
-	"errors"
 	"math"
 	"time"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/action"
-)
-
-var (
-	errDiscoveryTimeout = "action discovery timeout exceeded"
 )
 
 // ActionsGroup is a command group definition.
@@ -30,9 +25,6 @@ type Plugin struct {
 	app launchr.AppInternal
 	am  action.Manager
 	pm  launchr.PluginManager
-
-	// reqaid is a action id that was requested to run in cli.
-	reqaid string
 }
 
 // PluginInfo implements [launchr.Plugin] interface.
@@ -60,46 +52,20 @@ func (p *Plugin) discoverActions() (err error) {
 	}
 	// @todo configure timeout from flags
 	// Define timeout for cases when we may traverse the whole FS, e.g. in / or home.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	p.am.SetDiscoveryTimeout(30 * time.Second)
 
-	for _, pldisc := range launchr.GetPluginByType[action.DiscoveryPlugin](p.pm) {
-		actions, errDis := pldisc.V.DiscoverActions(ctx)
-		if errDis != nil {
-			return errDis
-		}
-
-		// Add discovered actions.
-		for _, a := range actions {
-			err = p.am.Add(a)
-			if err != nil {
-				launchr.Log().Warn("action was skipped due to error", "action_id", a.ID, "error", err)
-				launchr.Term().Warning().Printfln("Action %q was skipped:\n%v", a.ID, err)
-				continue
+	plugins := launchr.GetPluginByType[action.DiscoveryPlugin](p.pm)
+	launchr.Log().Debug("hook DiscoveryPlugin", "plugins", plugins)
+	for _, pldisc := range plugins {
+		p.am.AddDiscovery(func(ctx context.Context) ([]*action.Action, error) {
+			actions, errDisc := pldisc.V.DiscoverActions(ctx)
+			if errDisc != nil {
+				launchr.Log().Error("error on DiscoverActions", "plugin", pldisc.K.String(), "err", errDisc)
 			}
-		}
-
-		// Stop discovery if the requested command found.
-		// Check if an alias was provided to find the real action.
-		aid := p.am.GetIDFromAlias(early.Command)
-		if _, ok := p.am.Get(aid); ok {
-			p.reqaid = aid
-			// @fixme There is an issue that we can't call other actions because they are not discovered.
-			//break discoveryLoop
-		}
-	}
-	// Failed to discover actions in reasonable time.
-	if errCtx := ctx.Err(); errCtx != nil {
-		return errors.New(errDiscoveryTimeout)
+			return actions, errDisc
+		})
 	}
 
-	// Alter all registered actions.
-	for _, p := range launchr.GetPluginByType[action.AlterActionsPlugin](p.pm) {
-		err = p.V.AlterActions()
-		if err != nil {
-			return err
-		}
-	}
 	// @todo maybe cache discovery result for performance.
 	return err
 }
@@ -111,13 +77,10 @@ func (p *Plugin) CobraAddCommands(rootCmd *launchr.Command) error {
 	// Convert actions to cobra commands.
 	// Check the requested command to see what actions we must actually load.
 	var actions map[string]*action.Action
-	if p.reqaid != "" {
+	a, ok := p.am.Get(early.Command)
+	if ok {
 		// Use only the requested action.
-		a, ok := p.am.Get(p.reqaid)
-		if !ok {
-			panic("unexpected action id provided")
-		}
-		actions = map[string]*action.Action{p.reqaid: a}
+		actions = map[string]*action.Action{a.ID: a}
 	} else if early.Command != "" {
 		// Action was not requested, no need to load them.
 		return nil

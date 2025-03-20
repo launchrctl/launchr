@@ -1,6 +1,6 @@
 //go:build windows
 
-package driver
+package launchr
 
 import "os"
 

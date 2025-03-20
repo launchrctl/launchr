@@ -10,6 +10,7 @@ import (
 )
 
 func TestMkdirTemp(t *testing.T) {
+	t.Parallel()
 	dir, err := MkdirTemp("test")
 	require.NoError(t, err)
 	require.NotEmpty(t, dir)
@@ -23,6 +24,7 @@ func TestMkdirTemp(t *testing.T) {
 }
 
 func TestFsRealpath(t *testing.T) {
+	t.Parallel()
 	// Test basic dir fs.
 	rootfs := os.DirFS("../../")
 	path := FsRealpath(rootfs)

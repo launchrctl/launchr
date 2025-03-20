@@ -188,6 +188,7 @@ func addTestValueProcessors(am Manager) {
 }
 
 func Test_ActionsValueProcessor(t *testing.T) {
+	t.Parallel()
 	am := NewManager()
 	addTestValueProcessors(am)
 
