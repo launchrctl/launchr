@@ -219,8 +219,8 @@ func (ad *Discovery) Discover(ctx context.Context) ([]*Action, error) {
 func (ad *Discovery) parseFile(f string) *Action {
 	loader := ad.ds.Loader(
 		ad.fs.OpenCallback(f),
-		envProcessor{},
 		inputProcessor{},
+		envProcessor{},
 	)
 	a := New(ad.idp, loader, ad.fs, f)
 	a.SetWorkDir(launchr.MustAbs(ad.fs.wd))

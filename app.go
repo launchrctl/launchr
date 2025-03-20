@@ -3,9 +3,9 @@ package launchr
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
-	"strings"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/action"
@@ -39,6 +39,11 @@ func (app *appImpl) SetStreams(s Streams) { app.streams = s }
 
 func (app *appImpl) RegisterFS(fs ManagedFS)      { app.mFS = append(app.mFS, fs) }
 func (app *appImpl) GetRegisteredFS() []ManagedFS { return app.mFS }
+
+func (app *appImpl) SensitiveWriter(w io.Writer) io.Writer {
+	return NewMaskingWriter(w, app.SensitiveMask())
+}
+func (app *appImpl) SensitiveMask() *SensitiveMask { return launchr.GlobalSensitiveMask() }
 
 func (app *appImpl) RootCmd() *Command                      { return app.cmd }
 func (app *appImpl) CmdEarlyParsed() launchr.CmdEarlyParsed { return app.earlyCmd }
@@ -87,21 +92,32 @@ func (app *appImpl) init() error {
 		//Long:  ``, // @todo
 		SilenceErrors: true, // Handled manually.
 		Version:       version,
+		PersistentPreRunE: func(cmd *Command, args []string) error {
+			plugins := launchr.GetPluginByType[PersistentPreRunPlugin](app.pluginMngr)
+			Log().Debug("hook PersistentPreRunPlugin", "plugins", plugins)
+			for _, p := range plugins {
+				if err := p.V.PersistentPreRun(cmd, args); err != nil {
+					Log().Debug("error on PersistentPreRunPlugin", "plugin", p.K.String())
+					return err
+				}
+			}
+			return nil
+		},
 		RunE: func(cmd *Command, _ []string) error {
 			return cmd.Help()
 		},
 	}
 	app.earlyCmd = launchr.EarlyPeekCommand()
 	// Set io streams.
-	app.SetStreams(StandardStreams())
-	app.cmd.SetIn(app.streams.In())
+	app.SetStreams(MaskedStdStreams(app.SensitiveMask()))
+	app.cmd.SetIn(app.streams.In().Reader())
 	app.cmd.SetOut(app.streams.Out())
 	app.cmd.SetErr(app.streams.Err())
 
 	// Set working dir and config dir.
 	app.cfgDir = "." + name
 	app.workDir = launchr.MustAbs(".")
-	actionsPath := launchr.MustAbs(os.Getenv(strings.ToUpper(name + "_ACTIONS_PATH")))
+	actionsPath := launchr.MustAbs(EnvVarActionsPath.Get())
 	// Initialize managed FS for action discovery.
 	app.mFS = make([]ManagedFS, 0, 4)
 	app.RegisterFS(action.NewDiscoveryFS(os.DirFS(actionsPath), app.GetWD()))
@@ -121,35 +137,51 @@ func (app *appImpl) init() error {
 	app.AddService(app.pluginMngr)
 	app.AddService(config)
 
+	Log().Debug("initialising application")
+
 	// Run OnAppInit hook.
-	for _, p := range launchr.GetPluginByType[OnAppInitPlugin](app.pluginMngr) {
+	plugins := launchr.GetPluginByType[OnAppInitPlugin](app.pluginMngr)
+	Log().Debug("hook OnAppInitPlugin", "plugins", plugins)
+	for _, p := range plugins {
 		if err = p.V.OnAppInit(app); err != nil {
+			Log().Debug("error on OnAppInit", "plugin", p.K.String())
 			return err
 		}
 	}
+	Log().Debug("init success", "wd", app.workDir, "actions_dir", actionsPath)
 
 	return nil
 }
 
 func (app *appImpl) exec() error {
+	Log().Debug("executing command")
 	if app.earlyCmd.IsVersion {
 		app.cmd.SetVersionTemplate(Version().Full())
 		return app.cmd.Execute()
 	}
 
 	// Add application commands from plugins.
-	for _, p := range launchr.GetPluginByType[CobraPlugin](app.pluginMngr) {
+	plugins := launchr.GetPluginByType[CobraPlugin](app.pluginMngr)
+	Log().Debug("hook CobraPlugin", "plugins", plugins)
+	for _, p := range plugins {
 		if err := p.V.CobraAddCommands(app.cmd); err != nil {
+			Log().Debug("error on CobraAddCommands", "plugin", p.K.String())
 			return err
 		}
 	}
 
-	return app.cmd.Execute()
+	err := app.cmd.Execute()
+	if err != nil {
+		Log().Debug("execution error", "err", err)
+	}
+
+	return err
 }
 
 // Execute is an entrypoint to the launchr app.
 func (app *appImpl) Execute() int {
 	defer func() {
+		Log().Debug("shutdown cleanup")
 		if err := launchr.Cleanup(); err != nil {
 			Term().Warning().Printfln("Error on application shutdown cleanup:\n %s", err)
 		}

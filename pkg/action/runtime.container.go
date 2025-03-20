@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	osuser "os/user"
 	"path/filepath"
 	"runtime"
@@ -259,9 +260,11 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 
 	if !runConfig.Tty {
 		log.Debug("watching container signals")
-		sigc := driver.NotifyAllSignals()
-		go driver.ForwardAllSignals(ctx, c.crt, cid, sigc)
-		defer driver.StopCatchSignals(sigc)
+		sigc := launchr.NotifySignals()
+		go launchr.HandleSignals(ctx, sigc, func(_ os.Signal, sig string) error {
+			return c.crt.ContainerKill(ctx, cid, sig)
+		})
+		defer launchr.StopCatchSignals(sigc)
 	}
 
 	// Attach streams to the terminal.

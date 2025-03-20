@@ -2,7 +2,7 @@
 package verbosity
 
 import (
-	"errors"
+	"fmt"
 	"math"
 
 	"github.com/launchrctl/launchr/internal/launchr"
@@ -45,7 +45,10 @@ func (e *LogFormat) Set(v string) error {
 		*e = lf
 		return nil
 	default:
-		return errors.New(`must be one of "plain" or "json"`)
+		return fmt.Errorf(
+			`must be one of %s, %s, %s`,
+			LogFormatPlain, LogFormatJSON, LogFormatPretty,
+		)
 	}
 }
 
@@ -54,11 +57,38 @@ func (e *LogFormat) Type() string {
 	return "LogFormat"
 }
 
+type logLevelStr string
+
+// Set implements [fmt.Stringer] interface.
+func (e *logLevelStr) String() string {
+	return string(*e)
+}
+
+// Set implements [github.com/spf13/pflag.Value] interface.
+func (e *logLevelStr) Set(v string) error {
+	switch v {
+	case launchr.LogLevelStrDisabled, launchr.LogLevelStrDebug, launchr.LogLevelStrInfo, launchr.LogLevelStrWarn, launchr.LogLevelStrError:
+		*e = logLevelStr(v)
+		return nil
+	default:
+		return fmt.Errorf(
+			`must be one of %s, %s, %s, %s, %s`,
+			launchr.LogLevelStrDisabled, launchr.LogLevelStrDebug, launchr.LogLevelStrInfo, launchr.LogLevelStrWarn, launchr.LogLevelStrError,
+		)
+	}
+}
+
+// Type implements [github.com/spf13/pflag.Value] interface.
+func (e *logLevelStr) Type() string {
+	return "logLevelStr"
+}
+
 // OnAppInit implements [launchr.OnAppInitPlugin] interface.
 func (p Plugin) OnAppInit(app launchr.App) error {
 	verbosity := 0
 	quiet := false
 	var logFormat LogFormat
+	var logLvlStr logLevelStr
 
 	// Assert we are able to access internal functionality.
 	appInternal, ok := app.(launchr.AppInternal)
@@ -72,7 +102,8 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	unkFlagsBkp := pflags.ParseErrorsWhitelist.UnknownFlags
 	pflags.ParseErrorsWhitelist.UnknownFlags = true
 	pflags.CountVarP(&verbosity, "verbose", "v", "log verbosity level, use -vvvv DEBUG, -vvv INFO, -vv WARN, -v ERROR")
-	pflags.VarP(&logFormat, "log-format", "", "log format, may be pretty, plain or json (default pretty)")
+	pflags.VarP(&logLvlStr, "log-level", "", "log level, same as -v, can be: DEBUG, INFO, WARN, ERROR or NONE (default NONE)")
+	pflags.VarP(&logFormat, "log-format", "", "log format, can be: pretty, plain or json (default pretty)")
 	pflags.BoolVarP(&quiet, "quiet", "q", false, "disable output to the console")
 
 	// Parse available flags.
@@ -85,10 +116,26 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 		panic(err)
 	}
 	pflags.ParseErrorsWhitelist.UnknownFlags = unkFlagsBkp
+
+	// Set quiet mode.
 	launchr.Term().EnableOutput()
+	if !quiet && launchr.EnvVarQuietMode.Get() == "1" {
+		quiet = true
+	}
 	if quiet {
+		_ = launchr.EnvVarQuietMode.Set("1")
 		launchr.Term().DisableOutput()
 		app.SetStreams(launchr.NoopStreams())
+	}
+
+	// Select log level based on priority of definition.
+	logLevel := launchr.LogLevelDisabled
+	if pflags.Changed("log-level") {
+		logLevel = launchr.LogLevelFromString(string(logLvlStr))
+	} else if pflags.Changed("verbose") {
+		logLevel = logLevelFlagInt(verbosity)
+	} else if logLvlEnv := launchr.EnvVarLogLevel.Get(); logLvlEnv != "" {
+		logLevel = launchr.LogLevelFromString(logLvlEnv)
 	}
 
 	streams := app.Streams()
@@ -96,7 +143,10 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	// Set terminal output.
 	launchr.Term().SetOutput(out)
 	// Enable logger.
-	if verbosity > 0 {
+	if logLevel != launchr.LogLevelDisabled {
+		if logFormat == "" && launchr.EnvVarLogFormat.Get() != "" {
+			logFormat = LogFormat(launchr.EnvVarLogFormat.Get())
+		}
 		var logger *launchr.Logger
 		switch logFormat {
 		case LogFormatPlain:
@@ -107,8 +157,11 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 			logger = launchr.NewConsoleLogger(out)
 		}
 		launchr.SetLogger(logger)
+		// Save env variable for subprocesses.
+		_ = launchr.EnvVarLogLevel.Set(logLevel.String())
+		_ = launchr.EnvVarLogFormat.Set(logFormat.String())
 	}
-	launchr.Log().SetLevel(logLevelFlagInt(verbosity))
+	launchr.Log().SetLevel(logLevel)
 	cmd.SetOut(out)
 	cmd.SetErr(streams.Err())
 	return nil

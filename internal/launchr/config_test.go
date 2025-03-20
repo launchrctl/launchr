@@ -19,7 +19,6 @@ func (f fsmy) MapFS() fstest.MapFS {
 
 func Test_ConfigFromFS(t *testing.T) {
 	t.Parallel()
-	assert := assert.New(t)
 
 	type testYamlFieldSub struct {
 		Field1 string `yaml:"field1"`
@@ -57,11 +56,11 @@ func Test_ConfigFromFS(t *testing.T) {
 	expInvalid := expValType{
 		StructErr: "error(s) decoding",
 	}
-	var errCheck = func(err error, errStr string) {
+	var errCheck = func(t *testing.T, err error, errStr string) {
 		if errStr == "" {
-			assert.True(assert.NoError(err))
+			assert.NoError(t, err)
 		} else {
-			assert.ErrorContains(err, errStr)
+			assert.ErrorContains(t, err, errStr)
 		}
 	}
 
@@ -79,36 +78,36 @@ func Test_ConfigFromFS(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			cfg := ConfigFromFS(tt.fs.MapFS())
-			assert.NotNil(cfg)
+			assert.NotNil(t, cfg)
 			var err error
 			var val1, val1c testYamlFieldSub
 			var valcustom testYamlCustomTag
 			var val1ptr *testYamlFieldSub
 			// Check struct.
 			err = cfg.Get("test_perm", &val1)
-			errCheck(err, tt.expVal.StructErr)
-			assert.Equal(tt.expVal.Struct, val1)
+			errCheck(t, err, tt.expVal.StructErr)
+			assert.Equal(t, tt.expVal.Struct, val1)
 			// Check custom.
 			err = cfg.Get("test_custom", &valcustom)
-			errCheck(err, tt.expVal.CustomTagErr)
-			assert.Equal(tt.expVal.CustomTag, valcustom)
+			errCheck(t, err, tt.expVal.CustomTagErr)
+			assert.Equal(t, tt.expVal.CustomTag, valcustom)
 
 			// Check cache works.
 			err = cfg.Get("test_perm", &val1c)
-			errCheck(err, tt.expVal.StructErr)
-			assert.Equal(val1, val1c)
+			errCheck(t, err, tt.expVal.StructErr)
+			assert.Equal(t, val1, val1c)
 			// Check pointer to a struct.
 			err = cfg.Get("test_ptr", &val1ptr)
-			errCheck(err, tt.expVal.PtrErr)
-			assert.Equal(tt.expVal.Ptr, val1ptr)
+			errCheck(t, err, tt.expVal.PtrErr)
+			assert.Equal(t, tt.expVal.Ptr, val1ptr)
 
 			// Check primitives.
 			var val2s string
 			var val2int int
 			_ = cfg.Get("field1", &val2s)
 			_ = cfg.Get("field2", &val2int)
-			assert.Equal(tt.expVal.Primitive.Field1, val2s)
-			assert.Equal(tt.expVal.Primitive.Field2, val2int)
+			assert.Equal(t, tt.expVal.Primitive.Field1, val2s)
+			assert.Equal(t, tt.expVal.Primitive.Field2, val2int)
 		})
 	}
 }

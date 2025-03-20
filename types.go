@@ -28,6 +28,20 @@ var (
 	builtWith string //nolint:unused
 )
 
+// Application environment variables.
+const (
+	// EnvVarRootParentPID defines parent process id. May be used by forked processes.
+	EnvVarRootParentPID = launchr.EnvVarRootParentPID
+	// EnvVarActionsPath defines path where to search for actions.
+	EnvVarActionsPath = launchr.EnvVarActionsPath
+	// EnvVarLogLevel defines currently set log level.
+	EnvVarLogLevel = launchr.EnvVarLogLevel
+	// EnvVarLogFormat defines currently set log format, see --log-format flag.
+	EnvVarLogFormat = launchr.EnvVarLogFormat
+	// EnvVarQuietMode defines if the application should output anything, see --quiet flag.
+	EnvVarQuietMode = launchr.EnvVarQuietMode
+)
+
 // Re-export types aliases for usage by external modules.
 type (
 	// App stores global application state.
@@ -54,6 +68,13 @@ type (
 	TextPrinter = launchr.TextPrinter
 	// Streams is an interface which exposes the standard input and output streams.
 	Streams = launchr.Streams
+
+	// SensitiveMask replaces sensitive strings with a mask.
+	SensitiveMask = launchr.SensitiveMask
+	// MaskingWriter is a writer that masks sensitive data in the input stream.
+	// It buffers data to handle cases where sensitive data spans across writes.
+	MaskingWriter = launchr.MaskingWriter
+
 	// In is an input stream used by the app to read user input.
 	In = launchr.In
 	// Out is an output stream used by the app to write normal program output.
@@ -71,6 +92,9 @@ type (
 	ActionsAlterPlugin = action.AlterActionsPlugin
 	// CobraPlugin is an interface to implement a plugin for cobra.
 	CobraPlugin = launchr.CobraPlugin
+	// PersistentPreRunPlugin is an interface to implement a plugin
+	// to run before any command is run and all arguments are parsed.
+	PersistentPreRunPlugin = launchr.PersistentPreRunPlugin
 	// GeneratePlugin is an interface to generate supporting files before build.
 	GeneratePlugin = launchr.GeneratePlugin
 	// GenerateConfig defines generation config.
@@ -88,6 +112,11 @@ type (
 
 	// ExitError is an error holding an error code of executed command.
 	ExitError = launchr.ExitError
+	// EnvVar defines an environment variable and provides an interface to interact with it
+	// by prefixing the current app name.
+	// For example, if "my_var" is given as the variable name and the app name is "launchr",
+	// the accessed environment variable will be "LAUNCHR_MY_VAR".
+	EnvVar = launchr.EnvVar
 )
 
 // Version provides app version info.
@@ -111,11 +140,29 @@ func NewIn(in io.ReadCloser) *In { return launchr.NewIn(in) }
 // NewOut returns a new [Out] object from a [io.Writer].
 func NewOut(out io.Writer) *Out { return launchr.NewOut(out) }
 
-// StandardStreams sets a cli in, out and err streams with the standard streams.
-func StandardStreams() Streams { return launchr.StandardStreams() }
+// MaskedStdStreams sets a cli in, out and err streams with the standard streams and with masking of sensitive data.
+func MaskedStdStreams(mask *SensitiveMask) Streams { return launchr.MaskedStdStreams(mask) }
+
+// NewBasicStreams creates streams with given in, out and err streams.
+// Give decorate functions to extend functionality.
+func NewBasicStreams(in io.ReadCloser, out io.Writer, err io.Writer, fns ...launchr.StreamsModifierFn) Streams {
+	return launchr.NewBasicStreams(in, out, err, fns...)
+}
 
 // NoopStreams provides streams like /dev/null.
 func NoopStreams() Streams { return launchr.NoopStreams() }
+
+// StdInOutErr returns the standard streams (stdin, stdout, stderr).
+//
+// On Windows, it attempts to turn on VT handling on all std handles if
+// supported, or falls back to terminal emulation. On Unix, this returns
+// the standard [os.Stdin], [os.Stdout] and [os.Stderr].
+func StdInOutErr() (stdIn io.ReadCloser, stdOut, stdErr io.Writer) { return launchr.StdInOutErr() }
+
+// NewMaskingWriter initializes a new MaskingWriter.
+func NewMaskingWriter(w io.Writer, mask *SensitiveMask) io.WriteCloser {
+	return launchr.NewMaskingWriter(w, mask)
+}
 
 // Log returns the default logger.
 func Log() *Logger { return launchr.Log() }

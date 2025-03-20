@@ -62,6 +62,7 @@ func Test_Discover(t *testing.T) {
 }
 
 func Test_Discover_ActionWD(t *testing.T) {
+	t.Parallel()
 	// Test if working directory is correctly set to actions on discovery.
 	tfs := genFsTestMapActions(1, validEmptyVersionYaml, genPathTypeValid)
 	var expFPath string
