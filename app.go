@@ -82,15 +82,15 @@ func (app *appImpl) init() error {
 	var err error
 	// Set root command.
 	app.cmd = &Command{
-		Use: name,
-		//Short: "", // @todo
-		//Long:  ``, // @todo
+		Use:           name,
+		Short:         name + ` is a versatile CLI action runner that executes tasks defined in local or embeded yaml files across multiple runtimes`,
 		SilenceErrors: true, // Handled manually.
 		Version:       version,
 		RunE: func(cmd *Command, _ []string) error {
 			return cmd.Help()
 		},
 	}
+	app.cmd.SetVersionTemplate(`{{ appVersionFull }}`)
 	app.earlyCmd = launchr.EarlyPeekCommand()
 	// Set io streams.
 	app.SetStreams(StandardStreams())
@@ -133,7 +133,7 @@ func (app *appImpl) init() error {
 
 func (app *appImpl) exec() error {
 	if app.earlyCmd.IsVersion {
-		app.cmd.SetVersionTemplate(Version().Full())
+		// Version is requested, no need to bootstrap further.
 		return app.cmd.Execute()
 	}
 

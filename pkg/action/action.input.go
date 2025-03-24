@@ -26,7 +26,7 @@ type Input struct {
 	args InputParams
 	// opts contains parsed options with default values.
 	opts InputParams
-	// io contains out/in/err destinations. @todo should it be in Input?
+	// io contains out/in/err destinations.
 	io launchr.Streams
 
 	// argsPos contains raw positional arguments.
