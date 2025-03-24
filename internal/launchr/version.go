@@ -9,7 +9,15 @@ import (
 	"strings"
 	"text/template"
 	_ "unsafe" // Use unsafe to have linked variables from the main package.
+
+	"github.com/spf13/cobra"
 )
+
+func init() {
+	cobra.AddTemplateFunc("appVersionFull", func() string {
+		return Version().Full()
+	})
+}
 
 // Link variables to the main package to get the values from ldflags.
 var (

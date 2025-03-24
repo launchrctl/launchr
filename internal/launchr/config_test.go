@@ -64,7 +64,7 @@ func Test_ConfigFromFS(t *testing.T) {
 		}
 	}
 
-	// @todo test multiple structs
+	// @todo test parsed yaml for struct fields.
 	tts := []testCase{
 		{"valid config yaml", fsmy{"config.yaml": yamlValid}, expValid},
 		{"valid empty config yml", fsmy{"config.yml": ""}, expEmpty},
