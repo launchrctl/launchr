@@ -128,7 +128,7 @@ func (app *appImpl) init() error {
 	// @todo consider home dir for global config.
 	config := launchr.ConfigFromFS(os.DirFS(app.cfgDir))
 	actionMngr := action.NewManager(
-		action.WithDefaultRuntime,
+		action.WithDefaultRuntime(config),
 		action.WithContainerRuntimeConfig(config, name+"_"),
 	)
 
