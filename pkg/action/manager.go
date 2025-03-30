@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/launchrctl/launchr/internal/launchr"
+	"github.com/launchrctl/launchr/pkg/driver"
 )
 
 // DiscoverActionsFn defines a function to discover actions.
@@ -396,16 +397,35 @@ func (m *runManagerMap) RunInfoByID(id string) (RunInfo, bool) {
 }
 
 // WithDefaultRuntime adds a default [Runtime] for an action.
-func WithDefaultRuntime(_ Manager, a *Action) {
-	if a.Runtime() != nil {
-		return
+func WithDefaultRuntime(cfg launchr.Config) DecorateWithFn {
+	type configContainer struct {
+		Runtime string `yaml:"runtime"`
 	}
-	def, _ := a.Raw()
-	switch def.Runtime.Type {
-	case runtimeTypeContainer:
-		a.SetRuntime(NewContainerRuntimeDocker())
-	case runtimeTypeShell:
-		a.SetRuntime(NewShellRuntime())
+	var rtConfig configContainer
+	err := cfg.Get("container", &rtConfig)
+	if err != nil {
+		launchr.Term().Warning().Printfln("configuration file field %q is malformed", "container")
+	}
+	return func(_ Manager, a *Action) {
+		if a.Runtime() != nil {
+			return
+		}
+		def, _ := a.Raw()
+		switch def.Runtime.Type {
+		case runtimeTypeContainer:
+			var rt ContainerRuntime
+			switch driver.Type(rtConfig.Runtime) {
+			case driver.Kubernetes:
+				rt = NewContainerRuntimeKubernetes()
+			case driver.Docker:
+				fallthrough
+			default:
+				rt = NewContainerRuntimeDocker()
+			}
+			a.SetRuntime(rt)
+		case runtimeTypeShell:
+			a.SetRuntime(NewShellRuntime())
+		}
 	}
 }
 

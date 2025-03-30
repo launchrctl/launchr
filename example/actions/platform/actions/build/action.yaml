@@ -57,5 +57,5 @@ runtime:
 #  image: python:3.7-slim
   image: ubuntu
 #  command: python3 {{ .opt4 }}
-#  command: ["sh", "-c", "for i in $(seq 60); do echo $$i; sleep 1; done"]
-  command: /bin/bash
+  command: ["sh", "-c", "for i in $(seq 60); do if [ $((i % 2)) -eq 0 ]; then echo \"stdout: $$i\"; else echo \"stderr: $$i\" >&2; fi; sleep 1; done"]
+#  command: /bin/bash

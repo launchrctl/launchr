@@ -1,7 +1,6 @@
 package action
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -10,10 +9,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
-	"time"
 
 	"github.com/docker/docker/pkg/jsonmessage"
-	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -24,6 +21,14 @@ import (
 )
 
 const containerNamePrefix = "test_prefix_"
+
+const (
+	mockFnImageEnsure     = "ImageEnsure"
+	mockFnContainerCreate = "ContainerCreate"
+	mockFnContainerStart  = "ContainerStart"
+	mockFnContainerRemove = "ContainerRemove"
+	mockFnImageRemove     = "ImageRemove"
+)
 
 type eqImageOpts struct {
 	x driver.ImageOptions
@@ -37,15 +42,14 @@ func (e eqImageOpts) String() string {
 	return fmt.Sprintf("is equal to %v (%T)", e.x, e.x)
 }
 
-var cfgImgRes = LaunchrConfigImageBuildResolver{launchrCfg()}
+var cfgImgRes = LaunchrConfigImageBuildResolver{dummyCfg()}
 
-func launchrCfg() launchr.Config {
+func dummyCfg() launchr.Config {
 	cfgRoot := fstest.MapFS{"config.yaml": &fstest.MapFile{Data: []byte(cfgYaml)}}
 	return launchr.ConfigFromFS(cfgRoot)
 }
 
-func prepareContainerTestSuite(t *testing.T) (*assert.Assertions, *gomock.Controller, *containermock.MockContainerRuntime, *runtimeContainer) {
-	assert := assert.New(t)
+func prepareContainerTestSuite(t *testing.T) (*gomock.Controller, *containermock.MockContainerRuntime, *runtimeContainer) {
 	ctrl := gomock.NewController(t)
 	d := containermock.NewMockContainerRuntime(ctrl)
 	d.EXPECT().Close()
@@ -53,13 +57,14 @@ func prepareContainerTestSuite(t *testing.T) (*assert.Assertions, *gomock.Contro
 	r.AddImageBuildResolver(cfgImgRes)
 	r.SetContainerNameProvider(ContainerNameProvider{Prefix: containerNamePrefix})
 
-	return assert, ctrl, d, r
+	return ctrl, d, r
 }
 
 func testContainerAction(cdef *DefRuntimeContainer) *Action {
 	if cdef == nil {
 		cdef = &DefRuntimeContainer{
-			Image: "myimage",
+			Image:   "myimage",
+			Command: []string{"my", "cmd"},
 			ExtraHosts: []string{
 				"my:host1",
 				"my:host2",
@@ -83,18 +88,6 @@ func testContainerAction(cdef *DefRuntimeContainer) *Action {
 		"my/action/test/action.yaml",
 	)
 	return a
-}
-
-func testContainerIO() *driver.ContainerInOut {
-	outBytes := []byte("0test stdOut")
-	// Set row header for moby.stdCopy proper parsing of combined streams.
-	outBytes[0] = byte(stdcopy.Stdout)
-	return &driver.ContainerInOut{
-		In: &fakeWriter{
-			Buffer: bytes.NewBuffer([]byte{}),
-		},
-		Out: bytes.NewBuffer(outBytes),
-	}
 }
 
 func Test_ContainerExec_imageEnsure(t *testing.T) {
@@ -184,7 +177,7 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert, ctrl, d, r := prepareContainerTestSuite(t)
+			ctrl, d, r := prepareContainerTestSuite(t)
 			defer ctrl.Finish()
 			defer r.Close()
 			ctx := context.Background()
@@ -196,7 +189,7 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 				ImageEnsure(ctx, eqImageOpts{imgOpts}).
 				Return(tt.ret...)
 			err := r.imageEnsure(ctx, act)
-			assert.Equal(tt.ret[1], err)
+			assert.Equal(t, tt.ret[1], err)
 		})
 	}
 }
@@ -237,7 +230,7 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert, ctrl, d, r := prepareContainerTestSuite(t)
+			ctrl, d, r := prepareContainerTestSuite(t)
 			ctx := context.Background()
 
 			defer ctrl.Finish()
@@ -247,179 +240,118 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 			act.input = NewInput(act, nil, nil, launchr.NoopStreams())
 
 			run := act.RuntimeDef().Container
-			imgOpts := driver.ImageRemoveOptions{Force: true, PruneChildren: false}
+			imgOpts := driver.ImageRemoveOptions{Force: true}
 			d.EXPECT().
 				ImageRemove(ctx, run.Image, gomock.Eq(imgOpts)).
 				Return(tt.ret...)
 			err := r.imageRemove(ctx, act)
 
-			assert.Equal(err, tt.ret[1])
+			assert.Equal(t, err, tt.ret[1])
 		})
 	}
 }
 
-func Test_ContainerExec_containerCreate(t *testing.T) {
+func Test_ContainerExec_createContainerDef(t *testing.T) {
 	t.Parallel()
-	assert, ctrl, d, r := prepareContainerTestSuite(t)
-	defer ctrl.Finish()
-	defer r.Close()
-
-	a := testContainerAction(nil)
-	run := a.RuntimeDef()
-
-	runCfg := &driver.ContainerCreateOptions{
-		ContainerName: "container",
-		NetworkMode:   driver.NetworkModeHost,
-		ExtraHosts:    run.Container.ExtraHosts,
-		AutoRemove:    true,
-		OpenStdin:     true,
-		StdinOnce:     true,
-		AttachStdin:   true,
-		AttachStdout:  true,
-		AttachStderr:  true,
-		Tty:           true,
-		Env: []string{
-			"env1=val1",
-			"env2=val2",
-		},
-	}
-
-	eqCfg := *runCfg
-	eqCfg.Binds = []string{
-		launchr.MustAbs(a.WorkDir()) + ":" + containerHostMount,
-		launchr.MustAbs(a.Dir()) + ":" + containerActionMount,
-	}
-	eqCfg.WorkingDir = containerHostMount
-	eqCfg.Cmd = run.Container.Command
-	eqCfg.Image = run.Container.Image
-
-	ctx := context.Background()
-
-	// Normal create.
-	expCid := "container_id"
-	d.EXPECT().
-		ImageEnsure(ctx, driver.ImageOptions{Name: run.Container.Image}).
-		Return(&driver.ImageStatusResponse{Status: driver.ImageExists}, nil)
-	d.EXPECT().
-		ContainerCreate(ctx, gomock.Eq(eqCfg)).
-		Return(expCid, nil)
-
-	cid, err := r.containerCreate(ctx, a, runCfg)
-	require.NoError(t, err)
-	assert.Equal(expCid, cid)
-
-	// Create with a custom wd
-	a.def.WD = "../myactiondir"
-	wd := launchr.MustAbs(a.def.WD)
-	eqCfg.Binds = []string{
-		wd + ":" + containerHostMount,
-		launchr.MustAbs(a.Dir()) + ":" + containerActionMount,
-	}
-	d.EXPECT().
-		ImageEnsure(ctx, driver.ImageOptions{Name: run.Container.Image}).
-		Return(&driver.ImageStatusResponse{Status: driver.ImageExists}, nil)
-	d.EXPECT().
-		ContainerCreate(ctx, gomock.Eq(eqCfg)).
-		Return(expCid, nil)
-
-	cid, err = r.containerCreate(ctx, a, runCfg)
-	require.NoError(t, err)
-	assert.Equal(expCid, cid)
-
-	// Create with anonymous volumes.
-	r.useVolWD = true
-	eqCfg.Binds = nil
-	eqCfg.Volumes = map[string]struct{}{
-		containerHostMount:   {},
-		containerActionMount: {},
-	}
-	d.EXPECT().
-		ImageEnsure(ctx, driver.ImageOptions{Name: run.Container.Image}).
-		Return(&driver.ImageStatusResponse{Status: driver.ImageExists}, nil)
-	d.EXPECT().
-		ContainerCreate(ctx, gomock.Eq(eqCfg)).
-		Return(expCid, nil)
-
-	cid, err = r.containerCreate(ctx, a, runCfg)
-	require.NoError(t, err)
-	assert.Equal(expCid, cid)
-
-	// Image ensure fail.
-	errImg := fmt.Errorf("error on image ensure")
-	d.EXPECT().
-		ImageEnsure(ctx, driver.ImageOptions{Name: run.Container.Image}).
-		Return(nil, errImg)
-
-	cid, err = r.containerCreate(ctx, a, runCfg)
-	assert.Error(err)
-	assert.Equal("", cid)
-
-	// Container create fail.
-	expErr := fmt.Errorf("container create error")
-	d.EXPECT().
-		ImageEnsure(ctx, driver.ImageOptions{Name: run.Container.Image}).
-		Return(&driver.ImageStatusResponse{Status: driver.ImageExists}, nil)
-	d.EXPECT().
-		ContainerCreate(ctx, gomock.Any()).
-		Return("", expErr)
-	cid, err = r.containerCreate(ctx, a, runCfg)
-	assert.Error(err)
-	assert.Equal("", cid)
-}
-
-func Test_ContainerExec_containerWait(t *testing.T) {
-	t.Parallel()
-	assert, ctrl, d, r := prepareContainerTestSuite(t)
-	defer ctrl.Finish()
-	defer r.Close()
 
 	type testCase struct {
-		name      string
-		chanFn    func(resCh chan driver.ContainerWaitResponse, errCh chan error)
-		waitCond  driver.WaitCondition
-		expStatus int
+		name   string
+		newAct func(*runtimeContainer) *Action
+		exp    driver.ContainerDefinition
 	}
+
+	baseRes := driver.ContainerDefinition{
+		Image:      "myimage",
+		WorkingDir: containerHostMount,
+		ExtraHosts: []string{
+			"my:host1",
+			"my:host2",
+		},
+		Env: []string{
+			"env1=var1",
+			"env2=var2",
+		},
+		User: getCurrentUser(),
+	}
+	defaultCmd := []string{"my", "cmd"}
+	var defaultEntrypoint []string
+	actionDir := launchr.MustAbs("my/action/test")
 
 	tts := []testCase{
 		{
-			"condition removed",
-			func(resCh chan driver.ContainerWaitResponse, _ chan error) {
-				resCh <- driver.ContainerWaitResponse{StatusCode: 0}
+			"local binds, default working dir, stdin, tty",
+			func(_ *runtimeContainer) *Action {
+				a := testContainerAction(nil)
+				streams := launchr.NewBasicStreams(io.NopCloser(strings.NewReader("")), io.Discard, io.Discard)
+				streams.In().SetIsTerminal(true)
+				input := NewInput(a, nil, nil, streams)
+				input.SetValidated(true)
+				_ = a.SetInput(input)
+				return a
 			},
-			driver.WaitConditionRemoved,
-			0,
+			driver.ContainerDefinition{
+				ContainerName: driver.GetRandomName(0),
+				Command:       defaultCmd,
+				Entrypoint:    defaultEntrypoint,
+				Binds: []string{
+					launchr.MustAbs("./") + ":" + containerHostMount,
+					actionDir + ":" + containerActionMount,
+				},
+				Streams: driver.ContainerStreamsOptions{
+					Stdin:  true,
+					Stdout: true,
+					Stderr: true,
+					TTY:    true,
+				},
+			},
 		},
 		{
-			"condition next exit",
-			func(resCh chan driver.ContainerWaitResponse, _ chan error) {
-				resCh <- driver.ContainerWaitResponse{StatusCode: 0}
+			"local binds, different working dir, no stdin, no tty",
+			func(_ *runtimeContainer) *Action {
+				a := testContainerAction(nil)
+				input := NewInput(a, nil, nil, launchr.NewBasicStreams(nil, io.Discard, io.Discard))
+				input.SetValidated(true)
+				_ = a.SetInput(input)
+				a.def.WD = "../myactiondir"
+				return a
 			},
-			driver.WaitConditionNextExit,
-			0,
+			driver.ContainerDefinition{
+				ContainerName: driver.GetRandomName(0),
+				Command:       defaultCmd,
+				Entrypoint:    defaultEntrypoint,
+				Binds: []string{
+					launchr.MustAbs("../myactiondir") + ":" + containerHostMount,
+					actionDir + ":" + containerActionMount,
+				},
+				Streams: driver.ContainerStreamsOptions{
+					Stdout: true,
+					Stderr: true,
+				},
+			},
 		},
 		{
-			"return exit code",
-			func(resCh chan driver.ContainerWaitResponse, _ chan error) {
-				resCh <- driver.ContainerWaitResponse{StatusCode: 2}
+			"remote volumes, no attach, remote runtime, override entrypoint, override cmd",
+			func(r *runtimeContainer) *Action {
+				a := testContainerAction(nil)
+				args, _ := ArgsPosToNamed(a, []string{"arg1", "arg2"})
+				input := NewInput(a, args, nil, launchr.NoopStreams())
+				input.SetValidated(true)
+				_ = a.SetInput(input)
+				r.isRemoteRuntime = true
+				r.entrypointSet = true
+				r.entrypoint = "/my/entrypoint"
+				r.exec = true
+				return a
 			},
-			driver.WaitConditionRemoved,
-			2,
-		},
-		{
-			"fail on container run",
-			func(resCh chan driver.ContainerWaitResponse, _ chan error) {
-				resCh <- driver.ContainerWaitResponse{StatusCode: 0, Error: errors.New("fail run")}
+			driver.ContainerDefinition{
+				ContainerName: driver.GetRandomName(0),
+				Command:       []string{"arg1", "arg2"},
+				Entrypoint:    []string{"/my/entrypoint"},
+				Volumes: containerAnonymousVolumes(
+					containerHostMount,
+					containerActionMount,
+				),
 			},
-			driver.WaitConditionRemoved,
-			125,
-		},
-		{
-			"fail on wait",
-			func(_ chan driver.ContainerWaitResponse, errCh chan error) {
-				errCh <- errors.New("fail wait")
-			},
-			driver.WaitConditionRemoved,
-			125,
 		},
 	}
 
@@ -427,78 +359,22 @@ func Test_ContainerExec_containerWait(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			// Set timeout for broken channel cases.
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
+			ctrl, _, r := prepareContainerTestSuite(t)
+			defer ctrl.Finish()
+			defer r.Close()
 
-			// Prepare channels with buffer for non-blocking.
-			cid := ""
-			resCh, errCh := make(chan driver.ContainerWaitResponse, 1), make(chan error, 1)
-			tt.chanFn(resCh, errCh)
-			d.EXPECT().
-				ContainerWait(ctx, cid, driver.ContainerWaitOptions{Condition: tt.waitCond}).
-				Return(resCh, errCh)
-
-			// Test waiting and status.
-			autoRemove := false
-			if tt.waitCond == driver.WaitConditionRemoved {
-				autoRemove = true
-			}
-			runCfg := &driver.ContainerCreateOptions{AutoRemove: autoRemove}
-			ch := r.containerWait(ctx, cid, runCfg)
-			assert.Equal(tt.expStatus, <-ch)
+			a := tt.newAct(r)
+			a.SetRuntime(r)
+			cname := tt.exp.ContainerName
+			tt.exp.Image = baseRes.Image
+			tt.exp.WorkingDir = baseRes.WorkingDir
+			tt.exp.ExtraHosts = baseRes.ExtraHosts
+			tt.exp.Env = baseRes.Env
+			tt.exp.User = baseRes.User
+			runCfg := r.createContainerDef(a, cname)
+			assert.Equal(t, tt.exp, runCfg)
 		})
 	}
-}
-
-type fakeWriter struct {
-	*bytes.Buffer
-}
-
-func (f *fakeWriter) Close() error {
-	f.Buffer.Reset()
-	return nil
-}
-
-func Test_ContainerExec_containerAttach(t *testing.T) {
-	t.Parallel()
-	assert, ctrl, d, r := prepareContainerTestSuite(t)
-	streams := launchr.NoopStreams()
-	defer ctrl.Finish()
-	defer r.Close()
-
-	ctx := context.Background()
-	cid := ""
-	cio := testContainerIO()
-	opts := &driver.ContainerCreateOptions{
-		AttachStdin:  true,
-		AttachStdout: true,
-		AttachStderr: true,
-		Tty:          true,
-	}
-	attOpts := driver.ContainerAttachOptions{
-		Stream: true,
-		Stdin:  opts.AttachStdin,
-		Stdout: opts.AttachStdout,
-		Stderr: opts.AttachStderr,
-	}
-	d.EXPECT().
-		ContainerAttach(ctx, cid, attOpts).
-		Return(cio, nil)
-	acio, errCh, err := r.attachContainer(ctx, streams, cid, opts)
-	assert.Equal(acio, cio)
-	require.NoError(t, err)
-	require.NoError(t, <-errCh)
-	_ = acio.Close()
-
-	expErr := errors.New("fail to attach")
-	d.EXPECT().
-		ContainerAttach(ctx, cid, attOpts).
-		Return(nil, expErr)
-	acio, errCh, err = r.attachContainer(ctx, streams, cid, opts)
-	assert.Equal(nil, acio)
-	assert.Equal(expErr, err)
-	assert.Nil(errCh)
 }
 
 type mockCallInfo struct {
@@ -507,6 +383,7 @@ type mockCallInfo struct {
 	maxTimes int
 	args     []any
 	ret      []any
+	prepFn   func(*mockCallInfo)
 }
 
 func Test_ContainerExec(t *testing.T) {
@@ -516,176 +393,151 @@ func Test_ContainerExec(t *testing.T) {
 	act := testContainerAction(nil)
 	runConf := act.RuntimeDef().Container
 	imgBuild := &driver.ImageStatusResponse{Status: driver.ImageExists}
-	cio := testContainerIO()
 	nprv := ContainerNameProvider{Prefix: containerNamePrefix}
 
 	type testCase struct {
 		name   string
-		prepFn func(resCh chan driver.ContainerWaitResponse, errCh chan error)
 		steps  []mockCallInfo
 		expErr error
 	}
 
-	opts := driver.ContainerCreateOptions{
+	opts := driver.ContainerDefinition{
 		ContainerName: nprv.Get(act.ID),
-		Cmd:           runConf.Command,
+		Command:       runConf.Command,
 		Image:         runConf.Image,
-		NetworkMode:   driver.NetworkModeHost,
 		ExtraHosts:    runConf.ExtraHosts,
 		Binds: []string{
 			launchr.MustAbs(act.WorkDir()) + ":" + containerHostMount,
 			launchr.MustAbs(act.Dir()) + ":" + containerActionMount,
 		},
-		WorkingDir:   containerHostMount,
-		AutoRemove:   true,
-		OpenStdin:    true,
-		StdinOnce:    true,
-		AttachStdin:  true,
-		AttachStdout: true,
-		AttachStderr: true,
-		Tty:          false,
-		Env:          runConf.Env,
-		User:         getCurrentUser(),
-	}
-	attOpts := driver.ContainerAttachOptions{
-		Stream: true,
-		Stdin:  opts.AttachStdin,
-		Stdout: opts.AttachStdout,
-		Stderr: opts.AttachStderr,
+		WorkingDir: containerHostMount,
+		Env:        runConf.Env,
+		User:       getCurrentUser(),
 	}
 
 	errImgEns := errors.New("image ensure error")
 	errCreate := errors.New("container create error")
-	errAttach := errors.New("attach error")
 	errStart := errors.New("start error")
 	errExecError := launchr.NewExitError(2, fmt.Sprintf("action %q finished with exit code 2", act.ID))
 
+	const (
+		stepImageEnsure = iota
+		stepContainerCreate
+		stepContainerStart
+		stepContainerRemove
+	)
+
 	successSteps := []mockCallInfo{
-		{
-			"ImageEnsure",
+		stepImageEnsure: {
+			mockFnImageEnsure,
 			1, 1,
 			[]any{eqImageOpts{driver.ImageOptions{Name: runConf.Image}}},
 			[]any{imgBuild, nil},
+			nil,
 		},
-		{
-			"ContainerCreate",
+		stepContainerCreate: {
+			mockFnContainerCreate,
 			1, 1,
 			[]any{opts},
 			[]any{cid, nil},
+			nil,
 		},
-		{
-			"ContainerAttach",
+		stepContainerStart: {
+			mockFnContainerStart,
 			1, 1,
-			[]any{cid, attOpts},
-			[]any{cio, nil},
+			[]any{cid, gomock.Any()},
+			[]any{nil, nil, nil},
+			func(mock *mockCallInfo) {
+				resCh := make(chan int, 1)
+				mock.ret[0] = resCh
+				resCh <- 0
+			},
 		},
-		{
-			"ContainerWait",
+		stepContainerRemove: {
+			mockFnContainerRemove,
 			1, 1,
-			[]any{cid, driver.ContainerWaitOptions{Condition: driver.WaitConditionRemoved}},
-			[]any{},
-		},
-		{
-			"ContainerStart",
-			1, 1,
-			[]any{cid, driver.ContainerStartOptions{}},
+			[]any{cid},
 			[]any{nil},
+			nil,
 		},
 	}
 
 	tts := []testCase{
 		{
 			"successful run",
-			func(resCh chan driver.ContainerWaitResponse, _ chan error) {
-				resCh <- driver.ContainerWaitResponse{StatusCode: 0}
-			},
 			successSteps,
 			nil,
 		},
 		{
 			"image ensure error",
-			nil,
 			[]mockCallInfo{
 				{
-					"ImageEnsure",
+					mockFnImageEnsure,
 					1, 1,
 					[]any{gomock.Any()},
 					[]any{imgBuild, errImgEns},
+					nil,
 				},
 			},
 			errImgEns,
 		},
 		{
 			"container create error",
-			nil,
 			append(
-				slices.Clone(successSteps[0:1]),
+				slices.Clone(successSteps[stepImageEnsure:stepContainerCreate]),
 				mockCallInfo{
-					"ContainerCreate",
+					mockFnContainerCreate,
 					1, 1,
 					[]any{gomock.Any()},
 					[]any{"", errCreate},
+					nil,
 				}),
 			errCreate,
 		},
 		{
 			"container create error - empty container id",
-			nil,
 			append(
-				slices.Clone(successSteps[0:1]),
+				slices.Clone(successSteps[stepImageEnsure:stepContainerCreate]),
 				mockCallInfo{
-					"ContainerCreate",
+					mockFnContainerCreate,
 					1, 1,
 					[]any{gomock.Any()},
 					[]any{"", nil},
+					nil,
 				}),
 			errTestAny{},
 		},
 		{
-			"error on container attach",
-			func(resCh chan driver.ContainerWaitResponse, _ chan error) {
-				resCh <- driver.ContainerWaitResponse{StatusCode: 0}
-			},
-			append(
-				slices.Clone(successSteps[0:2]),
-				mockCallInfo{
-					"ContainerAttach",
-					1, 1,
-					[]any{cid, gomock.Any()},
-					[]any{cio, errAttach},
-				},
-			),
-			errAttach,
-		},
-		{
 			"error start container",
-			func(resCh chan driver.ContainerWaitResponse, _ chan error) {
-				resCh <- driver.ContainerWaitResponse{StatusCode: 0}
-			},
 			append(
-				slices.Clone(successSteps[0:4]),
+				slices.Clone(successSteps[stepImageEnsure:stepContainerStart]),
 				mockCallInfo{
-					"ContainerStart",
+					mockFnContainerStart,
 					1, 1,
 					[]any{cid, gomock.Any()},
-					[]any{errStart},
+					[]any{nil, nil, errStart},
+					nil,
 				},
+				successSteps[stepContainerRemove],
 			),
 			errStart,
 		},
 		{
 			"container return error",
-			func(resCh chan driver.ContainerWaitResponse, _ chan error) {
-				resCh <- driver.ContainerWaitResponse{StatusCode: 2}
-			},
 			append(
-				slices.Clone(successSteps[0:4]),
+				slices.Clone(successSteps[stepImageEnsure:stepContainerStart]),
 				mockCallInfo{
-					"ContainerStart",
+					mockFnContainerStart,
 					1, 1,
 					[]any{cid, gomock.Any()},
-					[]any{nil},
+					[]any{gomock.Any(), nil, nil},
+					func(mock *mockCallInfo) {
+						resCh := make(chan int, 1)
+						mock.ret[0] = resCh
+						resCh <- 2
+					},
 				},
+				successSteps[stepContainerRemove],
 			),
 			errExecError,
 		},
@@ -695,8 +547,7 @@ func Test_ContainerExec(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			resCh, errCh := make(chan driver.ContainerWaitResponse, 1), make(chan error, 1)
-			_, ctrl, d, r := prepareContainerTestSuite(t)
+			ctrl, d, r := prepareContainerTestSuite(t)
 			a := act.Clone()
 			input := NewInput(a, nil, nil, launchr.NoopStreams())
 			input.SetValidated(true)
@@ -707,13 +558,10 @@ func Test_ContainerExec(t *testing.T) {
 			var prev *gomock.Call
 			d.EXPECT().ContainerList(gomock.Any(), gomock.Any()).Return(nil) // @todo test different container names
 			for _, step := range tt.steps {
-				if step.fn == "ContainerWait" { //nolint:goconst
-					step.ret = []any{resCh, errCh}
+				if step.prepFn != nil {
+					step.prepFn(&step)
 				}
 				prev = callContainerDriverMockFn(d, step, prev)
-			}
-			if tt.prepFn != nil {
-				tt.prepFn(resCh, errCh)
 			}
 			ctx := context.Background()
 			err = r.Execute(ctx, a)
@@ -725,30 +573,28 @@ func Test_ContainerExec(t *testing.T) {
 func callContainerDriverMockFn(d *containermock.MockContainerRuntime, step mockCallInfo, prev *gomock.Call) *gomock.Call {
 	var call *gomock.Call
 	switch step.fn {
-	case "ImageEnsure":
+	case mockFnImageEnsure:
 		call = d.EXPECT().
 			ImageEnsure(gomock.Any(), step.args[0]).
 			Return(step.ret...)
-	case "ContainerCreate":
+	case mockFnContainerCreate:
 		call = d.EXPECT().
 			ContainerCreate(gomock.Any(), step.args[0]).
 			Return(step.ret...)
-	case "ContainerAttach":
-		call = d.EXPECT().
-			ContainerAttach(gomock.Any(), step.args[0], step.args[1]).
-			Return(step.ret...)
-	case "ContainerWait":
-		call = d.EXPECT().
-			ContainerWait(gomock.Any(), step.args[0], step.args[1]).
-			Return(step.ret...)
-	case "ContainerStart":
+	case mockFnContainerStart:
 		call = d.EXPECT().
 			ContainerStart(gomock.Any(), step.args[0], step.args[1]).
 			Return(step.ret...)
-	case "ImageRemove":
+	case mockFnImageRemove:
 		call = d.EXPECT().
 			ImageRemove(gomock.Any(), step.args[0], step.args[1]).
 			Return(step.ret...)
+	case mockFnContainerRemove:
+		call = d.EXPECT().
+			ContainerRemove(gomock.Any(), step.args[0]).
+			Return(step.ret...)
+	default:
+		panic("unknown function: " + step.fn)
 	}
 	if step.minTimes > 1 {
 		call.MinTimes(step.minTimes)
@@ -783,7 +629,6 @@ func (f fsmy) MapFS() fstest.MapFS {
 
 func Test_ConfigImageBuildInfo(t *testing.T) {
 	t.Parallel()
-	assert := assert.New(t)
 
 	type testCase struct {
 		name   string
@@ -803,7 +648,7 @@ func Test_ConfigImageBuildInfo(t *testing.T) {
 			t.Parallel()
 			cfg := launchr.ConfigFromFS(tt.fs.MapFS())
 			cfgImgRes := LaunchrConfigImageBuildResolver{cfg}
-			assert.NotNil(cfg)
+			assert.NotNil(t, cfg)
 			if img := cfgImgRes.ImageBuildInfo("my/image:version"); (img == nil) == tt.expImg {
 				t.Errorf("expected image to find in config directory")
 			}

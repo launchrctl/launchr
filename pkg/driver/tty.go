@@ -12,72 +12,76 @@ import (
 	"github.com/launchrctl/launchr/internal/launchr"
 )
 
-type resizeTtyFn func(ctx context.Context, d ContainerRunner, cli launchr.Streams, id string, isExec bool) error
+type terminalSize struct {
+	Height uint
+	Width  uint
+}
 
-// resizeTtyTo resizes tty to specific height and width
-func resizeTtyTo(ctx context.Context, d ContainerRunner, id string, height, width uint, isExec bool) error {
+type resizeTtyFn func(ctx context.Context, ropts terminalSize) error
+
+// resizeTty is to resize the tty with cli out's tty size
+func resizeTty(ctx context.Context, streams launchr.Streams, resizeFn resizeTtyFn) error {
+	height, width := streams.Out().GetTtySize()
 	if height == 0 && width == 0 {
 		return nil
 	}
 
-	options := ResizeOptions{
+	err := resizeFn(ctx, terminalSize{
 		Height: height,
 		Width:  width,
-	}
-
-	var err error
-	if isExec {
-		err = d.ContainerExecResize(ctx, id, options)
-	} else {
-		err = d.ContainerResize(ctx, id, options)
-	}
-
+	})
 	if err != nil {
 		launchr.Log().Debug("error tty resize", "error", err)
+	} else if errCtx := ctx.Err(); errCtx != nil {
+		err = errCtx
 	}
 	return err
 }
 
-// resizeTty is to resize the tty with cli out's tty size
-func resizeTty(ctx context.Context, d ContainerRunner, cli launchr.Streams, id string, isExec bool) error {
-	height, width := cli.Out().GetTtySize()
-	return resizeTtyTo(ctx, d, id, height, width, isExec)
-}
-
 // initTtySize is to init the tty's size to the same as the window, if there is an error, it will retry 10 times.
-func initTtySize(ctx context.Context, d ContainerRunner, cli launchr.Streams, id string, isExec bool, resizeTtyFunc resizeTtyFn) {
-	rttyFunc := resizeTtyFunc
-	if rttyFunc == nil {
-		rttyFunc = resizeTty
-	}
-	if err := rttyFunc(ctx, d, cli, id, isExec); err != nil {
+func initTtySize(ctx context.Context, streams launchr.Streams, resizeFn resizeTtyFn) {
+	if err := resizeTty(ctx, streams, resizeFn); err != nil {
 		go func() {
 			var err error
 			for retry := 0; retry < 10; retry++ {
 				time.Sleep(time.Duration(retry+1) * 10 * time.Millisecond)
-				if err = rttyFunc(ctx, d, cli, id, isExec); err == nil {
+				if err = resizeTty(ctx, streams, resizeFn); err == nil {
 					break
 				}
 			}
 			if err != nil {
-				launchr.Log().Error("failed to resize tty, using default size", "err", cli.Err())
+				launchr.Log().Error("failed to resize tty, using default size", "err", streams.Err())
 			}
 		}()
 	}
 }
 
-// MonitorTtySize updates the container tty size when the terminal tty changes size
-func MonitorTtySize(ctx context.Context, d ContainerRunner, cli launchr.Streams, id string, isExec bool) error {
-	initTtySize(ctx, d, cli, id, isExec, resizeTty)
+// TtySizeMonitor updates the container tty size when the terminal tty changes size
+type TtySizeMonitor struct {
+	resizeFn resizeTtyFn
+}
+
+// NewTtySizeMonitor creates a new TtySizeMonitor.
+func NewTtySizeMonitor(resizeFn resizeTtyFn) *TtySizeMonitor {
+	return &TtySizeMonitor{
+		resizeFn: resizeFn,
+	}
+}
+
+// Start starts tty size watching.
+func (t *TtySizeMonitor) Start(ctx context.Context, streams launchr.Streams) {
+	if t == nil {
+		return
+	}
+	initTtySize(ctx, streams, t.resizeFn)
 	if runtime.GOOS == "windows" {
 		go func() {
-			prevH, prevW := cli.Out().GetTtySize()
+			prevH, prevW := streams.Out().GetTtySize()
 			for {
-				time.Sleep(time.Millisecond * 250)
-				h, w := cli.Out().GetTtySize()
+				h, w := streams.Out().GetTtySize()
 
 				if prevW != w || prevH != h {
-					err := resizeTty(ctx, d, cli, id, isExec)
+					err := resizeTty(ctx, streams, t.resizeFn)
 					if err != nil {
 						// Stop monitoring
 						return
@@ -91,8 +95,9 @@ func MonitorTtySize(ctx context.Context, d ContainerRunner, cli launchr.Streams,
 		sigchan := make(chan os.Signal, 1)
 		gosignal.Notify(sigchan, signal.SIGWINCH)
 		go func() {
+			defer gosignal.Stop(sigchan)
 			for range sigchan {
-				err := resizeTty(ctx, d, cli, id, isExec)
+				err := resizeTty(ctx, streams, t.resizeFn)
 				if err != nil {
 					// Stop monitoring
 					return
@@ -100,5 +105,4 @@ func MonitorTtySize(ctx context.Context, d ContainerRunner, cli launchr.Streams,
 			}
 		}()
 	}
-	return nil
 }

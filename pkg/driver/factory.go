@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-// Type defines implemented driver types.
+// Type defines implemented container runtime types.
 type Type string
 
 // Available container runtime types.
@@ -13,11 +13,13 @@ const (
 	Kubernetes Type = "kubernetes" // Kubernetes runtime.
 )
 
-// New creates a new driver based on a type.
+// New creates a new container runtime based on a type.
 func New(t Type) (ContainerRunner, error) {
 	switch t {
 	case Docker:
-		return NewDockerDriver()
+		return NewDockerRuntime()
+	case Kubernetes:
+		return NewKubernetesRuntime()
 	default:
 		panic(fmt.Sprintf("container runtime %q is not implemented", t))
 	}
