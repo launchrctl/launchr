@@ -191,6 +191,7 @@ func (b *Builder) goBuild(ctx context.Context) error {
 	} else {
 		ldflags = append(ldflags, "-s", "-w")
 		args = append(args, "-trimpath")
+		b.Tags = append(b.Tags, "release")
 	}
 	args = append(args, "-ldflags", strings.Join(ldflags, " "))
 

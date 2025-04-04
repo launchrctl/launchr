@@ -27,7 +27,9 @@ func (app *appImpl) gen() error {
 		}
 
 		// Call generate functions on plugins.
-		for _, p := range launchr.GetPluginByType[GeneratePlugin](app.pluginMngr) {
+		plugins := launchr.GetPluginByType[GeneratePlugin](app.pluginMngr)
+		Log().Debug("hook GeneratePlugin", "plugins", plugins)
+		for _, p := range plugins {
 			if !isRelease && strings.HasPrefix(p.K.GetPackagePath(), PkgPath) {
 				// Skip core packages if not requested.
 				// Implemented for development of plugins to prevent generating of main.go.
@@ -35,6 +37,7 @@ func (app *appImpl) gen() error {
 			}
 			err = p.V.Generate(config)
 			if err != nil {
+				Log().Debug("error on Generate", "plugin", p.K.String())
 				return err
 			}
 		}

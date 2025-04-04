@@ -37,6 +37,49 @@ const (
 	LogLevelError                    // LogLevelError is the log level for errors.
 )
 
+// LogLevel string constants.
+const (
+	LogLevelStrDisabled string = "NONE"  // LogLevelStrDisabled does never print.
+	LogLevelStrDebug    string = "DEBUG" // LogLevelStrDebug is the log level for debug.
+	LogLevelStrInfo     string = "INFO"  // LogLevelStrInfo is the log level for info.
+	LogLevelStrWarn     string = "WARN"  // LogLevelStrWarn is the log level for warnings.
+	LogLevelStrError    string = "ERROR" // LogLevelStrError is the log level for errors.
+)
+
+// String implements [fmt.Stringer] interface.
+func (l LogLevel) String() string {
+	switch l {
+	case LogLevelDebug:
+		return LogLevelStrDebug
+	case LogLevelInfo:
+		return LogLevelStrInfo
+	case LogLevelWarn:
+		return LogLevelStrWarn
+	case LogLevelError:
+		return LogLevelStrError
+	default:
+		return LogLevelStrDisabled
+	}
+}
+
+// LogLevelFromString translates a log level string to
+func LogLevelFromString(s string) LogLevel {
+	switch s {
+	case LogLevelStrDisabled:
+		return LogLevelDisabled
+	case LogLevelStrError:
+		return LogLevelError
+	case LogLevelStrWarn:
+		return LogLevelWarn
+	case LogLevelStrInfo:
+		return LogLevelInfo
+	case LogLevelStrDebug:
+		return LogLevelDebug
+	default:
+		return LogLevelDisabled
+	}
+}
+
 // LogOptions is a common interface to allow adjusting the logger.
 type LogOptions interface {
 	// Level returns the currently set log level.

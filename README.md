@@ -1,9 +1,24 @@
 # Launchr
 
-Launchr is a CLI action runner that executes actions inside short-lived local containers.
-Actions are defined in `action.yaml` files, which are automatically discovered in the filesystem.
-They can be placed anywhere that makes sense semantically. You can find action examples [here](example) and in the [documentation](docs).
-Launchr has a plugin system that allows to extend its functionality. See [core plugins](plugins), [compose](https://github.com/launchrctl/compose) and [documentation](docs).
+Launchr is a versatile CLI action runner that executes tasks defined in local or embeded yaml files across multiple runtimes:
+- Short-lived container (docker)
+- Shell (host)
+- Golang (as plugin)
+
+It supports:
+- Arguments and options
+- Automatic action discovery
+- Automatic path-based naming of local actions
+- Seamless extensibility via a plugin system
+
+Actions are defined in `action.yaml` files:
+- either on local filesystem: Useful for project-specific actions
+- or embeded as plugin: Useful for common and shared actions
+
+You can find action examples [here](example), here and in the [documentation](docs).
+
+Launchr has a plugin system that allows to extend its functionality. See [core plugins](plugins), [official plugins](https://github.com/launchrctl#org-repositories) and [documentation](docs).
+
 
 ## Table of contents
 
@@ -11,6 +26,7 @@ Launchr has a plugin system that allows to extend its functionality. See [core p
 * [Installation](#installation)
   * [Installation from source](#installation-from-source)
 * [Development](#development)
+
 
 ## Usage
 
@@ -29,6 +45,7 @@ The documentation for `launchr` usage can be found in [docs](docs).
 If you face any issues with `launchr`:
 1. Open an issue in the repo.
 2. Share the app version with `launchr --version`
+
 
 ## Installation
 
@@ -78,8 +95,9 @@ Useful make commands:
 2. Test the code - `make test`
 3. Lint the code - `make lint`
 
+
 ## Publishing a new release
 
-- Just create new release [from UI](https://github.com/launchrctl/launchr/releases/new)
+- Create a new Github release [from UI](https://github.com/launchrctl/launchr/releases/new)
 - Github Action will compile new binaries using [goreleaser](https://goreleaser.com/) and attach them to release
 

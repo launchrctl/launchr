@@ -17,6 +17,7 @@ type Streams interface {
 	Out() *Out
 	// Err returns the writer used for stderr.
 	Err() io.Writer
+	io.Closer
 }
 
 type commonStream struct {
@@ -81,10 +82,18 @@ func (o *Out) GetTtySize() (uint, uint) {
 	return uint(ws.Height), uint(ws.Width)
 }
 
+// Writer returns the wrapped writer.
+func (o *Out) Writer() io.Writer {
+	return o.out
+}
+
 // NewOut returns a new [Out] object from a [io.Writer].
 func NewOut(out io.Writer) *Out {
 	fd, isTerminal := mobyterm.GetFdInfo(out)
-	return &Out{commonStream: commonStream{fd: fd, isTerminal: isTerminal}, out: out}
+	return &Out{
+		commonStream: commonStream{fd: fd, isTerminal: isTerminal},
+		out:          out,
+	}
 }
 
 // In is an input stream used by the app to read user input.
@@ -120,6 +129,11 @@ func (i *In) CheckTty(attachStdin, ttyMode bool) error {
 	return nil
 }
 
+// Reader returns the wrapped reader.
+func (i *In) Reader() io.ReadCloser {
+	return i.in
+}
+
 // NewIn returns a new [In] object from a [io.ReadCloser]
 func NewIn(in io.ReadCloser) *In {
 	fd, isTerminal := mobyterm.GetFdInfo(in)
@@ -136,22 +150,76 @@ func (cli *appCli) In() *In        { return cli.in }
 func (cli *appCli) Out() *Out      { return cli.out }
 func (cli *appCli) Err() io.Writer { return cli.err }
 
-// StandardStreams sets a cli in, out and err streams with the standard streams.
-func StandardStreams() Streams {
-	// Set terminal emulation based on platform as required.
-	stdin, stdout, stderr := mobyterm.StdStreams()
-	return &appCli{
-		in:  NewIn(stdin),
-		out: NewOut(stdout),
-		err: stderr,
+func (cli *appCli) Close() error {
+	err := cli.in.Close()
+	if err != nil {
+		return err
 	}
+	if out, ok := cli.out.out.(io.Closer); ok {
+		err = out.Close()
+		if err != nil {
+			return err
+		}
+	}
+
+	if errout, ok := cli.err.(io.Closer); ok {
+		err = errout.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// NewBasicStreams creates streams with given in, out and err streams.
+// Give decorate functions to extend functionality.
+func NewBasicStreams(in io.ReadCloser, out io.Writer, err io.Writer, fns ...StreamsModifierFn) Streams {
+	if in == nil {
+		in = io.NopCloser(strings.NewReader(""))
+	}
+	streams := &appCli{
+		in:  NewIn(in),
+		out: NewOut(out),
+		err: err,
+	}
+	for _, fn := range fns {
+		fn(streams)
+	}
+	return streams
+}
+
+// MaskedStdStreams sets a cli in, out and err streams with the standard streams and with masking of sensitive data.
+func MaskedStdStreams(mask *SensitiveMask) Streams {
+	// Set terminal emulation based on platform as required.
+	stdin, stdout, stderr := StdInOutErr()
+	return NewBasicStreams(stdin, stdout, stderr, WithSensitiveMask(mask))
+}
+
+// StdInOutErr returns the standard streams (stdin, stdout, stderr).
+//
+// On Windows, it attempts to turn on VT handling on all std handles if
+// supported, or falls back to terminal emulation. On Unix, this returns
+// the standard [os.Stdin], [os.Stdout] and [os.Stderr].
+func StdInOutErr() (stdIn io.ReadCloser, stdOut, stdErr io.Writer) {
+	return mobyterm.StdStreams()
 }
 
 // NoopStreams provides streams like /dev/null.
 func NoopStreams() Streams {
-	return &appCli{
-		in:  NewIn(io.NopCloser(strings.NewReader(""))),
-		out: NewOut(io.Discard),
-		err: io.Discard,
+	return NewBasicStreams(
+		nil,
+		io.Discard,
+		io.Discard,
+	)
+}
+
+// StreamsModifierFn is a decorator function for a stream.
+type StreamsModifierFn func(streams *appCli)
+
+// WithSensitiveMask decorates streams with a given mask.
+func WithSensitiveMask(m *SensitiveMask) StreamsModifierFn {
+	return func(streams *appCli) {
+		streams.out.out = NewMaskingWriter(streams.out.out, m)
+		streams.err = NewMaskingWriter(streams.err, m)
 	}
 }

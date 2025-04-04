@@ -63,9 +63,12 @@ func (p *Plugin) discoverActions() (err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	for _, pldisc := range launchr.GetPluginByType[action.DiscoveryPlugin](p.pm) {
+	plugins := launchr.GetPluginByType[action.DiscoveryPlugin](p.pm)
+	launchr.Log().Debug("hook DiscoveryPlugin", "plugins", plugins)
+	for _, pldisc := range plugins {
 		actions, errDis := pldisc.V.DiscoverActions(ctx)
 		if errDis != nil {
+			launchr.Log().Debug("error on DiscoverActions", "plugin", pldisc.K.String())
 			return errDis
 		}
 
@@ -94,9 +97,12 @@ func (p *Plugin) discoverActions() (err error) {
 	}
 
 	// Alter all registered actions.
-	for _, p := range launchr.GetPluginByType[action.AlterActionsPlugin](p.pm) {
-		err = p.V.AlterActions()
+	plalter := launchr.GetPluginByType[action.AlterActionsPlugin](p.pm)
+	launchr.Log().Debug("hook AlterActionsPlugin", "plugins", plalter)
+	for _, pl := range plalter {
+		err = pl.V.AlterActions()
 		if err != nil {
+			launchr.Log().Debug("error on AlterActions", "plugin", pl.K.String())
 			return err
 		}
 	}

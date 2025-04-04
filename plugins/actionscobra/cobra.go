@@ -28,10 +28,7 @@ func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, err
 		// @todo: have aliases documented in help
 		Short:   getDesc(def.Title, def.Description),
 		Aliases: def.Aliases,
-		RunE: func(cmd *launchr.Command, args []string) (err error) {
-			// Don't show usage help on a runtime error.
-			cmd.SilenceUsage = true
-
+		PreRunE: func(cmd *launchr.Command, args []string) error {
 			// Set action input.
 			argsNamed, err := action.ArgsPosToNamed(a, args)
 			if err != nil {
@@ -55,6 +52,12 @@ func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, err
 			if err = a.SetInput(input); err != nil {
 				return err
 			}
+
+			return nil
+		},
+		RunE: func(cmd *launchr.Command, _ []string) (err error) {
+			// Don't show usage help on a runtime error.
+			cmd.SilenceUsage = true
 
 			// @todo can we use action manager here and Manager.Run()
 			return a.Execute(cmd.Context())
