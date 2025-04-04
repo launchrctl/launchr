@@ -17,6 +17,7 @@ import (
 )
 
 func Test_Action(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 	require := require.New(t)
 
@@ -99,6 +100,7 @@ func Test_Action(t *testing.T) {
 }
 
 func Test_Action_NewYAMLFromFS(t *testing.T) {
+	t.Parallel()
 	// Prepare FS.
 	fsys := genFsTestMapActions(1, validFullYaml, genPathTypeArbitrary)
 	// Get first key to make subdir.
@@ -133,6 +135,7 @@ func Test_Action_NewYAMLFromFS(t *testing.T) {
 }
 
 func Test_ActionInput(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 	require := require.New(t)
 	a := NewFromYAML("input_test", []byte(validMultipleArgsAndOpts))
@@ -215,6 +218,7 @@ func Test_ActionInput(t *testing.T) {
 }
 
 func Test_ActionInputValidate(t *testing.T) {
+	t.Parallel()
 	type inputProcessFn func(_ *testing.T, a *Action, input *Input)
 	type testCase struct {
 		name   string

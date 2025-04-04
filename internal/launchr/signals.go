@@ -1,4 +1,4 @@
-package driver
+package launchr
 
 import (
 	"context"
@@ -6,14 +6,10 @@ import (
 	gosignal "os/signal"
 
 	"github.com/moby/sys/signal"
-
-	"github.com/launchrctl/launchr/internal/launchr"
 )
 
-// ForwardAllSignals forwards signals to the container
-//
-// The channel you pass in must already be setup to receive any signals you want to forward.
-func ForwardAllSignals(ctx context.Context, cli ContainerRunner, cid string, sigc <-chan os.Signal) {
+// HandleSignals forwards signals to the handler.
+func HandleSignals(ctx context.Context, sigc <-chan os.Signal, killFn func(s os.Signal, sig string) error) {
 	var (
 		s  os.Signal
 		ok bool
@@ -48,16 +44,16 @@ func ForwardAllSignals(ctx context.Context, cli ContainerRunner, cid string, sig
 			continue
 		}
 
-		if err := cli.ContainerKill(ctx, cid, sig); err != nil {
-			launchr.Log().Debug("error sending signal", "cid", cid, "error", err)
+		if err := killFn(s, sig); err != nil {
+			Log().Debug("error sending signal", "error", err, "sig", sig)
 		}
 	}
 }
 
-// NotifyAllSignals starts watching interrupt signals.
-func NotifyAllSignals() chan os.Signal {
+// NotifySignals starts watching interrupt signals.
+func NotifySignals(sig ...os.Signal) chan os.Signal {
 	sigc := make(chan os.Signal, 128)
-	gosignal.Notify(sigc)
+	gosignal.Notify(sigc, sig...)
 	return sigc
 }
 

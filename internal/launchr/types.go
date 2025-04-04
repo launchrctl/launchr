@@ -6,13 +6,37 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"text/template"
 
 	"github.com/spf13/cobra"
 )
 
+// Application environment variables.
+const (
+	// EnvVarRootParentPID defines parent process id. May be used by forked processes.
+	EnvVarRootParentPID = EnvVar("root_ppid")
+	// EnvVarActionsPath defines path where to search for actions.
+	EnvVarActionsPath = EnvVar("actions_path")
+	// EnvVarLogLevel defines currently set log level, see --log-level or -v flag.
+	EnvVarLogLevel = EnvVar("log_level")
+	// EnvVarLogFormat defines currently set log format, see --log-format flag.
+	EnvVarLogFormat = EnvVar("log_format")
+	// EnvVarQuietMode defines if the application should output anything, see --quiet flag.
+	EnvVarQuietMode = EnvVar("quiet_mode")
+)
+
 // PkgPath is a main module path.
 const PkgPath = "github.com/launchrctl/launchr"
+
+func init() {
+	// Set parent pid for subprocesses.
+	ppid := EnvVarRootParentPID.Get()
+	if ppid == "" {
+		_ = EnvVarRootParentPID.Set(strconv.Itoa(os.Getpid()))
+	}
+}
 
 // Command is a type alias for [cobra.Command].
 // to reduce direct dependency on cobra in packages.
@@ -37,6 +61,10 @@ type App interface {
 	// GetService retrieves a service of type [v] and assigns it to [v].
 	// Panics if a service is not found.
 	GetService(v any)
+	// SensitiveWriter wraps given writer with a sensitive mask.
+	SensitiveWriter(w io.Writer) io.Writer
+	// SensitiveMask returns current sensitive mask to add values to mask.
+	SensitiveMask() *SensitiveMask
 
 	// RegisterFS registers a File System in launchr.
 	// It may be a FS for action discovery, see [action.DiscoveryFS].
@@ -110,6 +138,13 @@ type CobraPlugin interface {
 	// CobraAddCommands is a hook called when cobra root command is available.
 	// Plugins may register its command line commands here.
 	CobraAddCommands(root *Command) error
+}
+
+// PersistentPreRunPlugin is an interface to implement a plugin
+// to run before any command is run and all arguments are parsed.
+type PersistentPreRunPlugin interface {
+	Plugin
+	PersistentPreRun(cmd *Command, args []string) error
 }
 
 // Template provides templating functionality to generate files.
@@ -232,4 +267,35 @@ func (e ExitError) Error() string {
 // ExitCode returns the exit code.
 func (e ExitError) ExitCode() int {
 	return e.code
+}
+
+// EnvVar defines an environment variable and provides an interface to interact with it
+// by prefixing the current app name.
+// For example, if "my_var" is given as the variable name and the app name is "launchr",
+// the accessed environment variable will be "LAUNCHR_MY_VAR".
+type EnvVar string
+
+// String implements [fmt.Stringer] interface.
+func (key EnvVar) String() string {
+	return strings.ToUpper(name + "_" + string(key))
+}
+
+// EnvString returns an os string of env variable with a value val.
+func (key EnvVar) EnvString(val string) string {
+	return key.String() + "=" + val
+}
+
+// Get returns env variable value.
+func (key EnvVar) Get() string {
+	return os.Getenv(key.String())
+}
+
+// Set sets env variable.
+func (key EnvVar) Set(val string) error {
+	return os.Setenv(key.String(), val)
+}
+
+// Unset unsets env variable.
+func (key EnvVar) Unset() error {
+	return os.Unsetenv(key.String())
 }
