@@ -30,6 +30,11 @@ func TestFsRealpath(t *testing.T) {
 	path := FsRealpath(rootfs)
 	assert.Equal(t, MustAbs("../../"), path)
 
+	// Test basic dir fs, absolute path.
+	rootfs = os.DirFS(MustAbs("../../"))
+	path = FsRealpath(rootfs)
+	assert.Equal(t, MustAbs("../../"), path)
+
 	// Test subdir of fs.
 	subfs, err := fs.Sub(rootfs, "internal")
 	require.NoError(t, err)
