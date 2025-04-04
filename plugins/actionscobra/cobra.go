@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/launchrctl/launchr/internal/launchr"
@@ -15,17 +16,10 @@ import (
 // CobraImpl returns cobra command implementation for an action command.
 func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, error) {
 	def := a.ActionDef()
-	argsDef := def.Arguments
-	use := a.ID
-	for _, p := range argsDef {
-		use += " " + p.Name
-	}
 	options := make(action.InputParams)
 	runOpts := make(action.InputParams)
 	cmd := &launchr.Command{
-		Use: use,
-		// @todo: maybe we need a long template for arguments description
-		// @todo: have aliases documented in help
+		Use:     getCmdUse(a),
 		Short:   getDesc(def.Title, def.Description),
 		Aliases: def.Aliases,
 		PreRunE: func(cmd *launchr.Command, args []string) error {
@@ -65,94 +59,23 @@ func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, err
 	}
 
 	// Collect action flags.
-	err := setCommandOptions(cmd, def.Options, options)
+	err := setCmdFlags(cmd.Flags(), def.Options, options)
 	if err != nil {
 		return nil, err
 	}
-	// Collect runtime flags.
-	globalFlags := []string{"help"}
 
 	if env, ok := a.Runtime().(action.RuntimeFlags); ok {
-		err = setCommandOptions(cmd, env.FlagsDefinition(), runOpts)
+		runtimeFlags := env.FlagsDefinition()
+		err = setCmdFlags(cmd.Flags(), runtimeFlags, runOpts)
 		if err != nil {
 			return nil, err
 		}
-
-		for _, opt := range env.FlagsDefinition() {
-			globalFlags = append(globalFlags, opt.Name)
-		}
 	}
 
-	// Update usage template according new global flags
-	updateUsageTemplate(cmd, globalFlags)
+	// Update usage template to represent arguments, options and runtime options.
+	cmd.SetUsageFunc(usageTplFn(a))
 
 	return cmd, nil
-}
-
-func updateUsageTemplate(cmd *launchr.Command, globalOpts []string) {
-	cmd.InitDefaultHelpFlag()
-	originalFlags := cmd.LocalFlags()
-	if !originalFlags.HasAvailableFlags() {
-		return
-	}
-
-	localFlags := pflag.NewFlagSet("local", pflag.ContinueOnError)
-	globalFlags := pflag.NewFlagSet("global", pflag.ContinueOnError)
-
-	originalFlags.VisitAll(func(flag *pflag.Flag) {
-		toAdd := false
-		for _, name := range globalOpts {
-			if flag.Name == name {
-				toAdd = true
-				break
-			}
-		}
-
-		if toAdd {
-			globalFlags.AddFlag(flag)
-		} else {
-			localFlags.AddFlag(flag)
-		}
-	})
-
-	usagesLocal := strings.TrimRight(localFlags.FlagUsages(), " ")
-	usagesGlobal := strings.TrimRight(globalFlags.FlagUsages(), " ")
-
-	cmd.SetUsageTemplate(fmt.Sprintf(getUsageTemplate(), usagesLocal, usagesGlobal))
-}
-
-func getUsageTemplate() string {
-	return `Usage:{{if .Runnable}}
-  {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
-  {{.CommandPath}} [command]{{end}}{{if gt (len .Aliases) 0}}
-
-Aliases:
-  {{.NameAndAliases}}{{end}}{{if .HasExample}}
-
-Examples:
-{{.Example}}{{end}}{{if .HasAvailableSubCommands}}{{$cmds := .Commands}}{{if eq (len .Groups) 0}}
-
-Available Commands:{{range $cmds}}{{if (or .IsAvailableCommand (eq .Name "help"))}}
-  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{else}}{{range $group := .Groups}}
-
-{{.Title}}{{range $cmds}}{{if (and (eq .GroupID $group.ID) (or .IsAvailableCommand (eq .Name "help")))}}
-  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if not .AllChildCommandsHaveGroup}}
-
-Additional Commands:{{range $cmds}}{{if (and (eq .GroupID "") (or .IsAvailableCommand (eq .Name "help")))}}
-  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
-
-Flags:
-%s
-Global Action Flags:
-%s
-Global Flags:
-{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasHelpSubCommands}}
-
-Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
-  {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
-
-Use "{{.CommandPath}} [command] --help" for more information about a command.{{end}}
-`
 }
 
 func filterChangedFlags(cmd *launchr.Command, opts action.InputParams) action.InputParams {
@@ -166,9 +89,9 @@ func filterChangedFlags(cmd *launchr.Command, opts action.InputParams) action.In
 	return filtered
 }
 
-func setCommandOptions(cmd *launchr.Command, defs action.ParametersList, opts action.InputParams) error {
+func setCmdFlags(flags *pflag.FlagSet, defs action.ParametersList, opts action.InputParams) error {
 	for _, opt := range defs {
-		v, err := setFlag(cmd, opt)
+		v, err := setFlag(flags, opt)
 		if err != nil {
 			return err
 		}
@@ -188,43 +111,43 @@ func getDesc(title string, desc string) string {
 	return strings.Join(parts, ": ")
 }
 
-func setFlag(cmd *launchr.Command, opt *action.DefParameter) (any, error) {
+func setFlag(flags *pflag.FlagSet, param *action.DefParameter) (any, error) {
 	var val any
-	desc := getDesc(opt.Title, opt.Description)
+	desc := getDesc(param.Title, param.Description)
 	// Get default value if it's not set.
-	dval, err := jsonschema.EnsureType(opt.Type, opt.Default)
+	dval, err := jsonschema.EnsureType(param.Type, param.Default)
 	if err != nil {
 		return nil, err
 	}
-	switch opt.Type {
+	switch param.Type {
 	case jsonschema.String:
-		val = cmd.Flags().StringP(opt.Name, opt.Shorthand, dval.(string), desc)
+		val = flags.StringP(param.Name, param.Shorthand, dval.(string), desc)
 	case jsonschema.Integer:
-		val = cmd.Flags().IntP(opt.Name, opt.Shorthand, dval.(int), desc)
+		val = flags.IntP(param.Name, param.Shorthand, dval.(int), desc)
 	case jsonschema.Number:
-		val = cmd.Flags().Float64P(opt.Name, opt.Shorthand, dval.(float64), desc)
+		val = flags.Float64P(param.Name, param.Shorthand, dval.(float64), desc)
 	case jsonschema.Boolean:
-		val = cmd.Flags().BoolP(opt.Name, opt.Shorthand, dval.(bool), desc)
+		val = flags.BoolP(param.Name, param.Shorthand, dval.(bool), desc)
 	case jsonschema.Array:
 		dslice := dval.([]any)
-		switch opt.Items.Type {
+		switch param.Items.Type {
 		case jsonschema.String:
-			val = cmd.Flags().StringSliceP(opt.Name, opt.Shorthand, action.CastSliceAnyToTyped[string](dslice), desc)
+			val = flags.StringSliceP(param.Name, param.Shorthand, action.CastSliceAnyToTyped[string](dslice), desc)
 		case jsonschema.Integer:
-			val = cmd.Flags().IntSliceP(opt.Name, opt.Shorthand, action.CastSliceAnyToTyped[int](dslice), desc)
+			val = flags.IntSliceP(param.Name, param.Shorthand, action.CastSliceAnyToTyped[int](dslice), desc)
 		case jsonschema.Number:
-			val = cmd.Flags().Float64SliceP(opt.Name, opt.Shorthand, action.CastSliceAnyToTyped[float64](dslice), desc)
+			val = flags.Float64SliceP(param.Name, param.Shorthand, action.CastSliceAnyToTyped[float64](dslice), desc)
 		case jsonschema.Boolean:
-			val = cmd.Flags().BoolSliceP(opt.Name, opt.Shorthand, action.CastSliceAnyToTyped[bool](dslice), desc)
+			val = flags.BoolSliceP(param.Name, param.Shorthand, action.CastSliceAnyToTyped[bool](dslice), desc)
 		default:
-			// @todo use cmd.Flags().Var() and define a custom value, jsonschema accepts "any".
-			return nil, fmt.Errorf("json schema array type %q is not implemented", opt.Items.Type)
+			// @todo use flags.Var() and define a custom value, jsonschema accepts "any".
+			return nil, fmt.Errorf("json schema array type %q is not implemented", param.Items.Type)
 		}
 	default:
-		return nil, fmt.Errorf("json schema type %q is not implemented", opt.Type)
+		return nil, fmt.Errorf("json schema type %q is not implemented", param.Type)
 	}
-	if opt.Required {
-		_ = cmd.MarkFlagRequired(opt.Name)
+	if param.Required {
+		_ = cobra.MarkFlagRequired(flags, param.Name)
 	}
 	return val, nil
 }

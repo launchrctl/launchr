@@ -246,7 +246,6 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 		if err != nil {
 			return fmt.Errorf("failed to copy host directory to the container: %w", err)
 		}
-		// @todo copy action if the original files are in memory
 		err = c.copyDirToContainer(ctx, cid, a.Dir(), containerActionMount)
 		if err != nil {
 			return fmt.Errorf("failed to copy action directory to the container: %w", err)
