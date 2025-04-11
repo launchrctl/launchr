@@ -97,7 +97,7 @@ func (app *appImpl) init() error {
 			Log().Debug("hook PersistentPreRunPlugin", "plugins", plugins)
 			for _, p := range plugins {
 				if err := p.V.PersistentPreRun(cmd, args); err != nil {
-					Log().Debug("error on PersistentPreRunPlugin", "plugin", p.K.String())
+					Log().Error("error on PersistentPreRunPlugin", "plugin", p.K.String(), "err", err)
 					return err
 				}
 			}
@@ -144,7 +144,7 @@ func (app *appImpl) init() error {
 	Log().Debug("hook OnAppInitPlugin", "plugins", plugins)
 	for _, p := range plugins {
 		if err = p.V.OnAppInit(app); err != nil {
-			Log().Debug("error on OnAppInit", "plugin", p.K.String())
+			Log().Error("error on OnAppInit", "plugin", p.K.String(), "err", err)
 			return err
 		}
 	}
@@ -165,7 +165,7 @@ func (app *appImpl) exec() error {
 	Log().Debug("hook CobraPlugin", "plugins", plugins)
 	for _, p := range plugins {
 		if err := p.V.CobraAddCommands(app.cmd); err != nil {
-			Log().Debug("error on CobraAddCommands", "plugin", p.K.String())
+			Log().Error("error on CobraAddCommands", "plugin", p.K.String(), "err", err)
 			return err
 		}
 	}

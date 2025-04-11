@@ -88,8 +88,6 @@ type (
 	OnAppInitPlugin = launchr.OnAppInitPlugin
 	// ActionDiscoveryPlugin is an interface to implement a plugin to discover actions.
 	ActionDiscoveryPlugin = action.DiscoveryPlugin
-	// ActionsAlterPlugin is in interface to implement a plugin to alter registered actions.
-	ActionsAlterPlugin = action.AlterActionsPlugin
 	// CobraPlugin is an interface to implement a plugin for cobra.
 	CobraPlugin = launchr.CobraPlugin
 	// PersistentPreRunPlugin is an interface to implement a plugin

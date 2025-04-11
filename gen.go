@@ -37,7 +37,7 @@ func (app *appImpl) gen() error {
 			}
 			err = p.V.Generate(config)
 			if err != nil {
-				Log().Debug("error on Generate", "plugin", p.K.String())
+				Log().Error("error on Generate", "plugin", p.K.String(), "err", err)
 				return err
 			}
 		}
