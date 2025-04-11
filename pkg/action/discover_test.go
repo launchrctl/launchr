@@ -111,6 +111,7 @@ func Test_Discover_isValid(t *testing.T) {
 	tts := []testCase{
 		{"valid yaml", "1/2/actions/3/action.yaml", true},                           // Valid action.yaml path.
 		{"valid yml", "1/2/actions/3/action.yml", true},                             // Valid action.yml path.
+		{"valid yml incorrect path", "1/2/myactions/3/action.yml", false},           // Valid action.yml, incorrect path.
 		{"random file", "1/2/actions/3/random.yaml", false},                         // Random yaml name.
 		{"incorrect filename prefix", "1/2/actions/3/myaction.yaml", false},         // Incorrect prefix.
 		{"incorrect filename suffix", "1/2/actions/3/action.yaml.bkp", false},       // Incorrect suffix.
@@ -118,7 +119,8 @@ func Test_Discover_isValid(t *testing.T) {
 		{"incorrect hidden root path", ".1/2/actions/3/action.yml", false},          // Invalid hidden directory.
 		{"incorrect hidden subdir path", "1/2/.github/actions/3/action.yml", false}, // Invalid hidden subdirectory.
 		{"nested action", "1/2/actions/3/4/5/action.yaml", false},                   // There is a deeper nesting in actions directory.
-		{"root action", "actions/verb/action.yaml", false},                          // Actions are located in root.
+		{"root action", "actions/verb/action.yaml", true},                           // Actions are located in root.
+		{"root myactions", "myactions/verb/action.yaml", false},                     // Actions are located in dir ending with actions.
 		{"dir", "1/2/actions/3", false},                                             // A directory is given.
 	}
 
@@ -139,30 +141,29 @@ func Test_Discover_isValid(t *testing.T) {
 func Test_Discover_IDProvider(t *testing.T) {
 	t.Parallel()
 	type testCase struct {
+		name string
 		path string
 		exp  string
 	}
 	tts := []testCase{
-		// Expected relative path.
-		{"path/to/my/actions/verb/action.yaml", "path.to.my:verb"},
-		// Expected absolute path.
-		{"/absolute/path/to/my/actions/verb/action.yaml", "absolute.path.to.my:verb"},
-		// Missing /actions/ in the subpath.
-		{"path/to/my/verb/action.yaml", ""},
-		// Unexpected root path.
-		{"actions/verb/action.yaml", ""},
-		// Unexpected absolute root path.
-		{"/actions/verb/action.yaml", ""},
-		// Unexpected nested, but valid.
-		{"1/2/3/actions/4/5/6/action.yaml", "1.2.3:4.5.6"},
-		// Unexpected path, but valid.
-		{"1/2/3/actions/4/5/6/random.yaml", "1.2.3:4.5.6"},
+		{"expected relative path", "path/to/my/actions/verb/action.yaml", "path.to.my:verb"},
+		{"expected absolute path", "/absolute/path/to/my/actions/verb/action.yaml", "absolute.path.to.my:verb"},
+		{"expected root path", "actions/verb/action.yaml", "verb"},
+		{"expected absolute root path", "/actions/verb/action.yaml", "verb"},
+		{"missing /actions/ in the subpath", "path/to/my/verb/action.yaml", ""},
+		{"missing /actions/ in the subpath", "myactions/verb/action.yaml", ""},
+		{"unexpected nested, but valid id", "1/2/3/actions/4/5/6/action.yaml", "1.2.3:4.5.6"},
+		{"unexpected path, but valid id", "1/2/3/actions/4/5/6/random.yaml", "1.2.3:4.5.6"},
 	}
 	idp := DefaultIDProvider{}
 	for _, tt := range tts {
-		res := idp.GetID(&Action{fpath: tt.path})
-		if tt.exp != res {
-			t.Errorf("expected %q, got %q", tt.exp, res)
-		}
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			res := idp.GetID(&Action{fpath: tt.path})
+			if tt.exp != res {
+				t.Errorf("expected %q, got %q", tt.exp, res)
+			}
+		})
 	}
 }
