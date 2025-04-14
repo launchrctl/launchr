@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"syscall"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 )
@@ -55,7 +54,7 @@ func (r *runtimeShell) Execute(ctx context.Context, a *Action) (err error) {
 	sigc := launchr.NotifySignals()
 	go launchr.HandleSignals(ctx, sigc, func(s os.Signal, _ string) error {
 		launchr.Log().Debug("forwarding signal for action", "sig", s, "pid", cmd.Process.Pid)
-		return syscall.Kill(-cmd.Process.Pid, s.(syscall.Signal))
+		return cmd.Process.Signal(s)
 	})
 	defer launchr.StopCatchSignals(sigc)
 
