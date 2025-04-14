@@ -56,7 +56,7 @@ func Test_Action(t *testing.T) {
 	require.NotNil(act.input)
 
 	// Option is not defined, but should be there
-	// because [Action.ValidateInput] decides if the input correct or not.
+	// because [manager.ValidateInput] decides if the input correct or not.
 	_, okOpt := act.input.Opts()["opt6"]
 	assert.True(okOpt)
 	assert.Equal(inputArgs, act.input.Args())
@@ -231,6 +231,8 @@ func Test_ActionInputValidate(t *testing.T) {
 		expErr error
 	}
 
+	am := NewManager()
+
 	// Extra input preparation and testing.
 	setValidatedInput := func(t *testing.T, _ *Action, input *Input) {
 		input.SetValidated(true)
@@ -371,7 +373,7 @@ func Test_ActionInputValidate(t *testing.T) {
 			if tt.fnInit != nil {
 				tt.fnInit(t, a, input)
 			}
-			err := a.ValidateInput(input)
+			err := am.ValidateInput(a, input)
 			assert.Equal(t, err == nil, input.IsValidated())
 			assertIsSameError(t, tt.expErr, err)
 		})

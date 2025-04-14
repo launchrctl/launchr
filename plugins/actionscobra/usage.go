@@ -39,8 +39,9 @@ func usageTplFn(a *action.Action) func(*cobra.Command) error {
 		def := a.ActionDef()
 
 		var runtimeFlags action.ParametersList
-		if env, ok := a.Runtime().(action.RuntimeFlags); ok {
-			runtimeFlags = env.FlagsDefinition()
+		if rt, ok := a.Runtime().(action.RuntimeFlags); ok {
+			runtimeFlagsGroup := rt.GetFlags()
+			runtimeFlags = runtimeFlagsGroup.GetDefinitions()
 		}
 
 		t := template.New("top")

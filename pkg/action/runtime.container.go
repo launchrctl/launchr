@@ -31,12 +31,14 @@ const (
 )
 
 type runtimeContainer struct {
+	WithLogger
+	WithTerm
+	WithFlagsGroup
+
 	// crt is a container runtime.
 	crt driver.ContainerRunner
 	// rtype is a container runtime type string.
 	rtype driver.Type
-	// logWith contains context arguments for a structured logger.
-	logWith []any
 	// isRemoteRuntime checks if a container is run remotely.
 	isRemoteRuntime bool
 
@@ -86,63 +88,90 @@ func NewContainerRuntimeKubernetes() ContainerRuntime {
 
 // NewContainerRuntime creates a new action container runtime.
 func NewContainerRuntime(t driver.Type) ContainerRuntime {
-	return &runtimeContainer{
+	rc := &runtimeContainer{
 		rtype:   t,
 		nameprv: ContainerNameProvider{Prefix: "launchr_", RandomSuffix: true},
 	}
+
+	rc.SetFlagsGroup(NewFlagsGroup(jsonschemaPropRuntime))
+	return rc
 }
 
 func (c *runtimeContainer) Clone() Runtime {
 	return NewContainerRuntime(c.rtype)
 }
 
-func (c *runtimeContainer) FlagsDefinition() ParametersList {
-	return ParametersList{
-		&DefParameter{
-			Name:        containerFlagRemote,
-			Title:       "Remote runtime",
-			Description: "Forces the container runtime to be used as remote. Copies the working directory to a container volume. Local binds are not used.",
-			Type:        jsonschema.Boolean,
-			Default:     false,
-		},
-		&DefParameter{
-			Name:        containerFlagCopyBack,
-			Title:       "Remote copy back",
-			Description: "Copies the working directory back from the container. Works only if the runtime is remote.",
-			Type:        jsonschema.Boolean,
-		},
-		&DefParameter{
-			Name:        containerFlagRemoveImage,
-			Title:       "Remove Image",
-			Description: "Remove an image after execution of action",
-			Type:        jsonschema.Boolean,
-			Default:     false,
-		},
-		&DefParameter{
-			Name:        containerFlagNoCache,
-			Title:       "No cache",
-			Description: "Send command to build container without cache",
-			Type:        jsonschema.Boolean,
-			Default:     false,
-		},
-		&DefParameter{
-			Name:        containerFlagEntrypoint,
-			Title:       "Image Entrypoint",
-			Description: `Overwrite the default ENTRYPOINT of the image. Example: --entrypoint "/bin/sh"`,
-			Type:        jsonschema.String,
-			Default:     "",
-		},
-		&DefParameter{
-			Name:        containerFlagExec,
-			Title:       "Exec command",
-			Description: "Overwrite the command of the action. Argument and options are not validated, sets container CMD directly. Example usage: --exec -- ls -lah",
-			Type:        jsonschema.Boolean,
-			Default:     false,
-		},
+func (c *runtimeContainer) GetFlags() *FlagsGroup {
+	flags := c.GetFlagsGroup()
+	if len(flags.GetDefinitions()) == 0 {
+		definitions := ParametersList{
+			&DefParameter{
+				Name:        containerFlagRemote,
+				Title:       "Remote runtime",
+				Description: "Forces the container runtime to be used as remote. Copies the working directory to a container volume. Local binds are not used.",
+				Type:        jsonschema.Boolean,
+				Default:     false,
+			},
+			&DefParameter{
+				Name:        containerFlagCopyBack,
+				Title:       "Remote copy back",
+				Description: "Copies the working directory back from the container. Works only if the runtime is remote.",
+				Type:        jsonschema.Boolean,
+			},
+			&DefParameter{
+				Name:        containerFlagRemoveImage,
+				Title:       "Remove Image",
+				Description: "Remove an image after execution of action",
+				Type:        jsonschema.Boolean,
+				Default:     false,
+			},
+			&DefParameter{
+				Name:        containerFlagNoCache,
+				Title:       "No cache",
+				Description: "Send command to build container without cache",
+				Type:        jsonschema.Boolean,
+				Default:     false,
+			},
+			&DefParameter{
+				Name:        containerFlagEntrypoint,
+				Title:       "Image Entrypoint",
+				Description: `Overwrite the default ENTRYPOINT of the image. Example: --entrypoint "/bin/sh"`,
+				Type:        jsonschema.String,
+				Default:     "",
+			},
+			&DefParameter{
+				Name:        containerFlagExec,
+				Title:       "Exec command",
+				Description: "Overwrite the command of the action. Argument and options are not validated, sets container CMD directly. Example usage: --exec -- ls -lah",
+				Type:        jsonschema.Boolean,
+				Default:     false,
+			},
+		}
+
+		flags.AddDefinitions(definitions)
 	}
+
+	return flags
 }
 
-func (c *runtimeContainer) UseFlags(flags InputParams) error {
+func (c *runtimeContainer) ValidateInput(input *Input) error {
+	err := c.flags.ValidateFlags(input.GroupFlags(c.flags.GetName()))
+	if err != nil {
+		return err
+	}
+
+	// early peak for an exec flag.
+	if c.exec {
+		// Mark input as validated because arguments are passed directly to exec.
+		input.SetValidated(true)
+	}
+
+	return nil
+}
+
+func (c *runtimeContainer) SetFlags(input *Input) error {
+	flags := input.GroupFlags(c.flags.GetName())
+
 	if v, ok := flags[containerFlagRemote]; ok {
 		c.isSetRemote = v.(bool)
 	}
@@ -170,13 +199,7 @@ func (c *runtimeContainer) UseFlags(flags InputParams) error {
 
 	return nil
 }
-func (c *runtimeContainer) ValidateInput(_ *Action, input *Input) error {
-	if c.exec {
-		// Mark input as validated because arguments are passed directly to exec.
-		input.SetValidated(true)
-	}
-	return nil
-}
+
 func (c *runtimeContainer) AddImageBuildResolver(r ImageBuildResolver) {
 	c.imgres = append(c.imgres, r)
 }
@@ -209,17 +232,10 @@ func (c *runtimeContainer) Init(ctx context.Context, _ *Action) (err error) {
 				"This process may take time or potentially break existing permissions.",
 			c.volumeFlags,
 		)
-		c.log().Warn("using selinux flags", "flags", c.volumeFlags)
+		c.Log().Warn("using selinux flags", "flags", c.volumeFlags)
 	}
 
 	return nil
-}
-
-func (c *runtimeContainer) log(attrs ...any) *launchr.Slog {
-	if attrs != nil {
-		c.logWith = append(c.logWith, attrs...)
-	}
-	return launchr.Log().With(c.logWith...)
 }
 
 func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
@@ -232,7 +248,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 	if runDef.Container == nil {
 		return errors.New("action container configuration is not set, use different runtime")
 	}
-	log := c.log("action_id", a.ID)
+	log := c.LogWith("action_id", a.ID)
 	log.Debug("starting execution of the action")
 
 	// Generate a container name.
@@ -244,7 +260,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 
 	// Create a container.
 	runConfig := c.createContainerDef(a, name)
-	log = c.log("image", runConfig.Image, "command", runConfig.Command, "entrypoint", runConfig.Entrypoint)
+	log = c.LogWith("image", runConfig.Image, "command", runConfig.Command, "entrypoint", runConfig.Entrypoint)
 	log.Debug("creating a container for an action")
 	cid, err := c.containerCreate(ctx, a, &runConfig)
 	if err != nil {
@@ -279,7 +295,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 		}
 	}()
 
-	log = c.log("container_id", cid)
+	log = c.LogWith("container_id", cid)
 	log.Debug("successfully created a container for an action")
 
 	// Copy working dirs to the container.
@@ -398,7 +414,7 @@ func (c *runtimeContainer) isRebuildRequired(bi *driver.BuildDefinition) (bool, 
 	}
 
 	if errCache := c.imgccres.Save(); errCache != nil {
-		c.log().Warn("failed to update actions.sum file", "error", errCache)
+		c.Log().Warn("failed to update actions.sum file", "error", errCache)
 	}
 
 	return doRebuild, nil
@@ -430,7 +446,7 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 		return err
 	}
 
-	log := c.log()
+	log := c.Log()
 	switch status.Status {
 	case driver.ImageExists:
 		log.Debug("image exists locally")
@@ -441,12 +457,12 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 		defer func() {
 			_ = status.Progress.Close()
 		}()
-		launchr.Term().Printfln("Image %q doesn't exist locally, pulling from the registry...", image)
+		c.Term().Printfln("Image %q doesn't exist locally, pulling from the registry...", image)
 		log.Info("image doesn't exist locally, pulling from the registry")
 		// Output docker status only in Debug.
 		err = status.Progress.Stream(streams.Out())
 		if err != nil {
-			launchr.Term().Error().Println("Error occurred while pulling the image %q", image)
+			c.Term().Error().Println("Error occurred while pulling the image %q", image)
 			log.Error("error while pulling the image", "error", err)
 		}
 	case driver.ImageBuild:
@@ -456,12 +472,12 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 		defer func() {
 			_ = status.Progress.Close()
 		}()
-		launchr.Term().Printfln("Image %q doesn't exist locally, building...", image)
+		c.Term().Printfln("Image %q doesn't exist locally, building...", image)
 		log.Info("image doesn't exist locally, building the image")
 		// Output docker status only in Debug.
 		err = status.Progress.Stream(streams.Out())
 		if err != nil {
-			launchr.Term().Error().Println("Error occurred while building the image %q", image)
+			c.Term().Error().Println("Error occurred while building the image %q", image)
 			log.Error("error while building the image", "error", err)
 		}
 	}

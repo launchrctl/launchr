@@ -26,6 +26,8 @@ type Input struct {
 	args InputParams
 	// opts contains parsed options with default values.
 	opts InputParams
+	// groups contains input parameters grouped by unique name
+	groups map[string]InputParams
 	// io contains out/in/err destinations.
 	io launchr.Streams
 
@@ -52,6 +54,7 @@ func NewInput(a *Action, args InputParams, opts InputParams, io launchr.Streams)
 		argsPos: argsPos,
 		opts:    setParamDefaults(opts, def.Options),
 		optsRaw: opts,
+		groups:  make(map[string]InputParams),
 		io:      io,
 	}
 }
@@ -147,6 +150,29 @@ func (input *Input) UnsetOpt(name string) {
 func (input *Input) IsOptChanged(name string) bool {
 	_, ok := input.optsRaw[name]
 	return ok
+}
+
+// GroupFlags returns stored group flags values.
+func (input *Input) GroupFlags(group string) InputParams {
+	if gp, ok := input.groups[group]; ok {
+		return gp
+	}
+	return make(InputParams)
+}
+
+// GetFlagInGroup returns a group flag by name.
+func (input *Input) GetFlagInGroup(group, name string) any {
+	return input.GroupFlags(group)[name]
+}
+
+// SetFlagInGroup sets group flag value.
+func (input *Input) SetFlagInGroup(group, name string, val any) {
+	gp, ok := input.groups[group]
+	if !ok {
+		gp = make(InputParams)
+		input.groups[group] = gp
+	}
+	gp[name] = val
 }
 
 // Args returns input named and processed arguments.

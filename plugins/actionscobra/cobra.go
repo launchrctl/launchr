@@ -14,7 +14,7 @@ import (
 )
 
 // CobraImpl returns cobra command implementation for an action command.
-func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, error) {
+func CobraImpl(a *action.Action, streams launchr.Streams, manager action.Manager) (*launchr.Command, error) {
 	def := a.ActionDef()
 	options := make(action.InputParams)
 	runOpts := make(action.InputParams)
@@ -30,22 +30,38 @@ func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, err
 			}
 			optsChanged := derefOpts(filterChangedFlags(cmd, options))
 			input := action.NewInput(a, argsNamed, optsChanged, streams)
-			// Pass to the runtime its flags.
-			if r, ok := a.Runtime().(action.RuntimeFlags); ok {
+
+			// Store runtime flags in the input.
+			if rt, ok := a.Runtime().(action.RuntimeFlags); ok {
+				runtimeFlagsGroup := rt.GetFlags()
 				runOpts = derefOpts(filterChangedFlags(cmd, runOpts))
-				err = r.UseFlags(runOpts)
-				if err != nil {
-					return err
-				}
-				if err = r.ValidateInput(a, input); err != nil {
-					return err
+				for k, v := range runOpts {
+					input.SetFlagInGroup(runtimeFlagsGroup.GetName(), k, v)
 				}
 			}
 
-			// Set and validate input.
+			// Retrieve the current persistent flags state and pass to action. It will be later used during decorating
+			// or other action steps.
+			// Flags are immutable in action.
+			persistentFlagsGroup := manager.GetPersistentFlags()
+			for k, v := range persistentFlagsGroup.GetAll() {
+				input.SetFlagInGroup(persistentFlagsGroup.GetName(), k, v)
+			}
+
+			// Validate input before setting to action.
+			if err = manager.ValidateInput(a, input); err != nil {
+				return err
+			}
+
+			// Set input.
 			if err = a.SetInput(input); err != nil {
 				return err
 			}
+
+			// Re-apply all registered decorators to action before its execution.
+			// Triggered after action.SetInput to ensure decorators have access to all necessary data from the input
+			// to proceed.
+			manager.Decorate(a)
 
 			return nil
 		},
@@ -53,8 +69,8 @@ func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, err
 			// Don't show usage help on a runtime error.
 			cmd.SilenceUsage = true
 
-			// @todo can we use action manager here and Manager.Run()
-			return a.Execute(cmd.Context())
+			_, err = manager.Run(cmd.Context(), a)
+			return err
 		},
 	}
 
@@ -64,9 +80,9 @@ func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, err
 		return nil, err
 	}
 
-	if env, ok := a.Runtime().(action.RuntimeFlags); ok {
-		runtimeFlags := env.FlagsDefinition()
-		err = setCmdFlags(cmd.Flags(), runtimeFlags, runOpts)
+	if rt, ok := a.Runtime().(action.RuntimeFlags); ok {
+		runtimeFlagsGroup := rt.GetFlags()
+		err = setCmdFlags(cmd.Flags(), runtimeFlagsGroup.GetDefinitions(), runOpts)
 		if err != nil {
 			return nil, err
 		}

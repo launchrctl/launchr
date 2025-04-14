@@ -53,6 +53,8 @@ func prepareContainerTestSuite(t *testing.T) (*gomock.Controller, *containermock
 	d := containermock.NewMockContainerRuntime(ctrl)
 	d.EXPECT().Close()
 	r := &runtimeContainer{crt: d, rtype: "mock"}
+	r.SetLogger(launchr.Log())
+	r.SetTerm(launchr.Term())
 	r.AddImageBuildResolver(cfgImgRes)
 	r.SetContainerNameProvider(ContainerNameProvider{Prefix: containerNamePrefix})
 

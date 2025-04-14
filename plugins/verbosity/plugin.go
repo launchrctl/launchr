@@ -3,9 +3,13 @@ package verbosity
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"math"
 
 	"github.com/launchrctl/launchr/internal/launchr"
+	"github.com/launchrctl/launchr/pkg/action"
+	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 func init() {
@@ -87,7 +91,7 @@ func (e *logLevelStr) Type() string {
 func (p Plugin) OnAppInit(app launchr.App) error {
 	verbosity := 0
 	quiet := false
-	var logFormat LogFormat
+	var logFormatStr LogFormat
 	var logLvlStr logLevelStr
 
 	// Assert we are able to access internal functionality.
@@ -103,7 +107,7 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	pflags.ParseErrorsWhitelist.UnknownFlags = true
 	pflags.CountVarP(&verbosity, "verbose", "v", "log verbosity level, use -vvvv DEBUG, -vvv INFO, -vv WARN, -v ERROR")
 	pflags.VarP(&logLvlStr, "log-level", "", "log level, same as -v, can be: DEBUG, INFO, WARN, ERROR or NONE (default NONE)")
-	pflags.VarP(&logFormat, "log-format", "", "log format, can be: pretty, plain or json (default pretty)")
+	pflags.VarP(&logFormatStr, "log-format", "", "log format, can be: pretty, plain or json (default pretty)")
 	pflags.BoolVarP(&quiet, "quiet", "q", false, "disable output to the console")
 
 	// Parse available flags.
@@ -138,16 +142,56 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 		logLevel = launchr.LogLevelFromString(logLvlEnv)
 	}
 
+	// ensure logFormat always has a value
+	logFormat := LogFormatPretty
+	if pflags.Changed("log-format") {
+		logFormat = logFormatStr
+	}
+
 	streams := app.Streams()
 	out := streams.Out()
 	// Set terminal output.
 	launchr.Term().SetOutput(out)
+	// if some library, that we don't control, uses a std log
+	// We ensure that std lib logger has the same output level as the Terminal. It is NOT our app specific logger.
+	log.SetOutput(out)
+
 	// Enable logger.
+	logger := NewLogger(logFormat, logLevel, out)
+	launchr.SetLogger(logger)
+
 	if logLevel != launchr.LogLevelDisabled {
-		if logFormat == "" && launchr.EnvVarLogFormat.Get() != "" {
-			logFormat = LogFormat(launchr.EnvVarLogFormat.Get())
-		}
-		var logger *launchr.Logger
+		_ = launchr.EnvVarLogLevel.Set(logLevel.String())
+		_ = launchr.EnvVarLogFormat.Set(logFormat.String())
+	}
+
+	cmd.SetOut(out)
+	cmd.SetErr(streams.Err())
+
+	var am action.Manager
+	app.GetService(&am)
+
+	// Retrieve and expand application persistent flags with new log and term-related options.
+	persistentFlags := am.GetPersistentFlags()
+	persistentFlags.AddDefinitions(getVerbosityPersistentFlags())
+
+	// Store initial values of persistent flags.
+	persistentFlags.Set("log-level", logger.Level().String())
+	persistentFlags.Set("log-format", logFormat.String())
+	persistentFlags.Set("quiet", quiet)
+
+	// Add new decorators which provide automatic logger and term creation for action based on persistent flags state.
+	am.AddDecorators(withCustomLogger, withCustomTerm)
+
+	return nil
+}
+
+// NewLogger creates and initializes a new logger with the specified format, log level, and output stream.
+func NewLogger(logFormat LogFormat, logLevel launchr.LogLevel, out *launchr.Out) *launchr.Logger {
+	var logger *launchr.Logger
+	if logLevel == launchr.LogLevelDisabled {
+		logger = launchr.NewTextHandlerLogger(io.Discard)
+	} else {
 		switch logFormat {
 		case LogFormatPlain:
 			logger = launchr.NewTextHandlerLogger(out)
@@ -156,15 +200,11 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 		default:
 			logger = launchr.NewConsoleLogger(out)
 		}
-		launchr.SetLogger(logger)
-		// Save env variable for subprocesses.
-		_ = launchr.EnvVarLogLevel.Set(logLevel.String())
-		_ = launchr.EnvVarLogFormat.Set(logFormat.String())
 	}
-	launchr.Log().SetLevel(logLevel)
-	cmd.SetOut(out)
-	cmd.SetErr(streams.Err())
-	return nil
+
+	logger.SetLevel(logLevel)
+
+	return logger
 }
 
 func logLevelFlagInt(v int) launchr.LogLevel {
@@ -181,5 +221,82 @@ func logLevelFlagInt(v int) launchr.LogLevel {
 		return launchr.LogLevelDebug
 	default:
 		return launchr.LogLevelDisabled
+	}
+}
+
+// withCustomLogger decorator adds a new logger for [RuntimeLoggerAware] runtime.
+func withCustomLogger(m action.Manager, a *action.Action) {
+	if a.Runtime() == nil {
+		return
+	}
+
+	if !a.Input().IsValidated() {
+		return
+	}
+
+	persistentFlags := m.GetPersistentFlags()
+	if rt, ok := a.Runtime().(action.RuntimeLoggerAware); ok {
+		var logFormat LogFormat
+		if lfStr, ok := a.Input().GetFlagInGroup(persistentFlags.GetName(), "log-format").(string); ok {
+			logFormat = LogFormat(lfStr)
+		}
+
+		var logLevel launchr.LogLevel
+		if llStr, ok := a.Input().GetFlagInGroup(persistentFlags.GetName(), "log-level").(string); ok {
+			logLevel = launchr.LogLevelFromString(llStr)
+		}
+
+		logger := NewLogger(logFormat, logLevel, a.Input().Streams().Out())
+		rt.SetLogger(logger)
+	}
+}
+
+// withCustomTerm decorator adds a new term for [RuntimeTermAware] runtime.
+func withCustomTerm(m action.Manager, a *action.Action) {
+	if a.Runtime() == nil {
+		return
+	}
+
+	if !a.Input().IsValidated() {
+		return
+	}
+
+	persistentFlags := m.GetPersistentFlags()
+	if rt, ok := a.Runtime().(action.RuntimeTermAware); ok {
+		term := launchr.NewTerminal()
+		term.SetOutput(a.Input().Streams().Out())
+		if quiet, ok := a.Input().GetFlagInGroup(persistentFlags.GetName(), "log-level").(bool); ok && quiet {
+			term.DisableOutput()
+		}
+
+		rt.SetTerm(term)
+	}
+}
+
+func getVerbosityPersistentFlags() action.ParametersList {
+	return action.ParametersList{
+		&action.DefParameter{
+			Name:        "log-level",
+			Title:       "Log level",
+			Description: "Log level, can be: DEBUG, INFO, WARN, ERROR or NONE",
+			Type:        jsonschema.String,
+			Default:     "NONE",
+			Enum:        []any{"DEBUG", "INFO", "WARN", "ERROR", "NONE"},
+		},
+		&action.DefParameter{
+			Name:        "log-format",
+			Title:       "Log format",
+			Description: "Log format, can be: pretty, plain or json",
+			Type:        jsonschema.String,
+			Default:     "pretty",
+			Enum:        []any{"pretty", "plain", "json"},
+		},
+		&action.DefParameter{
+			Name:        "quiet",
+			Title:       "Quiet",
+			Description: "Disable output to the console",
+			Type:        jsonschema.Boolean,
+			Default:     false,
+		},
 	}
 }

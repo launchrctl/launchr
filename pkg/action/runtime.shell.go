@@ -12,6 +12,7 @@ import (
 )
 
 type runtimeShell struct {
+	WithLogger
 }
 
 // NewShellRuntime creates a new action shell runtime.
@@ -31,7 +32,7 @@ func (r *runtimeShell) Init(_ context.Context, _ *Action) (err error) {
 }
 
 func (r *runtimeShell) Execute(ctx context.Context, a *Action) (err error) {
-	log := launchr.Log().With("run_env", "shell", "action_id", a.ID)
+	log := r.LogWith("run_env", "shell", "action_id", a.ID)
 	log.Debug("starting execution of the action")
 
 	streams := a.Input().Streams()
