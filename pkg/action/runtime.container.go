@@ -35,6 +35,8 @@ type runtimeContainer struct {
 	crt driver.ContainerRunner
 	// rtype is a container runtime type string.
 	rtype driver.Type
+
+	logger *launchr.Logger
 	// logWith contains context arguments for a structured logger.
 	logWith []any
 
@@ -94,41 +96,41 @@ func (c *runtimeContainer) Clone() Runtime {
 
 func (c *runtimeContainer) FlagsDefinition() ParametersList {
 	return ParametersList{
-		&DefParameter{
+		NewDefParameter(DefParameter{
 			Name:        containerFlagUseVolumeWD,
 			Title:       "Use volume as a WD",
 			Description: "Copy the working directory to a container volume and not bind local paths. Usually used with remote environments.",
 			Type:        jsonschema.Boolean,
 			Default:     false,
-		},
-		&DefParameter{
+		}),
+		NewDefParameter(DefParameter{
 			Name:        containerFlagRemoveImage,
 			Title:       "Remove Image",
 			Description: "Remove an image after execution of action",
 			Type:        jsonschema.Boolean,
 			Default:     false,
-		},
-		&DefParameter{
+		}),
+		NewDefParameter(DefParameter{
 			Name:        containerFlagNoCache,
 			Title:       "No cache",
 			Description: "Send command to build container without cache",
 			Type:        jsonschema.Boolean,
 			Default:     false,
-		},
-		&DefParameter{
+		}),
+		NewDefParameter(DefParameter{
 			Name:        containerFlagEntrypoint,
 			Title:       "Image Entrypoint",
 			Description: "Overwrite the default ENTRYPOINT of the image",
 			Type:        jsonschema.String,
 			Default:     "",
-		},
-		&DefParameter{
+		}),
+		NewDefParameter(DefParameter{
 			Name:        containerFlagExec,
 			Title:       "Exec command",
 			Description: "Overwrite CMD definition of the container",
 			Type:        jsonschema.Boolean,
 			Default:     false,
-		},
+		}),
 	}
 }
 
@@ -174,14 +176,19 @@ func (c *runtimeContainer) Init(_ context.Context, _ *Action) (err error) {
 	if c.crt == nil {
 		c.crt, err = driver.New(c.rtype)
 	}
+
 	return err
 }
 
-func (c *runtimeContainer) log(attrs ...any) *launchr.Slog {
+func (c *runtimeContainer) SetLogger(l *launchr.Logger) {
+	c.logger = l
+}
+
+func (c *runtimeContainer) Log(attrs ...any) *launchr.Slog {
 	if attrs != nil {
 		c.logWith = append(c.logWith, attrs...)
 	}
-	return launchr.Log().With(c.logWith...)
+	return c.logger.With(c.logWith...)
 }
 
 func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
@@ -192,7 +199,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 	if runDef.Container == nil {
 		return errors.New("action container configuration is not set, use different runtime")
 	}
-	log := c.log("run_env", c.rtype, "action_id", a.ID, "image", runDef.Container.Image, "command", runDef.Container.Command)
+	log := c.Log("run_env", c.rtype, "action_id", a.ID, "image", runDef.Container.Image, "command", runDef.Container.Command)
 	log.Debug("starting execution of the action")
 	name := c.nameprv.Get(a.ID)
 	existing := c.crt.ContainerList(ctx, driver.ContainerListOptions{SearchName: name})
@@ -236,7 +243,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 		return errors.New("error on creating a container")
 	}
 
-	log = c.log("container_id", cid)
+	log = c.Log("container_id", cid)
 	log.Debug("successfully created a container for an action")
 	// Copy working dirs to the container.
 	if c.useVolWD {
@@ -407,7 +414,7 @@ func (c *runtimeContainer) isRebuildRequired(bi *driver.BuildDefinition) (bool, 
 	}
 
 	if errCache := c.imgccres.Save(); errCache != nil {
-		c.log().Warn("failed to update actions.sum file", "error", errCache)
+		c.Log().Warn("failed to update actions.sum file", "error", errCache)
 	}
 
 	return doRebuild, nil
@@ -439,7 +446,7 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 		return err
 	}
 
-	log := c.log()
+	log := c.Log()
 	switch status.Status {
 	case driver.ImageExists:
 		log.Debug("image exists locally")
@@ -532,7 +539,7 @@ func (c *runtimeContainer) containerCreate(ctx context.Context, a *Action, opts 
 					"This process may take time or potentially break existing permissions.",
 				flags,
 			)
-			c.log().Warn("using selinux flags", "flags", flags)
+			c.Log().Warn("using selinux flags", "flags", flags)
 		}
 		createOpts.Binds = []string{
 			launchr.MustAbs(a.WorkDir()) + ":" + containerHostMount + flags,
@@ -607,7 +614,7 @@ func (c *runtimeContainer) copyFromContainer(ctx context.Context, cid, srcPath, 
 }
 
 func (c *runtimeContainer) containerWait(ctx context.Context, cid string, opts *driver.ContainerCreateOptions) <-chan int {
-	log := c.log()
+	log := c.Log()
 	// Wait for the container to stop or catch error.
 	waitCond := driver.WaitConditionNextExit
 	if opts.AutoRemove {

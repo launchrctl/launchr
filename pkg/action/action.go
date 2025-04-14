@@ -13,6 +13,11 @@ import (
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
+const (
+	// EventActionPreExecute const for event name
+	EventActionPreExecute = "action.pre_execute"
+)
+
 // Action is an action definition with a contextual id (name), working directory path
 // and a runtime context such as input arguments and options.
 type Action struct {
@@ -32,6 +37,8 @@ type Action struct {
 	runtime    Runtime                   // runtime is the [Runtime] to execute the action.
 	input      *Input                    // input is a storage for arguments and options used in runtime.
 	processors map[string]ValueProcessor // processors are [ValueProcessor] for manipulating input.
+
+	globalsDef ParametersList
 }
 
 // New creates a new action.
@@ -88,6 +95,8 @@ func (a *Action) Clone() *Action {
 		wd:     a.wd,
 		fs:     a.fs,
 		fpath:  a.fpath,
+
+		globalsDef: a.globalsDef,
 	}
 	if a.runtime != nil {
 		c.runtime = a.runtime.Clone()
@@ -113,6 +122,16 @@ func (a *Action) SetProcessors(list map[string]ValueProcessor) error {
 // GetProcessors returns processors map.
 func (a *Action) GetProcessors() map[string]ValueProcessor {
 	return a.processors
+}
+
+// GlobalsDef returns action globals definitions.
+func (a *Action) GlobalsDef() ParametersList {
+	return a.globalsDef
+}
+
+// SetGlobalsDef sets action globals definitions.
+func (a *Action) SetGlobalsDef(globalsDef ParametersList) {
+	a.globalsDef = globalsDef
 }
 
 // Reset unsets loaded action to force reload.
@@ -250,6 +269,17 @@ func (a *Action) ImageBuildInfo(image string) *driver.BuildDefinition {
 func (a *Action) SetInput(input *Input) (err error) {
 	def := a.ActionDef()
 
+	if r, ok := a.Runtime().(RuntimeFlags); ok {
+		err = r.UseFlags(input.RuntimeOpts())
+		if err != nil {
+			return err
+		}
+
+		if err = r.ValidateInput(a, input); err != nil {
+			return err
+		}
+	}
+
 	// Process arguments.
 	err = a.processInputParams(def.Arguments, input.Args(), input.ArgsChanged())
 	if err != nil {
@@ -333,6 +363,13 @@ func (a *Action) Execute(ctx context.Context) error {
 		panic("runtime is not set, call SetRuntime first")
 	}
 	defer a.runtime.Close()
+
+	launchr.Log().Debug("triggering event", "event", EventActionPreExecute)
+	e := launchr.NewEvent(EventActionPreExecute, map[string]any{"action": a})
+	if err := launchr.EventDispatcher().FireEvent(e); err != nil {
+		return err
+	}
+
 	if err := a.runtime.Init(ctx, a); err != nil {
 		return err
 	}

@@ -2,18 +2,24 @@ package action
 
 import (
 	"context"
+
+	"github.com/launchrctl/launchr/internal/launchr"
 )
 
 // Runtime is an interface for action execution environment.
 type Runtime interface {
 	// Init prepares the runtime.
 	Init(ctx context.Context, a *Action) error
-	// Execute runs action a in the environment and operates with io through streams.
+	// Execute runs action `a` in the environment and operates with io through streams.
 	Execute(ctx context.Context, a *Action) error
 	// Close does wrap up operations.
 	Close() error
 	// Clone creates the same runtime, but in initial state.
 	Clone() Runtime
+	// SetLogger adds runtime logger
+	SetLogger(l *launchr.Logger)
+	// Log returns runtime logger
+	Log(attrs ...any) *launchr.Slog
 }
 
 // RuntimeFlags is an interface to define environment specific runtime configuration.
