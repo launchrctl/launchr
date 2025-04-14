@@ -8,8 +8,10 @@ import (
 )
 
 const (
-	jsonschemaPropArgs = "arguments"
-	jsonschemaPropOpts = "options"
+	jsonschemaPropArgs    = "arguments"
+	jsonschemaPropOpts    = "options"
+	jsonschemaRuntimeOpts = "runtime"
+	jsonschemaGlobalOpts  = "globals"
 )
 
 // validateJSONSchema validates arguments and options according to
@@ -18,8 +20,10 @@ func validateJSONSchema(a *Action, input *Input) error {
 	return jsonschema.Validate(
 		a.JSONSchema(),
 		map[string]any{
-			jsonschemaPropArgs: input.Args(),
-			jsonschemaPropOpts: input.Opts(),
+			jsonschemaPropArgs:    input.Args(),
+			jsonschemaPropOpts:    input.Opts(),
+			jsonschemaRuntimeOpts: input.RuntimeOpts(),
+			jsonschemaGlobalOpts:  input.Globals(),
 		},
 	)
 }
@@ -39,6 +43,31 @@ func (a *Action) JSONSchema() jsonschema.Schema {
 	s.Schema = "https://json-schema.org/draft/2020-12/schema#"
 	s.Title = fmt.Sprintf("%s (%s)", def.Title, a.ID) // @todo provide better title.
 	s.Description = def.Description
+
+	if env, ok := a.Runtime().(RuntimeFlags); ok {
+		fd := env.FlagsDefinition()
+		properties, required := fd.JSONSchema()
+		s.Properties[jsonschemaRuntimeOpts] = map[string]any{
+			"type":                 "object",
+			"title":                "Runtime",
+			"properties":           properties,
+			"required":             required,
+			"additionalProperties": false,
+		}
+	}
+
+	gd := a.GlobalsDef()
+	if len(gd) > 0 {
+		properties, required := gd.JSONSchema()
+		s.Properties[jsonschemaGlobalOpts] = map[string]any{
+			"type":                 "object",
+			"title":                "Globals",
+			"properties":           properties,
+			"required":             required,
+			"additionalProperties": false,
+		}
+	}
+
 	return s
 }
 

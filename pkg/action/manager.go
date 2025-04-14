@@ -38,6 +38,11 @@ type Manager interface {
 	// This id provider will be used as default on [Action] discovery process.
 	SetActionIDProvider(p IDProvider)
 
+	// AddGlobalsDef adds options definitions to list of global options.
+	AddGlobalsDef(opts ParametersList)
+	// GetGlobalsDef returns list of global action options.
+	GetGlobalsDef() ParametersList
+
 	// AddValueProcessor adds processor to list of available processors
 	AddValueProcessor(name string, vp ValueProcessor)
 	// GetValueProcessors returns list of available processors
@@ -86,6 +91,7 @@ type actionManagerMap struct {
 	actionAliases map[string]string
 	mx            sync.Mutex
 	dwFns         []DecorateWithFn
+	GlobalsDef    ParametersList
 	processors    map[string]ValueProcessor
 	idProvider    IDProvider
 
@@ -95,6 +101,31 @@ type actionManagerMap struct {
 	discTimeout  time.Duration
 
 	runManagerMap
+}
+
+func (m *actionManagerMap) GetGlobalsDef() ParametersList {
+	return m.GlobalsDef
+}
+
+func (m *actionManagerMap) AddGlobalsDef(opts ParametersList) {
+	itemMap := make(map[string]int)
+
+	for index, item := range m.GlobalsDef {
+		itemMap[item.Name] = index
+	}
+
+	for _, item := range opts {
+		if item.Name == "" {
+			panic("action global option name cannot be empty")
+		}
+
+		if index, exists := itemMap[item.Name]; exists {
+			launchr.Log().Debug("duplicate action global has been detected, replacing", "name", item.Name)
+			m.GlobalsDef[index] = item
+		} else {
+			m.GlobalsDef = append(m.GlobalsDef, item)
+		}
+	}
 }
 
 // NewManager constructs a new action manager.
@@ -143,6 +174,9 @@ func (m *actionManagerMap) add(a *Action) error {
 		// Skip action because the definition is not correct.
 		return err
 	}
+
+	a.SetGlobalsDef(m.GetGlobalsDef())
+
 	if dup, ok := m.actionStore[a.ID]; ok {
 		launchr.Log().Debug("action was overridden by another declaration",
 			"action_id", a.ID,

@@ -262,18 +262,18 @@ func (mr *MockContainerRuntimeMockRecorder) ImageEnsure(ctx, opts any) *gomock.C
 }
 
 // ImageRemove mocks base method.
-func (m *MockContainerRuntime) ImageRemove(ctx context.Context, image string, opts image.RemoveOptions) (*driver.ImageRemoveResponse, error) {
+func (m *MockContainerRuntime) ImageRemove(ctx context.Context, arg1 string, opts image.RemoveOptions) (*driver.ImageRemoveResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ImageRemove", ctx, image, opts)
+	ret := m.ctrl.Call(m, "ImageRemove", ctx, arg1, opts)
 	ret0, _ := ret[0].(*driver.ImageRemoveResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ImageRemove indicates an expected call of ImageRemove.
-func (mr *MockContainerRuntimeMockRecorder) ImageRemove(ctx, image, opts any) *gomock.Call {
+func (mr *MockContainerRuntimeMockRecorder) ImageRemove(ctx, arg1, opts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImageRemove", reflect.TypeOf((*MockContainerRuntime)(nil).ImageRemove), ctx, image, opts)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImageRemove", reflect.TypeOf((*MockContainerRuntime)(nil).ImageRemove), ctx, arg1, opts)
 }
 
 // Info mocks base method.

@@ -6,6 +6,7 @@ toolchain go1.23.3
 
 require (
 	github.com/docker/docker v27.5.1+incompatible
+	github.com/gookit/event v1.1.2
 	github.com/knadh/koanf v1.5.0
 	github.com/moby/sys/signal v0.7.1
 	github.com/moby/term v0.5.2

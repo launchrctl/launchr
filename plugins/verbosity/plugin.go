@@ -6,6 +6,11 @@ import (
 	"math"
 
 	"github.com/launchrctl/launchr/internal/launchr"
+	"github.com/launchrctl/launchr/pkg/action"
+	"github.com/launchrctl/launchr/pkg/jsonschema"
+	"github.com/launchrctl/launchr/plugins/actionscobra"
+
+	"github.com/gookit/event"
 )
 
 func init() {
@@ -90,6 +95,10 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	var logFormat LogFormat
 	var logLvlStr logLevelStr
 
+	var am action.Manager
+	app.GetService(&am)
+	am.AddGlobalsDef(p.getGlobals())
+
 	// Assert we are able to access internal functionality.
 	appInternal, ok := app.(launchr.AppInternal)
 	if !ok {
@@ -164,7 +173,85 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	launchr.Log().SetLevel(logLevel)
 	cmd.SetOut(out)
 	cmd.SetErr(streams.Err())
+
+	p.addEvents(logLevel, logFormat, quiet)
+
 	return nil
+}
+
+func (p Plugin) addEvents(logLevel launchr.LogLevel, logFormat LogFormat, quiet bool) {
+	ed := launchr.EventDispatcher()
+	ed.On(actionscobra.EventCobraPreRun, event.ListenerFunc(func(e event.Event) error {
+		a := e.Get("input")
+		if inputObj, okObj := a.(*action.Input); okObj {
+			if logFormat != "" {
+				inputObj.SetGlobalOpt("log-format", logFormat.String())
+			}
+
+			inputObj.SetGlobalOpt("log-level", logLevel.String())
+			inputObj.SetGlobalOpt("quiet", quiet)
+		}
+
+		return nil
+	}), event.Normal)
+
+	ed.On(action.EventActionPreExecute, event.ListenerFunc(func(e event.Event) error {
+		a := e.Get("action")
+		if actionObj, okObj := a.(*action.Action); okObj {
+			input := actionObj.Input()
+			ll := input.Globals()["log-level"]
+			lf := input.Globals()["log-format"]
+			str := actionObj.Input().Streams()
+
+			if lf == "" && launchr.EnvVarLogFormat.Get() != "" {
+				lf = LogFormat(launchr.EnvVarLogFormat.Get())
+			}
+
+			var logger *launchr.Logger
+			switch lf {
+			case LogFormatPlain:
+				logger = launchr.NewTextHandlerLogger(str.Out())
+			case LogFormatJSON:
+				logger = launchr.NewJSONHandlerLogger(str.Out())
+			default:
+				logger = launchr.NewConsoleLogger(str.Out())
+			}
+
+			if ll == launchr.LogLevelStrDisabled {
+				logger.SetOutput(launchr.NoopStreams().Out())
+			}
+
+			actionObj.Runtime().SetLogger(logger)
+		}
+
+		return nil
+	}), event.Normal)
+}
+
+func (p Plugin) getGlobals() action.ParametersList {
+	return action.ParametersList{
+		action.NewDefParameter(action.DefParameter{
+			Name:    "log-level",
+			Title:   "log-level",
+			Type:    jsonschema.String,
+			Default: "NONE",
+			Enum:    []any{"DEBUG", "INFO", "WARN", "ERROR", "NONE"},
+		}),
+		action.NewDefParameter(action.DefParameter{
+			Name:    "log-format",
+			Title:   "log-format",
+			Type:    jsonschema.String,
+			Default: "pretty",
+			Enum:    []any{"pretty", "plain", "json"},
+		}),
+		action.NewDefParameter(action.DefParameter{
+			Name:        "quiet",
+			Title:       "quiet",
+			Description: "disable output to the console",
+			Type:        jsonschema.Boolean,
+			Default:     false,
+		}),
+	}
 }
 
 func logLevelFlagInt(v int) launchr.LogLevel {

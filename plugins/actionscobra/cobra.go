@@ -13,6 +13,11 @@ import (
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
+const (
+	// EventCobraPreRun const for event name
+	EventCobraPreRun = "actionscobra.pre_run"
+)
+
 // CobraImpl returns cobra command implementation for an action command.
 func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, error) {
 	def := a.ActionDef()
@@ -30,16 +35,20 @@ func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, err
 			}
 			optsChanged := derefOpts(filterChangedFlags(cmd, options))
 			input := action.NewInput(a, argsNamed, optsChanged, streams)
-			// Pass to the runtime its flags.
-			if r, ok := a.Runtime().(action.RuntimeFlags); ok {
-				runOpts = derefOpts(filterChangedFlags(cmd, runOpts))
-				err = r.UseFlags(runOpts)
-				if err != nil {
-					return err
-				}
-				if err = r.ValidateInput(a, input); err != nil {
-					return err
-				}
+
+			// Set runtime opts.
+			runOpts = derefOpts(filterChangedFlags(cmd, runOpts))
+			for k, v := range runOpts {
+				input.SetRuntimeOpt(k, v)
+			}
+
+			launchr.Log().Debug("triggering event", "event", EventCobraPreRun)
+			e := launchr.NewEvent(EventCobraPreRun, map[string]any{
+				"input": input,
+			})
+
+			if err = launchr.EventDispatcher().FireEvent(e); err != nil {
+				return err
 			}
 
 			// Set and validate input.
