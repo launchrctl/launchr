@@ -60,6 +60,10 @@ type Out struct {
 	out io.Writer
 }
 
+func (o *Out) Fd() uintptr {
+	return o.commonStream.FD()
+}
+
 func (o *Out) Write(p []byte) (int, error) {
 	if o.out == nil {
 		// Discard.
