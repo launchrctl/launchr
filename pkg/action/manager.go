@@ -363,7 +363,11 @@ func (m *runManagerMap) RunBackground(ctx context.Context, a *Action, runID stri
 		chErr <- err
 		close(chErr)
 		if err != nil {
-			m.updateRunStatus(ri.ID, "error")
+			if errors.Is(err, context.Canceled) {
+				m.updateRunStatus(ri.ID, "canceled")
+			} else {
+				m.updateRunStatus(ri.ID, "error")
+			}
 		} else {
 			m.updateRunStatus(ri.ID, "finished")
 		}
