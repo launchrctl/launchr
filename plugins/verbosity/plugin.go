@@ -3,14 +3,12 @@ package verbosity
 
 import (
 	"fmt"
+	"io"
 	"math"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/action"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
-	"github.com/launchrctl/launchr/plugins/actionscobra"
-
-	"github.com/gookit/event"
 )
 
 func init() {
@@ -95,10 +93,6 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	var logFormat LogFormat
 	var logLvlStr logLevelStr
 
-	var am action.Manager
-	app.GetService(&am)
-	am.AddGlobalsDef(p.getGlobals())
-
 	// Assert we are able to access internal functionality.
 	appInternal, ok := app.(launchr.AppInternal)
 	if !ok {
@@ -151,12 +145,49 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	out := streams.Out()
 	// Set terminal output.
 	launchr.Term().SetOutput(out)
-	// Enable logger.
+
+	logger := NewLogger(logFormat, logLevel, out)
+	launchr.SetLogger(logger)
+
 	if logLevel != launchr.LogLevelDisabled {
-		if logFormat == "" && launchr.EnvVarLogFormat.Get() != "" {
-			logFormat = LogFormat(launchr.EnvVarLogFormat.Get())
+		_ = launchr.EnvVarLogLevel.Set(logLevel.String())
+		_ = launchr.EnvVarLogFormat.Set(logFormat.String())
+	}
+
+	cmd.SetOut(out)
+	cmd.SetErr(streams.Err())
+
+	var am action.Manager
+	app.GetService(&am)
+	globalFlags := p.getPersistentFlagsDefinition()
+
+	persistentFlags := am.GetPersistentFlags()
+	persistentFlags.AddDefinitions(globalFlags)
+	for _, f := range globalFlags {
+		name := f.Name
+		var value any
+
+		switch f.Name {
+		case "log-level":
+			value = logger.Level().String()
+		case "log-format":
+			value = logFormat.String()
+		case "quiet":
+			value = quiet
 		}
-		var logger *launchr.Logger
+
+		persistentFlags.Set(name, value)
+	}
+	am.AddDecorators(WithCustomLogger)
+
+	return nil
+}
+
+func NewLogger(logFormat LogFormat, logLevel launchr.LogLevel, out *launchr.Out) *launchr.Logger {
+	var logger *launchr.Logger
+	if logLevel == launchr.LogLevelDisabled {
+		logger = launchr.NewTextHandlerLogger(io.Discard)
+	} else {
 		switch logFormat {
 		case LogFormatPlain:
 			logger = launchr.NewTextHandlerLogger(out)
@@ -165,70 +196,38 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 		default:
 			logger = launchr.NewConsoleLogger(out)
 		}
-		launchr.SetLogger(logger)
-		// Save env variable for subprocesses.
-		_ = launchr.EnvVarLogLevel.Set(logLevel.String())
-		_ = launchr.EnvVarLogFormat.Set(logFormat.String())
 	}
-	launchr.Log().SetLevel(logLevel)
-	cmd.SetOut(out)
-	cmd.SetErr(streams.Err())
 
-	p.addEvents(logLevel, logFormat, quiet)
+	launchr.Term().Printfln("NewLogger")
 
-	return nil
+	logger.SetLevel(logLevel)
+
+	return logger
 }
 
-func (p Plugin) addEvents(logLevel launchr.LogLevel, logFormat LogFormat, quiet bool) {
-	ed := launchr.EventDispatcher()
-	ed.On(actionscobra.EventCobraPreRun, event.ListenerFunc(func(e event.Event) error {
-		a := e.Get("input")
-		if inputObj, okObj := a.(*action.Input); okObj {
-			if logFormat != "" {
-				inputObj.SetGlobalOpt("log-format", logFormat.String())
-			}
+// WithCustomLogger adds a default [Runtime] for an action.
+func WithCustomLogger(_ action.Manager, a *action.Action) {
+	if a.Runtime() == nil {
+		return
+	}
 
-			inputObj.SetGlobalOpt("log-level", logLevel.String())
-			inputObj.SetGlobalOpt("quiet", quiet)
+	if env, ok := a.Runtime().(action.RuntimeLoggerAware); ok {
+		var logFormat LogFormat
+		if lfStr, ok := a.Input().PersistentFlag("log-format").(string); ok {
+			logFormat = LogFormat(lfStr)
 		}
 
-		return nil
-	}), event.Normal)
-
-	ed.On(action.EventActionPreExecute, event.ListenerFunc(func(e event.Event) error {
-		a := e.Get("action")
-		if actionObj, okObj := a.(*action.Action); okObj {
-			input := actionObj.Input()
-			ll := input.Globals()["log-level"]
-			lf := input.Globals()["log-format"]
-			str := actionObj.Input().Streams()
-
-			if lf == "" && launchr.EnvVarLogFormat.Get() != "" {
-				lf = LogFormat(launchr.EnvVarLogFormat.Get())
-			}
-
-			var logger *launchr.Logger
-			switch lf {
-			case LogFormatPlain:
-				logger = launchr.NewTextHandlerLogger(str.Out())
-			case LogFormatJSON:
-				logger = launchr.NewJSONHandlerLogger(str.Out())
-			default:
-				logger = launchr.NewConsoleLogger(str.Out())
-			}
-
-			if ll == launchr.LogLevelStrDisabled {
-				logger.SetOutput(launchr.NoopStreams().Out())
-			}
-
-			actionObj.Runtime().SetLogger(logger)
+		var logLevel launchr.LogLevel
+		if llStr, ok := a.Input().PersistentFlag("log-level").(string); ok {
+			logLevel = launchr.LogLevelFromString(llStr)
 		}
 
-		return nil
-	}), event.Normal)
+		logger := NewLogger(logFormat, logLevel, a.Input().Streams().Out())
+		env.SetLogger(logger)
+	}
 }
 
-func (p Plugin) getGlobals() action.ParametersList {
+func (p Plugin) getPersistentFlagsDefinition() action.ParametersList {
 	return action.ParametersList{
 		action.NewDefParameter(action.DefParameter{
 			Name:    "log-level",

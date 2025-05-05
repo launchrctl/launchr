@@ -16,10 +16,6 @@ type Runtime interface {
 	Close() error
 	// Clone creates the same runtime, but in initial state.
 	Clone() Runtime
-	// SetLogger adds runtime logger
-	SetLogger(l *launchr.Logger)
-	// Log returns runtime logger
-	Log(attrs ...any) *launchr.Slog
 }
 
 // RuntimeFlags is an interface to define environment specific runtime configuration.
@@ -43,4 +39,13 @@ type ContainerRuntime interface {
 	// SetImageBuildCacheResolver sets an image build cache resolver
 	// to check when image must be rebuilt.
 	SetImageBuildCacheResolver(*ImageBuildCacheResolver)
+}
+
+// RuntimeLoggerAware is an interface for logger runtime.
+type RuntimeLoggerAware interface {
+	Runtime
+	// SetLogger adds runtime logger
+	SetLogger(l *launchr.Logger)
+	// Log returns runtime logger
+	Log(attrs ...any) *launchr.Slog
 }

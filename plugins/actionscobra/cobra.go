@@ -13,16 +13,12 @@ import (
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
-const (
-	// EventCobraPreRun const for event name
-	EventCobraPreRun = "actionscobra.pre_run"
-)
-
 // CobraImpl returns cobra command implementation for an action command.
-func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, error) {
+func CobraImpl(a *action.Action, streams launchr.Streams, manager action.Manager) (*launchr.Command, error) {
 	def := a.ActionDef()
 	options := make(action.InputParams)
 	runOpts := make(action.InputParams)
+
 	cmd := &launchr.Command{
 		Use:     getCmdUse(a),
 		Short:   getDesc(def.Title, def.Description),
@@ -37,18 +33,20 @@ func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, err
 			input := action.NewInput(a, argsNamed, optsChanged, streams)
 
 			// Set runtime opts.
-			runOpts = derefOpts(filterChangedFlags(cmd, runOpts))
-			for k, v := range runOpts {
-				input.SetRuntimeOpt(k, v)
+			if r, ok := a.Runtime().(action.RuntimeFlags); ok {
+				runOpts = derefOpts(filterChangedFlags(cmd, runOpts))
+				err = r.UseFlags(runOpts)
+				if err != nil {
+					return err
+				}
+				if err = r.ValidateInput(a, input); err != nil {
+					return err
+				}
 			}
 
-			launchr.Log().Debug("triggering event", "event", EventCobraPreRun)
-			e := launchr.NewEvent(EventCobraPreRun, map[string]any{
-				"input": input,
-			})
-
-			if err = launchr.EventDispatcher().FireEvent(e); err != nil {
-				return err
+			pf := manager.GetPersistentFlags()
+			for k, v := range pf.GetAll() {
+				input.SetPersistentFlag(k, v)
 			}
 
 			// Set and validate input.
@@ -56,14 +54,16 @@ func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, err
 				return err
 			}
 
+			manager.Decorate(a)
+
 			return nil
 		},
 		RunE: func(cmd *launchr.Command, _ []string) (err error) {
 			// Don't show usage help on a runtime error.
 			cmd.SilenceUsage = true
 
-			// @todo can we use action manager here and Manager.Run()
-			return a.Execute(cmd.Context())
+			_, err = manager.Run(cmd.Context(), a)
+			return err
 		},
 	}
 
