@@ -26,10 +26,8 @@ type Input struct {
 	args InputParams
 	// opts contains parsed options with default values.
 	opts InputParams
-	// runtimeOpts contains runtime options with default values.
-	runtimeOpts InputParams
-	// globals contains global options with default values.
-	globals InputParams
+	// persistentFlags contains global options with default values.
+	persistentFlags InputParams
 
 	// io contains out/in/err destinations. @todo should it be in Input?
 	io launchr.Streams
@@ -40,10 +38,6 @@ type Input struct {
 	argsRaw InputParams
 	// optsRaw contains options that were input by a user and without default values.
 	optsRaw InputParams
-	// runtimeOptsRaw contains runtime options that were input by a user and without default values.
-	runtimeOptsRaw InputParams
-	// globalsRaw contains globals that were input by a user and without default values.
-	globalsRaw InputParams
 }
 
 // NewInput creates new input with named Arguments args and named Options opts.
@@ -55,23 +49,15 @@ func NewInput(a *Action, args InputParams, opts InputParams, io launchr.Streams)
 	// Make sure the special key doesn't leak.
 	delete(args, inputMapKeyArgsPos)
 
-	runtimeOpts := make(InputParams)
-	if r, ok := a.Runtime().(RuntimeFlags); ok {
-		runtimeOpts = setParamDefaults(make(InputParams), r.FlagsDefinition())
-	}
-
 	return &Input{
-		action:         a,
-		args:           setParamDefaults(args, def.Arguments),
-		argsRaw:        args,
-		argsPos:        argsPos,
-		opts:           setParamDefaults(opts, def.Options),
-		optsRaw:        opts,
-		runtimeOpts:    runtimeOpts,
-		runtimeOptsRaw: make(InputParams),
-		globals:        setParamDefaults(make(InputParams), a.GlobalsDef()),
-		globalsRaw:     make(InputParams),
-		io:             io,
+		action:          a,
+		args:            setParamDefaults(args, def.Arguments),
+		argsRaw:         args,
+		argsPos:         argsPos,
+		opts:            setParamDefaults(opts, def.Options),
+		optsRaw:         opts,
+		persistentFlags: make(InputParams),
+		io:              io,
 	}
 }
 
@@ -168,43 +154,19 @@ func (input *Input) IsOptChanged(name string) bool {
 	return ok
 }
 
-// Globals returns global options with default values and processed.
-func (input *Input) Globals() InputParams {
-	return input.globals
+// PersistentFlags returns global options with default values and processed.
+func (input *Input) PersistentFlags() InputParams {
+	return input.persistentFlags
 }
 
-// SetGlobalOpt sets global option.
-func (input *Input) SetGlobalOpt(name string, val any) {
-	input.globalsRaw[name] = val
-	input.globals[name] = val
+// PersistentFlag returns argument by a name.
+func (input *Input) PersistentFlag(name string) any {
+	return input.PersistentFlags()[name]
 }
 
-// UnsetGlobalOpt unsets global and recalculates default values.
-func (input *Input) UnsetGlobalOpt(name string) {
-	delete(input.globalsRaw, name)
-	delete(input.globals, name)
-	input.globals = setParamDefaults(input.globals, input.action.GlobalsDef())
-}
-
-// RuntimeOpts returns runtime options with default values and processed.
-func (input *Input) RuntimeOpts() InputParams {
-	return input.runtimeOpts
-}
-
-// SetRuntimeOpt sets runtime option.
-func (input *Input) SetRuntimeOpt(name string, val any) {
-	input.runtimeOptsRaw[name] = val
-	input.runtimeOpts[name] = val
-}
-
-// UnsetRuntimeOpt unsets runtime opt and recalculates default values.
-func (input *Input) UnsetRuntimeOpt(name string) {
-	delete(input.runtimeOptsRaw, name)
-	delete(input.runtimeOpts, name)
-
-	if r, ok := input.action.Runtime().(RuntimeFlags); ok {
-		input.runtimeOpts = setParamDefaults(input.runtimeOpts, r.FlagsDefinition())
-	}
+// SetPersistentFlag sets global option.
+func (input *Input) SetPersistentFlag(name string, val any) {
+	input.persistentFlags[name] = val
 }
 
 // Args returns input named and processed arguments.

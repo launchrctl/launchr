@@ -37,8 +37,6 @@ type Action struct {
 	runtime    Runtime                   // runtime is the [Runtime] to execute the action.
 	input      *Input                    // input is a storage for arguments and options used in runtime.
 	processors map[string]ValueProcessor // processors are [ValueProcessor] for manipulating input.
-
-	globalsDef ParametersList
 }
 
 // New creates a new action.
@@ -95,8 +93,6 @@ func (a *Action) Clone() *Action {
 		wd:     a.wd,
 		fs:     a.fs,
 		fpath:  a.fpath,
-
-		globalsDef: a.globalsDef,
 	}
 	if a.runtime != nil {
 		c.runtime = a.runtime.Clone()
@@ -122,16 +118,6 @@ func (a *Action) SetProcessors(list map[string]ValueProcessor) error {
 // GetProcessors returns processors map.
 func (a *Action) GetProcessors() map[string]ValueProcessor {
 	return a.processors
-}
-
-// GlobalsDef returns action globals definitions.
-func (a *Action) GlobalsDef() ParametersList {
-	return a.globalsDef
-}
-
-// SetGlobalsDef sets action globals definitions.
-func (a *Action) SetGlobalsDef(globalsDef ParametersList) {
-	a.globalsDef = globalsDef
 }
 
 // Reset unsets loaded action to force reload.
@@ -268,17 +254,6 @@ func (a *Action) ImageBuildInfo(image string) *driver.BuildDefinition {
 // SetInput saves arguments and options for later processing in run, templates, etc.
 func (a *Action) SetInput(input *Input) (err error) {
 	def := a.ActionDef()
-
-	if r, ok := a.Runtime().(RuntimeFlags); ok {
-		err = r.UseFlags(input.RuntimeOpts())
-		if err != nil {
-			return err
-		}
-
-		if err = r.ValidateInput(a, input); err != nil {
-			return err
-		}
-	}
 
 	// Process arguments.
 	err = a.processInputParams(def.Arguments, input.Args(), input.ArgsChanged())

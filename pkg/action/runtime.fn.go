@@ -12,17 +12,17 @@ type FnRuntimeCallback func(ctx context.Context, a *Action) error
 // FnRuntime is a function type implementing [Runtime].
 type FnRuntime struct {
 	logger *launchr.Logger
-	frc    func(ctx context.Context, a *Action) error
+	fn     FnRuntimeCallback
 }
 
 // NewFnRuntime creates runtime as a go function.
 func NewFnRuntime(fn FnRuntimeCallback) Runtime {
-	return &FnRuntime{frc: fn}
+	return &FnRuntime{fn: fn}
 }
 
 // Clone implements [Runtime] interface.
 func (fn *FnRuntime) Clone() Runtime {
-	return fn
+	return NewFnRuntime(fn.fn)
 }
 
 // Init implements [Runtime] interface.
@@ -42,8 +42,8 @@ func (fn *FnRuntime) Log(attrs ...any) *launchr.Slog {
 
 // Execute implements [Runtime] interface.
 func (fn *FnRuntime) Execute(ctx context.Context, a *Action) error {
-	launchr.Log().Debug("starting execution of the action", "run_env", "fn", "action_id", a.ID)
-	return fn.frc(ctx, a)
+	fn.Log().Debug("starting execution of the action", "run_env", "fn", "action_id", a.ID)
+	return fn.fn(ctx, a)
 }
 
 // Close implements [Runtime] interface.

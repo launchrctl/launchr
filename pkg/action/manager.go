@@ -26,9 +26,11 @@ type Manager interface {
 	Add(*Action) error
 	// Delete deletes the action from the manager.
 	Delete(id string)
+
+	AddDecorators(withFns ...DecorateWithFn)
 	// Decorate decorates an action with given behaviors and returns its copy.
 	// If functions withFn are not provided, default functions are applied.
-	Decorate(a *Action, withFn ...DecorateWithFn) *Action
+	Decorate(a *Action, withFn ...DecorateWithFn)
 	// GetIDFromAlias returns a real action ID by its alias. If not, returns alias.
 	GetIDFromAlias(alias string) string
 
@@ -38,10 +40,8 @@ type Manager interface {
 	// This id provider will be used as default on [Action] discovery process.
 	SetActionIDProvider(p IDProvider)
 
-	// AddGlobalsDef adds options definitions to list of global options.
-	AddGlobalsDef(opts ParametersList)
-	// GetGlobalsDef returns list of global action options.
-	GetGlobalsDef() ParametersList
+	// GetPersistentFlags returns list of global action options.
+	GetPersistentFlags() *PersistentFlags
 
 	// AddValueProcessor adds processor to list of available processors
 	AddValueProcessor(name string, vp ValueProcessor)
@@ -86,31 +86,78 @@ type ManagerUnsafe interface {
 // DecorateWithFn is a type alias for functions accepted in a [Manager.Decorate] interface method.
 type DecorateWithFn = func(m Manager, a *Action)
 
-type actionManagerMap struct {
-	actionStore   map[string]*Action
-	actionAliases map[string]string
-	mx            sync.Mutex
-	dwFns         []DecorateWithFn
-	GlobalsDef    ParametersList
-	processors    map[string]ValueProcessor
-	idProvider    IDProvider
-
-	// Actions discovery.
-	discoveryFns []DiscoverActionsFn
-	discoverySeq *launchr.SliceSeqStateful[DiscoverActionsFn]
-	discTimeout  time.Duration
-
-	runManagerMap
+type PersistentFlags struct {
+	definitions ParametersList
+	values      map[string]any
+	defaults    map[string]any
 }
 
-func (m *actionManagerMap) GetGlobalsDef() ParametersList {
-	return m.GlobalsDef
+func NewPersistentFlags() *PersistentFlags {
+	return &PersistentFlags{
+		definitions: make(ParametersList, 0),
+		values:      make(map[string]any),
+		defaults:    make(map[string]any),
+	}
 }
 
-func (m *actionManagerMap) AddGlobalsDef(opts ParametersList) {
+func (p *PersistentFlags) GetAll() map[string]any {
+	result := make(map[string]any)
+	for name, value := range p.defaults {
+		if _, ok := p.values[name]; !ok {
+			result[name] = value
+		} else {
+			result[name] = p.values[name]
+		}
+	}
+
+	return result
+}
+
+func (p *PersistentFlags) Exists(name string) bool {
+	_, ok := p.defaults[name]
+	return ok
+}
+
+func (p *PersistentFlags) Get(name string) (any, bool) {
+	if !p.Exists(name) {
+		return nil, false
+	}
+
+	var value any
+	if v, ok := p.values[name]; ok {
+		value = v
+	} else {
+		value = p.defaults[name]
+	}
+
+	return value, true
+}
+
+func (p *PersistentFlags) Set(name string, value any) {
+	if !p.Exists(name) {
+		panic(fmt.Sprintf("flag `%s` does not exist", name))
+		return
+	}
+
+	if value == nil {
+		panic(fmt.Sprintf("flag `%s` cannot be nil", name))
+	}
+
+	p.values[name] = value
+}
+
+func (p *PersistentFlags) Unset(name string) {
+	delete(p.values, name)
+}
+
+func (p *PersistentFlags) GetDefinitions() ParametersList {
+	return p.definitions
+}
+
+func (p *PersistentFlags) AddDefinitions(opts ParametersList) {
 	itemMap := make(map[string]int)
 
-	for index, item := range m.GlobalsDef {
+	for index, item := range p.definitions {
 		itemMap[item.Name] = index
 	}
 
@@ -121,11 +168,41 @@ func (m *actionManagerMap) AddGlobalsDef(opts ParametersList) {
 
 		if index, exists := itemMap[item.Name]; exists {
 			launchr.Log().Debug("duplicate action global has been detected, replacing", "name", item.Name)
-			m.GlobalsDef[index] = item
+			p.definitions[index] = item
 		} else {
-			m.GlobalsDef = append(m.GlobalsDef, item)
+			p.definitions = append(p.definitions, item)
 		}
 	}
+
+	for _, d := range p.definitions {
+		p.defaults[d.Name] = d.Default
+	}
+}
+
+type actionManagerMap struct {
+	actionStore   map[string]*Action
+	actionAliases map[string]string
+	mx            sync.Mutex
+	dwFns         []DecorateWithFn
+	processors    map[string]ValueProcessor
+	idProvider    IDProvider
+
+	// Actions discovery.
+	discoveryFns []DiscoverActionsFn
+	discoverySeq *launchr.SliceSeqStateful[DiscoverActionsFn]
+	discTimeout  time.Duration
+
+	persistentFlags *PersistentFlags
+
+	runManagerMap
+}
+
+func (m *actionManagerMap) AddDecorators(withFns ...DecorateWithFn) {
+	m.dwFns = append(m.dwFns, withFns...)
+}
+
+func (m *actionManagerMap) GetPersistentFlags() *PersistentFlags {
+	return m.persistentFlags
 }
 
 // NewManager constructs a new action manager.
@@ -135,6 +212,8 @@ func NewManager(withFns ...DecorateWithFn) Manager {
 		actionAliases: make(map[string]string),
 		dwFns:         withFns,
 		processors:    make(map[string]ValueProcessor),
+
+		persistentFlags: NewPersistentFlags(),
 
 		discTimeout: 10 * time.Second,
 
@@ -171,11 +250,9 @@ func (m *actionManagerMap) add(a *Action) error {
 	// Set action related processors.
 	err = a.SetProcessors(m.GetValueProcessors())
 	if err != nil {
-		// Skip action because the definition is not correct.
+		// Skip action because the definitions is not correct.
 		return err
 	}
-
-	a.SetGlobalsDef(m.GetGlobalsDef())
 
 	if dup, ok := m.actionStore[a.ID]; ok {
 		launchr.Log().Debug("action was overridden by another declaration",
@@ -222,7 +299,9 @@ func (m *actionManagerMap) Delete(id string) {
 func (m *actionManagerMap) All() map[string]*Action {
 	ret := m.AllUnsafe()
 	for k, v := range ret {
-		ret[k] = m.Decorate(v, m.dwFns...)
+		a := v.Clone()
+		m.Decorate(a, m.dwFns...)
+		ret[k] = a
 	}
 	return ret
 }
@@ -230,7 +309,9 @@ func (m *actionManagerMap) All() map[string]*Action {
 func (m *actionManagerMap) Get(id string) (*Action, bool) {
 	a, ok := m.GetUnsafe(id)
 	// Process action with default decorators and return a copy to have an isolated scope.
-	return m.Decorate(a, m.dwFns...), ok
+	cA := a.Clone()
+	m.Decorate(cA, m.dwFns...)
+	return cA, ok
 }
 
 func (m *actionManagerMap) GetUnsafe(id string) (a *Action, ok bool) {
@@ -315,18 +396,17 @@ func (m *actionManagerMap) GetValueProcessors() map[string]ValueProcessor {
 	return m.processors
 }
 
-func (m *actionManagerMap) Decorate(a *Action, withFns ...DecorateWithFn) *Action {
+func (m *actionManagerMap) Decorate(a *Action, withFns ...DecorateWithFn) {
 	if a == nil {
-		return nil
+		return
 	}
 	if withFns == nil {
 		withFns = m.dwFns
 	}
-	a = a.Clone()
+
 	for _, fn := range withFns {
 		fn(m, a)
 	}
-	return a
 }
 
 func (m *actionManagerMap) GetActionIDProvider() IDProvider {
