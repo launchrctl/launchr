@@ -12,9 +12,7 @@ import (
 )
 
 type runtimeShell struct {
-	logger *launchr.Logger
-	// logWith contains context arguments for a structured logger.
-	logWith []any
+	RuntimeWithLogger
 }
 
 // NewShellRuntime creates a new action shell runtime.
@@ -32,17 +30,6 @@ func (r *runtimeShell) Init(_ context.Context, _ *Action) (err error) {
 	}
 
 	return nil
-}
-
-func (r *runtimeShell) SetLogger(l *launchr.Logger) {
-	r.logger = l
-}
-
-func (r *runtimeShell) Log(attrs ...any) *launchr.Slog {
-	if attrs != nil {
-		r.logWith = append(r.logWith, attrs...)
-	}
-	return r.logger.With(r.logWith...)
 }
 
 func (r *runtimeShell) Execute(ctx context.Context, a *Action) (err error) {

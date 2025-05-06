@@ -44,8 +44,7 @@ func CobraImpl(a *action.Action, streams launchr.Streams, manager action.Manager
 				}
 			}
 
-			pf := manager.GetPersistentFlags()
-			for k, v := range pf.GetAll() {
+			for k, v := range manager.GetPersistentFlags().GetAll() {
 				input.SetPersistentFlag(k, v)
 			}
 

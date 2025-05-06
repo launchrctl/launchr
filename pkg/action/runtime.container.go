@@ -36,10 +36,6 @@ type runtimeContainer struct {
 	// rtype is a container runtime type string.
 	rtype driver.Type
 
-	logger *launchr.Logger
-	// logWith contains context arguments for a structured logger.
-	logWith []any
-
 	// Container related functionality extenders
 	// @todo migrate to events/hooks for loose coupling.
 	imgres   ChainImageBuildResolver
@@ -53,6 +49,8 @@ type runtimeContainer struct {
 	entrypoint    string
 	entrypointSet bool
 	exec          bool
+
+	RuntimeWithLogger
 }
 
 // ContainerNameProvider provides an ability to generate a random container name
@@ -96,41 +94,41 @@ func (c *runtimeContainer) Clone() Runtime {
 
 func (c *runtimeContainer) FlagsDefinition() ParametersList {
 	return ParametersList{
-		NewDefParameter(DefParameter{
+		&DefParameter{
 			Name:        containerFlagUseVolumeWD,
 			Title:       "Use volume as a WD",
 			Description: "Copy the working directory to a container volume and not bind local paths. Usually used with remote environments.",
 			Type:        jsonschema.Boolean,
 			Default:     false,
-		}),
-		NewDefParameter(DefParameter{
+		},
+		&DefParameter{
 			Name:        containerFlagRemoveImage,
 			Title:       "Remove Image",
 			Description: "Remove an image after execution of action",
 			Type:        jsonschema.Boolean,
 			Default:     false,
-		}),
-		NewDefParameter(DefParameter{
+		},
+		&DefParameter{
 			Name:        containerFlagNoCache,
 			Title:       "No cache",
 			Description: "Send command to build container without cache",
 			Type:        jsonschema.Boolean,
 			Default:     false,
-		}),
-		NewDefParameter(DefParameter{
+		},
+		&DefParameter{
 			Name:        containerFlagEntrypoint,
 			Title:       "Image Entrypoint",
 			Description: "Overwrite the default ENTRYPOINT of the image",
 			Type:        jsonschema.String,
 			Default:     "",
-		}),
-		NewDefParameter(DefParameter{
+		},
+		&DefParameter{
 			Name:        containerFlagExec,
 			Title:       "Exec command",
 			Description: "Overwrite CMD definition of the container",
 			Type:        jsonschema.Boolean,
 			Default:     false,
-		}),
+		},
 	}
 }
 
@@ -178,17 +176,6 @@ func (c *runtimeContainer) Init(_ context.Context, _ *Action) (err error) {
 	}
 
 	return err
-}
-
-func (c *runtimeContainer) SetLogger(l *launchr.Logger) {
-	c.logger = l
-}
-
-func (c *runtimeContainer) Log(attrs ...any) *launchr.Slog {
-	if attrs != nil {
-		c.logWith = append(c.logWith, attrs...)
-	}
-	return c.logger.With(c.logWith...)
 }
 
 func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
@@ -248,7 +235,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 	// Copy working dirs to the container.
 	if c.useVolWD {
 		// @todo test somehow.
-		launchr.Term().Info().Printfln(`Flag "--%s" is set. Copying the working directory inside the container.`, containerFlagUseVolumeWD)
+		c.Term().Info().Printfln(`Flag "--%s" is set. Copying the working directory inside the container.`, containerFlagUseVolumeWD)
 		err = c.copyDirToContainer(ctx, cid, a.WorkDir(), containerHostMount)
 		if err != nil {
 			return fmt.Errorf("failed to copy host directory to the container: %w", err)
@@ -329,7 +316,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 	// @todo it's a bad implementation considering consequential runs, need to find a better way to sync with remote.
 	if c.useVolWD {
 		path := a.WorkDir()
-		launchr.Term().Info().Printfln(`Flag "--%s" is set. Copying back the result of the action run.`, containerFlagUseVolumeWD)
+		c.Term().Info().Printfln(`Flag "--%s" is set. Copying back the result of the action run.`, containerFlagUseVolumeWD)
 		err = c.copyFromContainer(ctx, cid, containerHostMount, filepath.Dir(path), filepath.Base(path)+"/result")
 		defer func() {
 			err = c.crt.ContainerRemove(ctx, cid, driver.ContainerRemoveOptions{})
@@ -457,12 +444,12 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 		defer func() {
 			_ = status.Progress.Close()
 		}()
-		launchr.Term().Printfln("Image %q doesn't exist locally, pulling from the registry...", image)
+		c.Term().Printfln("Image %q doesn't exist locally, pulling from the registry...", image)
 		log.Info("image doesn't exist locally, pulling from the registry")
 		// Output docker status only in Debug.
 		err = driver.DockerDisplayJSONMessages(status.Progress, streams)
 		if err != nil {
-			launchr.Term().Error().Println("Error occurred while pulling the image %q", image)
+			c.Term().Error().Println("Error occurred while pulling the image %q", image)
 			log.Error("error while pulling the image", "error", err)
 		}
 	case driver.ImageBuild:
@@ -472,12 +459,12 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 		defer func() {
 			_ = status.Progress.Close()
 		}()
-		launchr.Term().Printfln("Image %q doesn't exist locally, building...", image)
+		c.Term().Printfln("Image %q doesn't exist locally, building...", image)
 		log.Info("image doesn't exist locally, building the image")
 		// Output docker status only in Debug.
 		err = driver.DockerDisplayJSONMessages(status.Progress, streams)
 		if err != nil {
-			launchr.Term().Error().Println("Error occurred while building the image %q", image)
+			c.Term().Error().Println("Error occurred while building the image %q", image)
 			log.Error("error while building the image", "error", err)
 		}
 	}
@@ -534,7 +521,7 @@ func (c *runtimeContainer) containerCreate(ctx context.Context, a *Action, opts 
 		if c.isSELinuxEnabled(ctx) {
 			// Use the lowercase z flag to allow concurrent actions access to the FS.
 			flags += ":z"
-			launchr.Term().Warning().Printfln(
+			c.Term().Warning().Printfln(
 				"SELinux is detected. The volumes will be mounted with the %q flags, which will relabel your files.\n"+
 					"This process may take time or potentially break existing permissions.",
 				flags,

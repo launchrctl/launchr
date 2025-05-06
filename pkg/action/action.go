@@ -13,11 +13,6 @@ import (
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
-const (
-	// EventActionPreExecute const for event name
-	EventActionPreExecute = "action.pre_execute"
-)
-
 // Action is an action definition with a contextual id (name), working directory path
 // and a runtime context such as input arguments and options.
 type Action struct {
@@ -338,12 +333,6 @@ func (a *Action) Execute(ctx context.Context) error {
 		panic("runtime is not set, call SetRuntime first")
 	}
 	defer a.runtime.Close()
-
-	launchr.Log().Debug("triggering event", "event", EventActionPreExecute)
-	e := launchr.NewEvent(EventActionPreExecute, map[string]any{"action": a})
-	if err := launchr.EventDispatcher().FireEvent(e); err != nil {
-		return err
-	}
 
 	if err := a.runtime.Init(ctx, a); err != nil {
 		return err

@@ -27,10 +27,12 @@ type Manager interface {
 	// Delete deletes the action from the manager.
 	Delete(id string)
 
+	// AddDecorators adds new decorators to manager.
 	AddDecorators(withFns ...DecorateWithFn)
 	// Decorate decorates an action with given behaviors and returns its copy.
 	// If functions withFn are not provided, default functions are applied.
 	Decorate(a *Action, withFn ...DecorateWithFn)
+
 	// GetIDFromAlias returns a real action ID by its alias. If not, returns alias.
 	GetIDFromAlias(alias string) string
 
@@ -40,7 +42,8 @@ type Manager interface {
 	// This id provider will be used as default on [Action] discovery process.
 	SetActionIDProvider(p IDProvider)
 
-	// GetPersistentFlags returns list of global action options.
+	// GetPersistentFlags retrieves the instance of PersistentFlags containing global flag definitions and their
+	// current state.
 	GetPersistentFlags() *PersistentFlags
 
 	// AddValueProcessor adds processor to list of available processors
@@ -85,99 +88,6 @@ type ManagerUnsafe interface {
 
 // DecorateWithFn is a type alias for functions accepted in a [Manager.Decorate] interface method.
 type DecorateWithFn = func(m Manager, a *Action)
-
-type PersistentFlags struct {
-	definitions ParametersList
-	values      map[string]any
-	defaults    map[string]any
-}
-
-func NewPersistentFlags() *PersistentFlags {
-	return &PersistentFlags{
-		definitions: make(ParametersList, 0),
-		values:      make(map[string]any),
-		defaults:    make(map[string]any),
-	}
-}
-
-func (p *PersistentFlags) GetAll() map[string]any {
-	result := make(map[string]any)
-	for name, value := range p.defaults {
-		if _, ok := p.values[name]; !ok {
-			result[name] = value
-		} else {
-			result[name] = p.values[name]
-		}
-	}
-
-	return result
-}
-
-func (p *PersistentFlags) Exists(name string) bool {
-	_, ok := p.defaults[name]
-	return ok
-}
-
-func (p *PersistentFlags) Get(name string) (any, bool) {
-	if !p.Exists(name) {
-		return nil, false
-	}
-
-	var value any
-	if v, ok := p.values[name]; ok {
-		value = v
-	} else {
-		value = p.defaults[name]
-	}
-
-	return value, true
-}
-
-func (p *PersistentFlags) Set(name string, value any) {
-	if !p.Exists(name) {
-		panic(fmt.Sprintf("flag `%s` does not exist", name))
-		return
-	}
-
-	if value == nil {
-		panic(fmt.Sprintf("flag `%s` cannot be nil", name))
-	}
-
-	p.values[name] = value
-}
-
-func (p *PersistentFlags) Unset(name string) {
-	delete(p.values, name)
-}
-
-func (p *PersistentFlags) GetDefinitions() ParametersList {
-	return p.definitions
-}
-
-func (p *PersistentFlags) AddDefinitions(opts ParametersList) {
-	itemMap := make(map[string]int)
-
-	for index, item := range p.definitions {
-		itemMap[item.Name] = index
-	}
-
-	for _, item := range opts {
-		if item.Name == "" {
-			panic("action global option name cannot be empty")
-		}
-
-		if index, exists := itemMap[item.Name]; exists {
-			launchr.Log().Debug("duplicate action global has been detected, replacing", "name", item.Name)
-			p.definitions[index] = item
-		} else {
-			p.definitions = append(p.definitions, item)
-		}
-	}
-
-	for _, d := range p.definitions {
-		p.defaults[d.Name] = d.Default
-	}
-}
 
 type actionManagerMap struct {
 	actionStore   map[string]*Action

@@ -3,6 +3,7 @@ package action
 import (
 	"fmt"
 	"maps"
+	"slices"
 
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
@@ -10,7 +11,8 @@ import (
 const (
 	jsonschemaPropArgs    = "arguments"
 	jsonschemaPropOpts    = "options"
-	jsonschemaGlobalFlags = "persistentFlags"
+	jsonschemaRuntimeOpts = "runtime"
+	jsonschemaGlobalFlags = "globals"
 )
 
 // validateJSONSchema validates arguments and options according to
@@ -21,7 +23,6 @@ func validateJSONSchema(a *Action, input *Input) error {
 		map[string]any{
 			jsonschemaPropArgs: input.Args(),
 			jsonschemaPropOpts: input.Opts(),
-			//jsonschemaGlobalFlags:  input.Globals(),
 		},
 	)
 }
@@ -110,7 +111,88 @@ func (l *ParametersList) JSONSchema() (map[string]any, []string) {
 	return params, req
 }
 
+func (c *runtimeContainer) JSONSchema() jsonschema.Schema {
+	def := c.FlagsDefinition()
+	opts, optsReq := def.JSONSchema()
+
+	s := jsonschema.Schema{
+		Type:     jsonschema.Object,
+		Required: []string{jsonschemaRuntimeOpts},
+		Properties: map[string]any{
+			jsonschemaRuntimeOpts: map[string]any{
+				"type":                 "object",
+				"title":                "Runtime",
+				"properties":           opts,
+				"required":             optsReq,
+				"additionalProperties": false,
+			},
+		},
+	}
+
+	//s.Schema = "https://json-schema.org/draft/2020-12/schema#"
+	//s.Title = "test"
+	return s
+}
+
+func (c *runtimeContainer) ValidateJSONSchema(params InputParams) error {
+	return jsonschema.Validate(
+		c.JSONSchema(),
+		map[string]any{
+			jsonschemaRuntimeOpts: params,
+		},
+	)
+}
+
 // JSONSchema returns json schema definition of an option.
 func (p *DefParameter) JSONSchema() map[string]any {
-	return maps.Clone(p.raw)
+	if len(p.raw) != 0 {
+		return maps.Clone(p.raw)
+	}
+
+	raw := make(map[string]any)
+	raw["title"] = p.Title
+	raw["type"] = p.Type
+	raw["default"] = p.Default
+
+	if len(p.Enum) > 0 {
+		raw["enum"] = slices.Clone(p.Enum)
+	}
+	if p.Description != "" {
+		raw["description"] = p.Description
+	}
+
+	return raw
+}
+
+// JSONSchema returns json schema of [PersistentFlags]
+func (p *PersistentFlags) JSONSchema() jsonschema.Schema {
+	opts, optsReq := p.definitions.JSONSchema()
+
+	s := jsonschema.Schema{
+		Type:     jsonschema.Object,
+		Required: []string{jsonschemaGlobalFlags},
+		Properties: map[string]any{
+			jsonschemaGlobalFlags: map[string]any{
+				"type":                 "object",
+				"title":                "Globals",
+				"properties":           opts,
+				"required":             optsReq,
+				"additionalProperties": false,
+			},
+		},
+	}
+
+	//s.Schema = "https://json-schema.org/draft/2020-12/schema#"
+	//s.Title = "test"
+	return s
+}
+
+// ValidateJSONSchema validates params according to json schema of [PersistentFlags] definitions.
+func (p *PersistentFlags) ValidateJSONSchema(params InputParams) error {
+	return jsonschema.Validate(
+		p.JSONSchema(),
+		map[string]any{
+			jsonschemaGlobalFlags: params,
+		},
+	)
 }
