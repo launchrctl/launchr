@@ -2,8 +2,6 @@ package action
 
 import (
 	"context"
-
-	"github.com/launchrctl/launchr/internal/launchr"
 )
 
 // FnRuntimeCallback is a function type used in [FnRuntime].
@@ -11,8 +9,9 @@ type FnRuntimeCallback func(ctx context.Context, a *Action) error
 
 // FnRuntime is a function type implementing [Runtime].
 type FnRuntime struct {
-	logger *launchr.Logger
-	fn     FnRuntimeCallback
+	fn FnRuntimeCallback
+
+	RuntimeWithLogger
 }
 
 // NewFnRuntime creates runtime as a go function.
@@ -28,16 +27,6 @@ func (fn *FnRuntime) Clone() Runtime {
 // Init implements [Runtime] interface.
 func (fn *FnRuntime) Init(_ context.Context, _ *Action) error {
 	return nil
-}
-
-// SetLogger implements [Runtime] interface.
-func (fn *FnRuntime) SetLogger(l *launchr.Logger) {
-	fn.logger = l
-}
-
-// Log implements [Runtime] interface.
-func (fn *FnRuntime) Log(attrs ...any) *launchr.Slog {
-	return fn.logger.With(attrs...)
 }
 
 // Execute implements [Runtime] interface.

@@ -388,33 +388,33 @@ type DefParameter struct {
 }
 
 // NewDefParameter returns new instance of parameter with predefined raw.
-func NewDefParameter(dp DefParameter) *DefParameter {
-	raw := make(map[string]any)
-	raw["title"] = dp.Title
-	raw["type"] = dp.Type
-	raw["default"] = dp.Default
-
-	if len(dp.Enum) > 0 {
-		raw["enum"] = dp.Enum
-	}
-	if dp.Description != "" {
-		raw["description"] = dp.Description
-	}
-
-	return &DefParameter{
-		Name:        dp.Name,
-		Shorthand:   dp.Shorthand,
-		Required:    dp.Required,
-		Process:     dp.Process,
-		Type:        dp.Type,
-		Title:       dp.Title,
-		Description: dp.Description,
-		Default:     dp.Default,
-		Enum:        dp.Enum,
-		Items:       dp.Items,
-		raw:         raw,
-	}
-}
+//func NewDefParameter(dp DefParameter) *DefParameter {
+//	raw := make(map[string]any)
+//	raw["title"] = dp.Title
+//	raw["type"] = dp.Type
+//	raw["default"] = dp.Default
+//
+//	if len(dp.Enum) > 0 {
+//		raw["enum"] = dp.Enum
+//	}
+//	if dp.Description != "" {
+//		raw["description"] = dp.Description
+//	}
+//
+//	return &DefParameter{
+//		Name:        dp.Name,
+//		Shorthand:   dp.Shorthand,
+//		Required:    dp.Required,
+//		Process:     dp.Process,
+//		Type:        dp.Type,
+//		Title:       dp.Title,
+//		Description: dp.Description,
+//		Default:     dp.Default,
+//		Enum:        dp.Enum,
+//		Items:       dp.Items,
+//		raw:         raw,
+//	}
+//}
 
 // UnmarshalYAML implements [yaml.Unmarshaler] to parse [DefParameter].
 func (p *DefParameter) UnmarshalYAML(n *yaml.Node) (err error) {

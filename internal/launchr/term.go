@@ -19,7 +19,14 @@ var DefaultTextPrinter = message.NewPrinter(language.English)
 
 func init() {
 	// Initialize the default printer.
-	defaultTerm = &Terminal{
+	defaultTerm = NewTerminal()
+	// Do not output anything when not in the app, e.g. in tests.
+	defaultTerm.DisableOutput()
+}
+
+// NewTerminal creates a new instance of [Terminal]
+func NewTerminal() *Terminal {
+	return &Terminal{
 		p: []TextPrinter{
 			printerBasic:   newPTermBasicPrinter(pterm.DefaultBasicText),
 			printerInfo:    newPTermPrefixPrinter(pterm.Info),
@@ -29,8 +36,6 @@ func init() {
 		},
 		enabled: true,
 	}
-	// Do not output anything when not in the app, e.g. in tests.
-	defaultTerm.DisableOutput()
 }
 
 // Predefined keys of terminal printers.

@@ -26,7 +26,7 @@ type Input struct {
 	args InputParams
 	// opts contains parsed options with default values.
 	opts InputParams
-	// persistentFlags contains global options with default values.
+	// persistentFlags contains passed persistent flags values.
 	persistentFlags InputParams
 
 	// io contains out/in/err destinations. @todo should it be in Input?
@@ -154,17 +154,17 @@ func (input *Input) IsOptChanged(name string) bool {
 	return ok
 }
 
-// PersistentFlags returns global options with default values and processed.
+// PersistentFlags returns stored persistent flags values.
 func (input *Input) PersistentFlags() InputParams {
 	return input.persistentFlags
 }
 
-// PersistentFlag returns argument by a name.
+// PersistentFlag returns persistent flag by name.
 func (input *Input) PersistentFlag(name string) any {
 	return input.PersistentFlags()[name]
 }
 
-// SetPersistentFlag sets global option.
+// SetPersistentFlag sets persistent flag value.
 func (input *Input) SetPersistentFlag(name string, val any) {
 	input.persistentFlags[name] = val
 }

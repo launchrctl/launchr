@@ -51,6 +51,7 @@ func prepareContainerTestSuite(t *testing.T) (*assert.Assertions, *gomock.Contro
 	d.EXPECT().Close()
 	r := &runtimeContainer{crt: d, rtype: "mock"}
 	r.SetLogger(launchr.Log())
+	r.SetTerm(launchr.Term())
 	r.AddImageBuildResolver(cfgImgRes)
 	r.SetContainerNameProvider(ContainerNameProvider{Prefix: containerNamePrefix})
 

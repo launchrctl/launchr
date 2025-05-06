@@ -8,7 +8,6 @@ import (
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/action"
-	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 func init() {
@@ -159,30 +158,20 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 
 	var am action.Manager
 	app.GetService(&am)
-	globalFlags := p.getPersistentFlagsDefinition()
 
 	persistentFlags := am.GetPersistentFlags()
-	persistentFlags.AddDefinitions(globalFlags)
-	for _, f := range globalFlags {
-		name := f.Name
-		var value any
+	persistentFlags.AddDefinitions(p.getPluginPersistentFlags())
 
-		switch f.Name {
-		case "log-level":
-			value = logger.Level().String()
-		case "log-format":
-			value = logFormat.String()
-		case "quiet":
-			value = quiet
-		}
+	persistentFlags.Set("log-level", logger.Level().String())
+	persistentFlags.Set("log-format", logFormat.String())
+	persistentFlags.Set("quiet", quiet)
 
-		persistentFlags.Set(name, value)
-	}
-	am.AddDecorators(WithCustomLogger)
+	am.AddDecorators(withCustomLogger)
 
 	return nil
 }
 
+// NewLogger creates and initializes a new logger with the specified format, log level, and output stream.
 func NewLogger(logFormat LogFormat, logLevel launchr.LogLevel, out *launchr.Out) *launchr.Logger {
 	var logger *launchr.Logger
 	if logLevel == launchr.LogLevelDisabled {
@@ -198,59 +187,9 @@ func NewLogger(logFormat LogFormat, logLevel launchr.LogLevel, out *launchr.Out)
 		}
 	}
 
-	launchr.Term().Printfln("NewLogger")
-
 	logger.SetLevel(logLevel)
 
 	return logger
-}
-
-// WithCustomLogger adds a default [Runtime] for an action.
-func WithCustomLogger(_ action.Manager, a *action.Action) {
-	if a.Runtime() == nil {
-		return
-	}
-
-	if env, ok := a.Runtime().(action.RuntimeLoggerAware); ok {
-		var logFormat LogFormat
-		if lfStr, ok := a.Input().PersistentFlag("log-format").(string); ok {
-			logFormat = LogFormat(lfStr)
-		}
-
-		var logLevel launchr.LogLevel
-		if llStr, ok := a.Input().PersistentFlag("log-level").(string); ok {
-			logLevel = launchr.LogLevelFromString(llStr)
-		}
-
-		logger := NewLogger(logFormat, logLevel, a.Input().Streams().Out())
-		env.SetLogger(logger)
-	}
-}
-
-func (p Plugin) getPersistentFlagsDefinition() action.ParametersList {
-	return action.ParametersList{
-		action.NewDefParameter(action.DefParameter{
-			Name:    "log-level",
-			Title:   "log-level",
-			Type:    jsonschema.String,
-			Default: "NONE",
-			Enum:    []any{"DEBUG", "INFO", "WARN", "ERROR", "NONE"},
-		}),
-		action.NewDefParameter(action.DefParameter{
-			Name:    "log-format",
-			Title:   "log-format",
-			Type:    jsonschema.String,
-			Default: "pretty",
-			Enum:    []any{"pretty", "plain", "json"},
-		}),
-		action.NewDefParameter(action.DefParameter{
-			Name:        "quiet",
-			Title:       "quiet",
-			Description: "disable output to the console",
-			Type:        jsonschema.Boolean,
-			Default:     false,
-		}),
-	}
 }
 
 func logLevelFlagInt(v int) launchr.LogLevel {
