@@ -1,56 +1,60 @@
 working_directory: "{{ .current_working_dir }}"
 action:
-  title: Verb
-  description: Handles some logic
+  title: Platform build
+  description: platform:build description
   arguments:
-    - name: arg1
-      title: Argument 1
-      description: Some additional info for arg
+    - name: argStr
+      title: Argument String
+      description: This is a required implicit string argument
       required: true
-    - name: arg2
-      title: Argument 2
-      description: Some additional info for arg
+    - name: argInt
+      title: Argument Integer
+      type: integer
+      description: This is an optional integer argument
   options:
-    - name: opt1
-      title: Option 1
-      description: Some additional info for option
+    - name: optString
+      title: Option String
+      description: This is an optional string option with a default value
       default: ""
-    - name: opt2
-      title: Option 2
-      description: Some additional info for option
+    - name: optBoolean
+      title: Option Boolean
       type: boolean
       default: false
-    - name: opt3
-      title: Option 3
-      description: Some additional info for option
+      description: This is an optional boolean option with a default value
+    - name: optInteger
+      title: Option Integer
       type: integer
       default: 0
-    - name: opt4
-      title: Option 4
-      description: Some additional info for option
+      description: This is an optional boolean option with a default value
+    - name: optNumber
+      title: Option Number
       type: number
       default: 3.14
-    - name: optarr
-      title: Option 4
-      description: Some additional info for option
+      description: This is an optional number option with a default value
+    - name: optArray
+      title: Option Array String
       type: array
       default: []
-    - name: optenum
-      title: Option 5
+      description: This is an optional array<string> option with a default value
+    - name: optEnum
+      title: Option Enum
       type: string
       enum: [enum1, enum2]
       default: enum1
-    - name: optarrbool
-      title: Option 6
+      description: This is an optional enum<string> option with a default value
+    - name: optArrayBool
+      title: Option Array Boolean
       type: array
       default: []
       items:
         type: boolean
-    - name: optip
-      title: Option 7
+      description: This is an optional enum<boolean> option with a default value
+    - name: optIP
+      title: Option String IP
       type: string
       format: "ipv4"
       default: "1.1.1.1"
+      description: This is an optional string option with a format validation (ipv4)
 
 runtime:
   type: container
