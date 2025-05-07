@@ -120,13 +120,16 @@ func (t *Terminal) DisableOutput() {
 // SetOutput sets an output to target writer.
 func (t *Terminal) SetOutput(w io.Writer) {
 	t.w = w
-	// If some library uses std log, redirect as well.
-	log.SetOutput(w)
 	// Ensure underlying printers use self.
 	// Used to simplify update of writers in the printers.
 	for i := 0; i < len(t.p); i++ {
 		t.p[i].SetOutput(t)
 	}
+}
+
+// RedirectStdLog sets an output of std log in case it's necessary.
+func (t *Terminal) RedirectStdLog(w io.Writer) {
+	log.SetOutput(w)
 }
 
 // Write implements [io.Writer] interface.
