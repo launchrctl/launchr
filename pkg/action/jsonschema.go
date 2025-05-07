@@ -43,30 +43,6 @@ func (a *Action) JSONSchema() jsonschema.Schema {
 	s.Title = fmt.Sprintf("%s (%s)", def.Title, a.ID) // @todo provide better title.
 	s.Description = def.Description
 
-	//if env, ok := a.Runtime().(RuntimeFlags); ok {
-	//	fd := env.FlagsDefinition()
-	//	properties, required := fd.JSONSchema()
-	//	s.Properties[jsonschemaRuntimeOpts] = map[string]any{
-	//		"type":                 "object",
-	//		"title":                "Runtime",
-	//		"properties":           properties,
-	//		"required":             required,
-	//		"additionalProperties": false,
-	//	}
-	//}
-
-	//gd := a.GlobalsDef()
-	//if len(gd) > 0 {
-	//	properties, required := gd.JSONSchema()
-	//	s.Properties[jsonschemaGlobalFlags] = map[string]any{
-	//		"type":                 "object",
-	//		"title":                "Globals",
-	//		"properties":           properties,
-	//		"required":             required,
-	//		"additionalProperties": false,
-	//	}
-	//}
-
 	return s
 }
 
@@ -129,8 +105,6 @@ func (c *runtimeContainer) JSONSchema() jsonschema.Schema {
 		},
 	}
 
-	//s.Schema = "https://json-schema.org/draft/2020-12/schema#"
-	//s.Title = "test"
 	return s
 }
 
@@ -182,8 +156,6 @@ func (p *PersistentFlags) JSONSchema() jsonschema.Schema {
 		},
 	}
 
-	//s.Schema = "https://json-schema.org/draft/2020-12/schema#"
-	//s.Title = "test"
 	return s
 }
 
