@@ -52,7 +52,9 @@ type RuntimeLoggerAware interface {
 	// SetLogger adds runtime logger
 	SetLogger(l *launchr.Logger)
 	// Log returns runtime logger
-	Log(attrs ...any) *launchr.Slog
+	Log() *launchr.Logger
+	// LogWith returns runtime logger with attributes
+	LogWith(attrs ...any) *launchr.Slog
 }
 
 // LoggerAware provides a runtime composition with log utilities.
@@ -68,7 +70,12 @@ func (c *LoggerAware) SetLogger(l *launchr.Logger) {
 }
 
 // Log implements [RuntimeLoggerAware] interface
-func (c *LoggerAware) Log(attrs ...any) *launchr.Slog {
+func (c *LoggerAware) Log() *launchr.Logger {
+	return c.logger
+}
+
+// LogWith implements [RuntimeLoggerAware] interface
+func (c *LoggerAware) LogWith(attrs ...any) *launchr.Slog {
 	if attrs != nil {
 		c.logWith = append(c.logWith, attrs...)
 	}

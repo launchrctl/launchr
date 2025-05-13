@@ -72,7 +72,7 @@ func (p *Plugin) DiscoverActions(_ context.Context) ([]*action.Action, error) {
 
 		log := launchr.Log().With()
 		if rt, ok := a.Runtime().(action.RuntimeLoggerAware); ok {
-			log = rt.Log()
+			log = rt.LogWith()
 		}
 
 		term := launchr.Term()
