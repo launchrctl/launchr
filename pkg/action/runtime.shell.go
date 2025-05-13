@@ -12,7 +12,7 @@ import (
 )
 
 type runtimeShell struct {
-	RuntimeWithLogger
+	LoggerAware
 }
 
 // NewShellRuntime creates a new action shell runtime.

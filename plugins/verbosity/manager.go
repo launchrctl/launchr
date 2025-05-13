@@ -18,7 +18,6 @@ func withCustomLogger(_ action.Manager, a *action.Action) {
 
 	if rt, ok := a.Runtime().(action.RuntimeLoggerAware); ok {
 		var logFormat LogFormat
-
 		if lfStr, ok := a.Input().PersistentFlag("log-format").(string); ok {
 			logFormat = LogFormat(lfStr)
 		}
@@ -30,7 +29,20 @@ func withCustomLogger(_ action.Manager, a *action.Action) {
 
 		logger := NewLogger(logFormat, logLevel, a.Input().Streams().Out())
 		rt.SetLogger(logger)
+	}
+}
 
+// withCustomTerm decorator adds a default [Runtime] for an action.
+func withCustomTerm(_ action.Manager, a *action.Action) {
+	if a.Runtime() == nil {
+		return
+	}
+
+	if !a.Input().IsValidated() {
+		return
+	}
+
+	if rt, ok := a.Runtime().(action.RuntimeTermAware); ok {
 		term := launchr.NewTerminal()
 		term.SetOutput(a.Input().Streams().Out())
 		if quiet, ok := a.Input().PersistentFlag("log-level").(bool); ok && quiet {
