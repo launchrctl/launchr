@@ -2,13 +2,16 @@ package action
 
 import (
 	"context"
+
+	"github.com/launchrctl/launchr/internal/launchr"
+	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 // Runtime is an interface for action execution environment.
 type Runtime interface {
 	// Init prepares the runtime.
 	Init(ctx context.Context, a *Action) error
-	// Execute runs action a in the environment and operates with io through streams.
+	// Execute runs action `a` in the environment and operates with io through streams.
 	Execute(ctx context.Context, a *Action) error
 	// Close does wrap up operations.
 	Close() error
@@ -25,6 +28,10 @@ type RuntimeFlags interface {
 	UseFlags(flags InputParams) error
 	// ValidateInput validates input arguments in action definition.
 	ValidateInput(a *Action, input *Input) error
+	// JSONSchema returns json schema of runtime flags.
+	JSONSchema() jsonschema.Schema
+	// ValidateJSONSchema validates options according to a specified json schema of [RuntimeFlags]
+	ValidateJSONSchema(params InputParams) error
 }
 
 // ContainerRuntime is an interface for container runtime.
@@ -37,4 +44,57 @@ type ContainerRuntime interface {
 	// SetImageBuildCacheResolver sets an image build cache resolver
 	// to check when image must be rebuilt.
 	SetImageBuildCacheResolver(*ImageBuildCacheResolver)
+}
+
+// RuntimeLoggerAware is an interface for logger runtime.
+type RuntimeLoggerAware interface {
+	Runtime
+	// SetLogger adds runtime logger
+	SetLogger(l *launchr.Logger)
+	// Log returns runtime logger
+	Log(attrs ...any) *launchr.Slog
+}
+
+// LoggerAware provides a runtime composition with log utilities.
+type LoggerAware struct {
+	logger *launchr.Logger
+	// logWith contains context arguments for a structured logger.
+	logWith []any
+}
+
+// SetLogger implements [RuntimeLoggerAware] interface
+func (c *LoggerAware) SetLogger(l *launchr.Logger) {
+	c.logger = l
+}
+
+// Log implements [RuntimeLoggerAware] interface
+func (c *LoggerAware) Log(attrs ...any) *launchr.Slog {
+	if attrs != nil {
+		c.logWith = append(c.logWith, attrs...)
+	}
+	return c.logger.With(c.logWith...)
+}
+
+// RuntimeTermAware is an interface for term runtime.
+type RuntimeTermAware interface {
+	Runtime
+	// SetTerm adds runtime terminal
+	SetTerm(t *launchr.Terminal)
+	// Term returns runtime terminal.
+	Term() *launchr.Terminal
+}
+
+// TermAware provides a runtime composition with term utilities.
+type TermAware struct {
+	term *launchr.Terminal
+}
+
+// SetTerm implements [RuntimeTermAware] interface
+func (c *TermAware) SetTerm(t *launchr.Terminal) {
+	c.term = t
+}
+
+// Term implements [RuntimeTermAware] interface
+func (c *TermAware) Term() *launchr.Terminal {
+	return c.term
 }

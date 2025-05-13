@@ -3,9 +3,12 @@ package verbosity
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"math"
 
 	"github.com/launchrctl/launchr/internal/launchr"
+	"github.com/launchrctl/launchr/pkg/action"
 )
 
 func init() {
@@ -142,12 +145,40 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	out := streams.Out()
 	// Set terminal output.
 	launchr.Term().SetOutput(out)
-	// Enable logger.
+	log.SetOutput(out)
+
+	logger := NewLogger(logFormat, logLevel, out)
+	launchr.SetLogger(logger)
+
 	if logLevel != launchr.LogLevelDisabled {
-		if logFormat == "" && launchr.EnvVarLogFormat.Get() != "" {
-			logFormat = LogFormat(launchr.EnvVarLogFormat.Get())
-		}
-		var logger *launchr.Logger
+		_ = launchr.EnvVarLogLevel.Set(logLevel.String())
+		_ = launchr.EnvVarLogFormat.Set(logFormat.String())
+	}
+
+	cmd.SetOut(out)
+	cmd.SetErr(streams.Err())
+
+	var am action.Manager
+	app.GetService(&am)
+
+	persistentFlags := am.GetPersistentFlags()
+	persistentFlags.AddDefinitions(p.getPluginPersistentFlags())
+
+	persistentFlags.Set("log-level", logger.Level().String())
+	persistentFlags.Set("log-format", logFormat.String())
+	persistentFlags.Set("quiet", quiet)
+
+	am.AddDecorators(withCustomLogger, withCustomTerm)
+
+	return nil
+}
+
+// NewLogger creates and initializes a new logger with the specified format, log level, and output stream.
+func NewLogger(logFormat LogFormat, logLevel launchr.LogLevel, out *launchr.Out) *launchr.Logger {
+	var logger *launchr.Logger
+	if logLevel == launchr.LogLevelDisabled {
+		logger = launchr.NewTextHandlerLogger(io.Discard)
+	} else {
 		switch logFormat {
 		case LogFormatPlain:
 			logger = launchr.NewTextHandlerLogger(out)
@@ -156,15 +187,11 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 		default:
 			logger = launchr.NewConsoleLogger(out)
 		}
-		launchr.SetLogger(logger)
-		// Save env variable for subprocesses.
-		_ = launchr.EnvVarLogLevel.Set(logLevel.String())
-		_ = launchr.EnvVarLogFormat.Set(logFormat.String())
 	}
-	launchr.Log().SetLevel(logLevel)
-	cmd.SetOut(out)
-	cmd.SetErr(streams.Err())
-	return nil
+
+	logger.SetLevel(logLevel)
+
+	return logger
 }
 
 func logLevelFlagInt(v int) launchr.LogLevel {

@@ -12,6 +12,7 @@ import (
 )
 
 type runtimeShell struct {
+	LoggerAware
 }
 
 // NewShellRuntime creates a new action shell runtime.
@@ -53,7 +54,7 @@ func (r *runtimeShell) Execute(ctx context.Context, a *Action) (err error) {
 	// If we attached with TTY, all signals will be processed by a child process.
 	sigc := launchr.NotifySignals()
 	go launchr.HandleSignals(ctx, sigc, func(s os.Signal, _ string) error {
-		launchr.Log().Debug("forwarding signal for action", "sig", s, "pid", cmd.Process.Pid)
+		r.Log().Debug("forwarding signal for action", "sig", s, "pid", cmd.Process.Pid)
 		return cmd.Process.Signal(s)
 	})
 	defer launchr.StopCatchSignals(sigc)

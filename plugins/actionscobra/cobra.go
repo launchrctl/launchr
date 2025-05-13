@@ -14,7 +14,7 @@ import (
 )
 
 // CobraImpl returns cobra command implementation for an action command.
-func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, error) {
+func CobraImpl(a *action.Action, streams launchr.Streams, manager action.Manager) (*launchr.Command, error) {
 	def := a.ActionDef()
 	options := make(action.InputParams)
 	runOpts := make(action.InputParams)
@@ -30,7 +30,8 @@ func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, err
 			}
 			optsChanged := derefOpts(filterChangedFlags(cmd, options))
 			input := action.NewInput(a, argsNamed, optsChanged, streams)
-			// Pass to the runtime its flags.
+
+			// Set runtime opts.
 			if r, ok := a.Runtime().(action.RuntimeFlags); ok {
 				runOpts = derefOpts(filterChangedFlags(cmd, runOpts))
 				err = r.UseFlags(runOpts)
@@ -42,10 +43,16 @@ func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, err
 				}
 			}
 
+			for k, v := range manager.GetPersistentFlags().GetAll() {
+				input.SetPersistentFlag(k, v)
+			}
+
 			// Set and validate input.
 			if err = a.SetInput(input); err != nil {
 				return err
 			}
+
+			manager.Decorate(a)
 
 			return nil
 		},
@@ -53,8 +60,8 @@ func CobraImpl(a *action.Action, streams launchr.Streams) (*launchr.Command, err
 			// Don't show usage help on a runtime error.
 			cmd.SilenceUsage = true
 
-			// @todo can we use action manager here and Manager.Run()
-			return a.Execute(cmd.Context())
+			_, err = manager.Run(cmd.Context(), a)
+			return err
 		},
 	}
 

@@ -70,7 +70,20 @@ func (p *Plugin) DiscoverActions(_ context.Context) ([]*action.Action, error) {
 			nocache: input.Opt("no-cache").(bool),
 		}
 
-		return Execute(ctx, p.app.Streams(), &flags)
+		log := launchr.Log().With()
+		if rt, ok := a.Runtime().(action.RuntimeLoggerAware); ok {
+			log = rt.Log()
+		}
+
+		term := launchr.Term()
+		if rt, ok := a.Runtime().(action.RuntimeTermAware); ok {
+			term = rt.Term()
+		}
+
+		return Execute(ctx, p.app.Streams(), &flags, &buildUtilities{
+			log:  log,
+			term: term,
+		})
 	}))
 	return []*action.Action{a}, nil
 }
@@ -88,7 +101,7 @@ func (p *Plugin) Generate(config launchr.GenerateConfig) error {
 }
 
 // Execute runs launchr and executes build of launchr.
-func Execute(ctx context.Context, streams launchr.Streams, flags *builderInput) error {
+func Execute(ctx context.Context, streams launchr.Streams, flags *builderInput, utilities *buildUtilities) error {
 	// Set build timeout.
 	timeout, err := time.ParseDuration(flags.timeout)
 	if err != nil {
@@ -133,7 +146,7 @@ func Execute(ctx context.Context, streams launchr.Streams, flags *builderInput) 
 		return err
 	}
 
-	builder, err := NewBuilder(opts)
+	builder, err := NewBuilder(opts, utilities)
 	if err != nil {
 		return err
 	}
