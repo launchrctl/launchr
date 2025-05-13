@@ -31,6 +31,8 @@ const (
 )
 
 type runtimeContainer struct {
+	RuntimeWithLogger
+
 	// crt is a container runtime.
 	crt driver.ContainerRunner
 	// rtype is a container runtime type string.
@@ -49,8 +51,6 @@ type runtimeContainer struct {
 	entrypoint    string
 	entrypointSet bool
 	exec          bool
-
-	RuntimeWithLogger
 }
 
 // ContainerNameProvider provides an ability to generate a random container name
@@ -174,7 +174,6 @@ func (c *runtimeContainer) Init(_ context.Context, _ *Action) (err error) {
 	if c.crt == nil {
 		c.crt, err = driver.New(c.rtype)
 	}
-
 	return err
 }
 

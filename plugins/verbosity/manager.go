@@ -16,7 +16,7 @@ func withCustomLogger(_ action.Manager, a *action.Action) {
 		return
 	}
 
-	if env, ok := a.Runtime().(action.RuntimeLoggerAware); ok {
+	if rt, ok := a.Runtime().(action.RuntimeLoggerAware); ok {
 		var logFormat LogFormat
 
 		if lfStr, ok := a.Input().PersistentFlag("log-format").(string); ok {
@@ -29,7 +29,7 @@ func withCustomLogger(_ action.Manager, a *action.Action) {
 		}
 
 		logger := NewLogger(logFormat, logLevel, a.Input().Streams().Out())
-		env.SetLogger(logger)
+		rt.SetLogger(logger)
 
 		term := launchr.NewTerminal()
 		term.SetOutput(a.Input().Streams().Out())
@@ -37,7 +37,7 @@ func withCustomLogger(_ action.Manager, a *action.Action) {
 			term.DisableOutput()
 		}
 
-		env.SetTerm(term)
+		rt.SetTerm(term)
 	}
 }
 

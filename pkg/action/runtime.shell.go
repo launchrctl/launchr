@@ -28,7 +28,6 @@ func (r *runtimeShell) Init(_ context.Context, _ *Action) (err error) {
 	if runtime.GOOS == "windows" {
 		return fmt.Errorf("shell runtime is not supported in Windows")
 	}
-
 	return nil
 }
 

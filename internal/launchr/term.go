@@ -2,7 +2,6 @@ package launchr
 
 import (
 	"io"
-	"log"
 	"reflect"
 
 	"github.com/pterm/pterm"
@@ -125,11 +124,6 @@ func (t *Terminal) SetOutput(w io.Writer) {
 	for i := 0; i < len(t.p); i++ {
 		t.p[i].SetOutput(t)
 	}
-}
-
-// RedirectStdLog sets an output of std log in case it's necessary.
-func (t *Terminal) RedirectStdLog(w io.Writer) {
-	log.SetOutput(w)
 }
 
 // Write implements [io.Writer] interface.

@@ -9,9 +9,9 @@ type FnRuntimeCallback func(ctx context.Context, a *Action) error
 
 // FnRuntime is a function type implementing [Runtime].
 type FnRuntime struct {
-	fn FnRuntimeCallback
-
 	RuntimeWithLogger
+
+	fn FnRuntimeCallback
 }
 
 // NewFnRuntime creates runtime as a go function.

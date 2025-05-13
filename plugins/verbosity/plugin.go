@@ -4,6 +4,7 @@ package verbosity
 import (
 	"fmt"
 	"io"
+	"log"
 	"math"
 
 	"github.com/launchrctl/launchr/internal/launchr"
@@ -144,7 +145,7 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	out := streams.Out()
 	// Set terminal output.
 	launchr.Term().SetOutput(out)
-	launchr.Term().RedirectStdLog(out)
+	log.SetOutput(out)
 
 	logger := NewLogger(logFormat, logLevel, out)
 	launchr.SetLogger(logger)
