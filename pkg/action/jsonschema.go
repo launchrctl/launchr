@@ -2,8 +2,9 @@ package action
 
 import (
 	"fmt"
-	"github.com/launchrctl/launchr/pkg/jsonschema"
 	"maps"
+
+	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 const (

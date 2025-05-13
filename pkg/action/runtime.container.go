@@ -31,7 +31,8 @@ const (
 )
 
 type runtimeContainer struct {
-	RuntimeWithLogger
+	LoggerAware
+	TermAware
 
 	// crt is a container runtime.
 	crt driver.ContainerRunner

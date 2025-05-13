@@ -168,7 +168,7 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	persistentFlags.Set("log-format", logFormat.String())
 	persistentFlags.Set("quiet", quiet)
 
-	am.AddDecorators(withCustomLogger)
+	am.AddDecorators(withCustomLogger, withCustomTerm)
 
 	return nil
 }

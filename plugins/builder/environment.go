@@ -56,9 +56,10 @@ type buildEnvironment struct {
 	wd      string
 	env     envVars
 	streams launchr.Streams
+	utils   *buildUtilities
 }
 
-func newBuildEnvironment(streams launchr.Streams) (*buildEnvironment, error) {
+func newBuildEnvironment(streams launchr.Streams, utils *buildUtilities) (*buildEnvironment, error) {
 	tmpDir, err := launchr.MkdirTemp("build_")
 	if err != nil {
 		return nil, err
@@ -73,6 +74,8 @@ func newBuildEnvironment(streams launchr.Streams) (*buildEnvironment, error) {
 		wd:      tmpDir,
 		env:     env,
 		streams: streams,
+
+		utils: utils,
 	}, nil
 }
 
@@ -160,7 +163,7 @@ func (env *buildEnvironment) execGoGet(ctx context.Context, args ...string) erro
 }
 
 func (env *buildEnvironment) RunCmd(ctx context.Context, cmd *exec.Cmd) error {
-	launchr.Log().Debug("executing shell", "cmd", cmd)
+	env.utils.log.Debug("executing shell", "cmd", cmd)
 	err := cmd.Start()
 	if err != nil {
 		return err
