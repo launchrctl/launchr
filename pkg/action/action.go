@@ -333,7 +333,6 @@ func (a *Action) Execute(ctx context.Context) error {
 		panic("runtime is not set, call SetRuntime first")
 	}
 	defer a.runtime.Close()
-
 	if err := a.runtime.Init(ctx, a); err != nil {
 		return err
 	}

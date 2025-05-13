@@ -18,7 +18,6 @@ func CobraImpl(a *action.Action, streams launchr.Streams, manager action.Manager
 	def := a.ActionDef()
 	options := make(action.InputParams)
 	runOpts := make(action.InputParams)
-
 	cmd := &launchr.Command{
 		Use:     getCmdUse(a),
 		Short:   getDesc(def.Title, def.Description),

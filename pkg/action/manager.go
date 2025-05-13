@@ -160,7 +160,7 @@ func (m *actionManagerMap) add(a *Action) error {
 	// Set action related processors.
 	err = a.SetProcessors(m.GetValueProcessors())
 	if err != nil {
-		// Skip action because the definitions is not correct.
+		// Skip action because the definition is not correct.
 		return err
 	}
 
@@ -219,9 +219,9 @@ func (m *actionManagerMap) All() map[string]*Action {
 func (m *actionManagerMap) Get(id string) (*Action, bool) {
 	a, ok := m.GetUnsafe(id)
 	// Process action with default decorators and return a copy to have an isolated scope.
-	cA := a.Clone()
-	m.Decorate(cA, m.dwFns...)
-	return cA, ok
+	a = a.Clone()
+	m.Decorate(a, m.dwFns...)
+	return a, ok
 }
 
 func (m *actionManagerMap) GetUnsafe(id string) (a *Action, ok bool) {

@@ -26,9 +26,8 @@ type Input struct {
 	args InputParams
 	// opts contains parsed options with default values.
 	opts InputParams
-	// persistentFlags contains passed persistent flags values.
-	persistentFlags InputParams
-
+	// persistent contains passed persistent flags values.
+	persistent InputParams
 	// io contains out/in/err destinations. @todo should it be in Input?
 	io launchr.Streams
 
@@ -50,14 +49,14 @@ func NewInput(a *Action, args InputParams, opts InputParams, io launchr.Streams)
 	delete(args, inputMapKeyArgsPos)
 
 	return &Input{
-		action:          a,
-		args:            setParamDefaults(args, def.Arguments),
-		argsRaw:         args,
-		argsPos:         argsPos,
-		opts:            setParamDefaults(opts, def.Options),
-		optsRaw:         opts,
-		persistentFlags: make(InputParams),
-		io:              io,
+		action:     a,
+		args:       setParamDefaults(args, def.Arguments),
+		argsRaw:    args,
+		argsPos:    argsPos,
+		opts:       setParamDefaults(opts, def.Options),
+		optsRaw:    opts,
+		persistent: make(InputParams),
+		io:         io,
 	}
 }
 
@@ -156,7 +155,7 @@ func (input *Input) IsOptChanged(name string) bool {
 
 // PersistentFlags returns stored persistent flags values.
 func (input *Input) PersistentFlags() InputParams {
-	return input.persistentFlags
+	return input.persistent
 }
 
 // PersistentFlag returns persistent flag by name.
@@ -166,7 +165,7 @@ func (input *Input) PersistentFlag(name string) any {
 
 // SetPersistentFlag sets persistent flag value.
 func (input *Input) SetPersistentFlag(name string, val any) {
-	input.persistentFlags[name] = val
+	input.persistent[name] = val
 }
 
 // Args returns input named and processed arguments.

@@ -2,10 +2,8 @@ package action
 
 import (
 	"fmt"
-	"maps"
-	"slices"
-
 	"github.com/launchrctl/launchr/pkg/jsonschema"
+	"maps"
 )
 
 const (
@@ -129,7 +127,7 @@ func (p *DefParameter) JSONSchema() map[string]any {
 	raw["default"] = p.Default
 
 	if len(p.Enum) > 0 {
-		raw["enum"] = slices.Clone(p.Enum)
+		raw["enum"] = p.Enum
 	}
 	if p.Description != "" {
 		raw["description"] = p.Description
