@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	jsonschemaPropArgs    = "arguments"
-	jsonschemaPropOpts    = "options"
-	jsonschemaRuntimeOpts = "runtime"
-	jsonschemaGlobalFlags = "globals"
+	jsonschemaPropArgs       = "arguments"
+	jsonschemaPropOpts       = "options"
+	jsonschemaRuntimeOpts    = "runtime"
+	jsonschemaPersistentOpts = "persistent"
 )
 
 // validateJSONSchema validates arguments and options according to
@@ -143,11 +143,11 @@ func (p *PersistentFlags) JSONSchema() jsonschema.Schema {
 
 	s := jsonschema.Schema{
 		Type:     jsonschema.Object,
-		Required: []string{jsonschemaGlobalFlags},
+		Required: []string{jsonschemaPersistentOpts},
 		Properties: map[string]any{
-			jsonschemaGlobalFlags: map[string]any{
+			jsonschemaPersistentOpts: map[string]any{
 				"type":                 "object",
-				"title":                "Globals",
+				"title":                "Persistent",
 				"properties":           opts,
 				"required":             optsReq,
 				"additionalProperties": false,
@@ -163,7 +163,7 @@ func (p *PersistentFlags) ValidateJSONSchema(params InputParams) error {
 	return jsonschema.Validate(
 		p.JSONSchema(),
 		map[string]any{
-			jsonschemaGlobalFlags: params,
+			jsonschemaPersistentOpts: params,
 		},
 	)
 }

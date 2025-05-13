@@ -186,7 +186,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 	if runDef.Container == nil {
 		return errors.New("action container configuration is not set, use different runtime")
 	}
-	log := c.Log("run_env", c.rtype, "action_id", a.ID, "image", runDef.Container.Image, "command", runDef.Container.Command)
+	log := c.LogWith("run_env", c.rtype, "action_id", a.ID, "image", runDef.Container.Image, "command", runDef.Container.Command)
 	log.Debug("starting execution of the action")
 	name := c.nameprv.Get(a.ID)
 	existing := c.crt.ContainerList(ctx, driver.ContainerListOptions{SearchName: name})
@@ -230,7 +230,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 		return errors.New("error on creating a container")
 	}
 
-	log = c.Log("container_id", cid)
+	log = c.LogWith("container_id", cid)
 	log.Debug("successfully created a container for an action")
 	// Copy working dirs to the container.
 	if c.useVolWD {
