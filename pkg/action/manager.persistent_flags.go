@@ -2,6 +2,8 @@ package action
 
 import (
 	"fmt"
+
+	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 // PersistentFlags holds definitions, current state, and default values of flags.
@@ -114,4 +116,35 @@ func (p *PersistentFlags) AddDefinitions(opts ParametersList) {
 	for _, d := range p.definitions {
 		p.defaults[d.Name] = d.Default
 	}
+}
+
+// JSONSchema returns json schema of [PersistentFlags]
+func (p *PersistentFlags) JSONSchema() jsonschema.Schema {
+	opts, optsReq := p.definitions.JSONSchema()
+
+	s := jsonschema.Schema{
+		Type:     jsonschema.Object,
+		Required: []string{jsonschemaPersistentOpts},
+		Properties: map[string]any{
+			jsonschemaPersistentOpts: map[string]any{
+				"type":                 "object",
+				"title":                "Persistent",
+				"properties":           opts,
+				"required":             optsReq,
+				"additionalProperties": false,
+			},
+		},
+	}
+
+	return s
+}
+
+// ValidateJSONSchema validates params according to json schema of [PersistentFlags] definitions.
+func (p *PersistentFlags) ValidateJSONSchema(params InputParams) error {
+	return jsonschema.Validate(
+		p.JSONSchema(),
+		map[string]any{
+			jsonschemaPersistentOpts: params,
+		},
+	)
 }

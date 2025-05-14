@@ -164,6 +164,37 @@ func (c *runtimeContainer) ValidateInput(_ *Action, input *Input) error {
 	}
 	return nil
 }
+
+func (c *runtimeContainer) JSONSchema() jsonschema.Schema {
+	def := c.FlagsDefinition()
+	opts, optsReq := def.JSONSchema()
+
+	s := jsonschema.Schema{
+		Type:     jsonschema.Object,
+		Required: []string{jsonschemaRuntimeOpts},
+		Properties: map[string]any{
+			jsonschemaRuntimeOpts: map[string]any{
+				"type":                 "object",
+				"title":                "Runtime",
+				"properties":           opts,
+				"required":             optsReq,
+				"additionalProperties": false,
+			},
+		},
+	}
+
+	return s
+}
+
+func (c *runtimeContainer) ValidateJSONSchema(params InputParams) error {
+	return jsonschema.Validate(
+		c.JSONSchema(),
+		map[string]any{
+			jsonschemaRuntimeOpts: params,
+		},
+	)
+}
+
 func (c *runtimeContainer) AddImageBuildResolver(r ImageBuildResolver) {
 	c.imgres = append(c.imgres, r)
 }
