@@ -1,7 +1,7 @@
 # Launchr
 
 Launchr is a versatile CLI action runner that executes tasks defined in local or embeded yaml files across multiple runtimes:
-- Short-lived container (docker)
+- Short-lived container (docker or kubernetes)
 - Shell (host)
 - Golang (as plugin)
 
@@ -15,7 +15,7 @@ Actions are defined in `action.yaml` files:
 - either on local filesystem: Useful for project-specific actions
 - or embeded as plugin: Useful for common and shared actions
 
-You can find action examples [here](example), here and in the [documentation](docs).
+You can find action examples [here](example) and in the [documentation](docs).
 
 Launchr has a plugin system that allows to extend its functionality. See [core plugins](plugins), [official plugins](https://github.com/launchrctl#org-repositories) and [documentation](docs).
 
@@ -31,7 +31,7 @@ Launchr has a plugin system that allows to extend its functionality. See [core p
 ## Usage
 
 Build `launchr` from source locally. Build dependencies:
-1. `go >=1.20`, see [installation guide](https://go.dev/doc/install)
+1. `go >=1.24`, see [installation guide](https://go.dev/doc/install)
 2. `make`
 
 Build the `launchr` tool:
@@ -52,7 +52,7 @@ If you face any issues with `launchr`:
 ### Installation from source
 
 Build dependencies:
-1. `go >=1.20`, see [installation guide](https://go.dev/doc/install)
+1. `go >=1.24`, see [installation guide](https://go.dev/doc/install)
 2. `make`
 
 **Global installation**
@@ -81,7 +81,7 @@ bin/launchr --version
 
 ## Development
 
-The `launchr`  can be built with a `make` to `bin` directory:
+The `launchr` can be built with a `make` to `bin` directory:
 ```shell
 make
 ```

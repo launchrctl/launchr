@@ -3,8 +3,6 @@ package launchr
 import (
 	"errors"
 	"io"
-	"os"
-	"strings"
 
 	mobyterm "github.com/moby/term"
 )
@@ -16,12 +14,13 @@ type Streams interface {
 	// Out returns the writer used for stdout.
 	Out() *Out
 	// Err returns the writer used for stderr.
-	Err() io.Writer
+	Err() *Out
 	io.Closer
 }
 
 type commonStream struct {
 	fd         uintptr
+	isDiscard  bool
 	isTerminal bool
 	state      *mobyterm.State
 }
@@ -31,9 +30,23 @@ func (s *commonStream) FD() uintptr {
 	return s.fd
 }
 
+// IsDiscard returns if read/write is discarded.
+func (s *commonStream) IsDiscard() bool {
+	return s.isDiscard
+}
+
 // IsTerminal returns true if this stream is connected to a terminal.
 func (s *commonStream) IsTerminal() bool {
 	return s.isTerminal
+}
+
+// SetRawTerminal sets raw mode on the terminal.
+func (s *commonStream) SetRawTerminal() (err error) {
+	if !s.IsTerminal() {
+		return nil
+	}
+	s.state, err = mobyterm.SetRawTerminal(s.fd)
+	return err
 }
 
 // RestoreTerminal restores normal mode to the terminal.
@@ -44,6 +57,7 @@ func (s *commonStream) RestoreTerminal() {
 }
 
 // SetIsTerminal sets the boolean used for isTerminal.
+// Used for tests only.
 func (s *commonStream) SetIsTerminal(isTerminal bool) {
 	s.isTerminal = isTerminal
 }
@@ -55,16 +69,11 @@ type Out struct {
 }
 
 func (o *Out) Write(p []byte) (int, error) {
-	return o.out.Write(p)
-}
-
-// SetRawTerminal sets raw mode on the input terminal.
-func (o *Out) SetRawTerminal() (err error) {
-	if os.Getenv("NORAW") != "" || !o.commonStream.isTerminal {
-		return nil
+	if o.out == nil {
+		// Discard.
+		return len(p), nil
 	}
-	o.commonStream.state, err = mobyterm.SetRawTerminalOutput(o.commonStream.fd)
-	return err
+	return o.out.Write(p)
 }
 
 // GetTtySize returns the height and width in characters of the tty.
@@ -87,11 +96,20 @@ func (o *Out) Writer() io.Writer {
 	return o.out
 }
 
-// NewOut returns a new [Out] object from a [io.Writer].
+// Close implement [io.Closer]
+func (o *Out) Close() error {
+	if out, ok := o.out.(io.Closer); ok {
+		return out.Close()
+	}
+	return nil
+}
+
+// NewOut returns a new [Out] object from an [io.Writer].
 func NewOut(out io.Writer) *Out {
 	fd, isTerminal := mobyterm.GetFdInfo(out)
+	isDiscard := out == nil
 	return &Out{
-		commonStream: commonStream{fd: fd, isTerminal: isTerminal},
+		commonStream: commonStream{fd: fd, isTerminal: isTerminal, isDiscard: isDiscard},
 		out:          out,
 	}
 }
@@ -103,30 +121,19 @@ type In struct {
 }
 
 func (i *In) Read(p []byte) (int, error) {
+	if i.in == nil {
+		// Discard.
+		return 0, io.EOF
+	}
 	return i.in.Read(p)
 }
 
 // Close implements the [io.Closer] interface.
 func (i *In) Close() error {
-	return i.in.Close()
-}
-
-// SetRawTerminal sets raw mode on the input terminal.
-func (i *In) SetRawTerminal() (err error) {
-	if os.Getenv("NORAW") != "" || !i.commonStream.isTerminal {
+	if i.in == nil {
 		return nil
 	}
-	i.commonStream.state, err = mobyterm.SetRawTerminal(i.commonStream.fd)
-	return err
-}
-
-// CheckTty checks if we are trying to attach to a container tty
-// from a non-tty client input stream, and if so, returns an error.
-func (i *In) CheckTty(attachStdin, ttyMode bool) error {
-	if ttyMode && attachStdin && !i.isTerminal {
-		return errors.New("the input device is not a TTY")
-	}
-	return nil
+	return i.in.Close()
 }
 
 // Reader returns the wrapped reader.
@@ -137,50 +144,38 @@ func (i *In) Reader() io.ReadCloser {
 // NewIn returns a new [In] object from a [io.ReadCloser]
 func NewIn(in io.ReadCloser) *In {
 	fd, isTerminal := mobyterm.GetFdInfo(in)
-	return &In{commonStream: commonStream{fd: fd, isTerminal: isTerminal}, in: in}
+	isDiscard := in == nil
+	return &In{
+		commonStream: commonStream{fd: fd, isTerminal: isTerminal, isDiscard: isDiscard},
+		in:           in,
+	}
 }
 
 type appCli struct {
 	in  *In
 	out *Out
-	err io.Writer
+	err *Out
 }
 
-func (cli *appCli) In() *In        { return cli.in }
-func (cli *appCli) Out() *Out      { return cli.out }
-func (cli *appCli) Err() io.Writer { return cli.err }
+func (cli *appCli) In() *In   { return cli.in }
+func (cli *appCli) Out() *Out { return cli.out }
+func (cli *appCli) Err() *Out { return cli.err }
 
 func (cli *appCli) Close() error {
-	err := cli.in.Close()
-	if err != nil {
-		return err
-	}
-	if out, ok := cli.out.out.(io.Closer); ok {
-		err = out.Close()
-		if err != nil {
-			return err
-		}
-	}
-
-	if errout, ok := cli.err.(io.Closer); ok {
-		err = errout.Close()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return errors.Join(
+		cli.in.Close(),
+		cli.out.Close(),
+		cli.err.Close(),
+	)
 }
 
 // NewBasicStreams creates streams with given in, out and err streams.
 // Give decorate functions to extend functionality.
 func NewBasicStreams(in io.ReadCloser, out io.Writer, err io.Writer, fns ...StreamsModifierFn) Streams {
-	if in == nil {
-		in = io.NopCloser(strings.NewReader(""))
-	}
 	streams := &appCli{
 		in:  NewIn(in),
 		out: NewOut(out),
-		err: err,
+		err: NewOut(err),
 	}
 	for _, fn := range fns {
 		fn(streams)
@@ -190,7 +185,6 @@ func NewBasicStreams(in io.ReadCloser, out io.Writer, err io.Writer, fns ...Stre
 
 // MaskedStdStreams sets a cli in, out and err streams with the standard streams and with masking of sensitive data.
 func MaskedStdStreams(mask *SensitiveMask) Streams {
-	// Set terminal emulation based on platform as required.
 	stdin, stdout, stderr := StdInOutErr()
 	return NewBasicStreams(stdin, stdout, stderr, WithSensitiveMask(mask))
 }
@@ -206,11 +200,7 @@ func StdInOutErr() (stdIn io.ReadCloser, stdOut, stdErr io.Writer) {
 
 // NoopStreams provides streams like /dev/null.
 func NoopStreams() Streams {
-	return NewBasicStreams(
-		nil,
-		io.Discard,
-		io.Discard,
-	)
+	return NewBasicStreams(nil, nil, nil)
 }
 
 // StreamsModifierFn is a decorator function for a stream.
@@ -220,6 +210,6 @@ type StreamsModifierFn func(streams *appCli)
 func WithSensitiveMask(m *SensitiveMask) StreamsModifierFn {
 	return func(streams *appCli) {
 		streams.out.out = NewMaskingWriter(streams.out.out, m)
-		streams.err = NewMaskingWriter(streams.err, m)
+		streams.err.out = NewMaskingWriter(streams.err.out, m)
 	}
 }

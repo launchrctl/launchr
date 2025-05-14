@@ -14,8 +14,6 @@ import (
 	io "io"
 	reflect "reflect"
 
-	container "github.com/docker/docker/api/types/container"
-	image "github.com/docker/docker/api/types/image"
 	driver "github.com/launchrctl/launchr/pkg/driver"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -58,23 +56,8 @@ func (mr *MockContainerRuntimeMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockContainerRuntime)(nil).Close))
 }
 
-// ContainerAttach mocks base method.
-func (m *MockContainerRuntime) ContainerAttach(ctx context.Context, cid string, opts container.AttachOptions) (*driver.ContainerInOut, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ContainerAttach", ctx, cid, opts)
-	ret0, _ := ret[0].(*driver.ContainerInOut)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ContainerAttach indicates an expected call of ContainerAttach.
-func (mr *MockContainerRuntimeMockRecorder) ContainerAttach(ctx, cid, opts any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerAttach", reflect.TypeOf((*MockContainerRuntime)(nil).ContainerAttach), ctx, cid, opts)
-}
-
 // ContainerCreate mocks base method.
-func (m *MockContainerRuntime) ContainerCreate(ctx context.Context, opts driver.ContainerCreateOptions) (string, error) {
+func (m *MockContainerRuntime) ContainerCreate(ctx context.Context, opts driver.ContainerDefinition) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContainerCreate", ctx, opts)
 	ret0, _ := ret[0].(string)
@@ -86,20 +69,6 @@ func (m *MockContainerRuntime) ContainerCreate(ctx context.Context, opts driver.
 func (mr *MockContainerRuntimeMockRecorder) ContainerCreate(ctx, opts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerCreate", reflect.TypeOf((*MockContainerRuntime)(nil).ContainerCreate), ctx, opts)
-}
-
-// ContainerExecResize mocks base method.
-func (m *MockContainerRuntime) ContainerExecResize(ctx context.Context, cid string, opts container.ResizeOptions) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ContainerExecResize", ctx, cid, opts)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ContainerExecResize indicates an expected call of ContainerExecResize.
-func (mr *MockContainerRuntimeMockRecorder) ContainerExecResize(ctx, cid, opts any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerExecResize", reflect.TypeOf((*MockContainerRuntime)(nil).ContainerExecResize), ctx, cid, opts)
 }
 
 // ContainerKill mocks base method.
@@ -131,39 +100,27 @@ func (mr *MockContainerRuntimeMockRecorder) ContainerList(ctx, opts any) *gomock
 }
 
 // ContainerRemove mocks base method.
-func (m *MockContainerRuntime) ContainerRemove(ctx context.Context, cid string, opts container.RemoveOptions) error {
+func (m *MockContainerRuntime) ContainerRemove(ctx context.Context, cid string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ContainerRemove", ctx, cid, opts)
+	ret := m.ctrl.Call(m, "ContainerRemove", ctx, cid)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ContainerRemove indicates an expected call of ContainerRemove.
-func (mr *MockContainerRuntimeMockRecorder) ContainerRemove(ctx, cid, opts any) *gomock.Call {
+func (mr *MockContainerRuntimeMockRecorder) ContainerRemove(ctx, cid any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerRemove", reflect.TypeOf((*MockContainerRuntime)(nil).ContainerRemove), ctx, cid, opts)
-}
-
-// ContainerResize mocks base method.
-func (m *MockContainerRuntime) ContainerResize(ctx context.Context, cid string, opts container.ResizeOptions) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ContainerResize", ctx, cid, opts)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ContainerResize indicates an expected call of ContainerResize.
-func (mr *MockContainerRuntimeMockRecorder) ContainerResize(ctx, cid, opts any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerResize", reflect.TypeOf((*MockContainerRuntime)(nil).ContainerResize), ctx, cid, opts)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerRemove", reflect.TypeOf((*MockContainerRuntime)(nil).ContainerRemove), ctx, cid)
 }
 
 // ContainerStart mocks base method.
-func (m *MockContainerRuntime) ContainerStart(ctx context.Context, cid string, opts driver.ContainerStartOptions) error {
+func (m *MockContainerRuntime) ContainerStart(ctx context.Context, cid string, opts driver.ContainerDefinition) (<-chan int, *driver.ContainerInOut, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContainerStart", ctx, cid, opts)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(<-chan int)
+	ret1, _ := ret[1].(*driver.ContainerInOut)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // ContainerStart indicates an expected call of ContainerStart.
@@ -173,10 +130,10 @@ func (mr *MockContainerRuntimeMockRecorder) ContainerStart(ctx, cid, opts any) *
 }
 
 // ContainerStatPath mocks base method.
-func (m *MockContainerRuntime) ContainerStatPath(ctx context.Context, cid, path string) (container.PathStat, error) {
+func (m *MockContainerRuntime) ContainerStatPath(ctx context.Context, cid, path string) (driver.ContainerPathStat, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContainerStatPath", ctx, cid, path)
-	ret0, _ := ret[0].(container.PathStat)
+	ret0, _ := ret[0].(driver.ContainerPathStat)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -188,40 +145,25 @@ func (mr *MockContainerRuntimeMockRecorder) ContainerStatPath(ctx, cid, path any
 }
 
 // ContainerStop mocks base method.
-func (m *MockContainerRuntime) ContainerStop(ctx context.Context, cid string) error {
+func (m *MockContainerRuntime) ContainerStop(ctx context.Context, cid string, opts driver.ContainerStopOptions) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ContainerStop", ctx, cid)
+	ret := m.ctrl.Call(m, "ContainerStop", ctx, cid, opts)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ContainerStop indicates an expected call of ContainerStop.
-func (mr *MockContainerRuntimeMockRecorder) ContainerStop(ctx, cid any) *gomock.Call {
+func (mr *MockContainerRuntimeMockRecorder) ContainerStop(ctx, cid, opts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerStop", reflect.TypeOf((*MockContainerRuntime)(nil).ContainerStop), ctx, cid)
-}
-
-// ContainerWait mocks base method.
-func (m *MockContainerRuntime) ContainerWait(ctx context.Context, cid string, opts driver.ContainerWaitOptions) (<-chan driver.ContainerWaitResponse, <-chan error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ContainerWait", ctx, cid, opts)
-	ret0, _ := ret[0].(<-chan driver.ContainerWaitResponse)
-	ret1, _ := ret[1].(<-chan error)
-	return ret0, ret1
-}
-
-// ContainerWait indicates an expected call of ContainerWait.
-func (mr *MockContainerRuntimeMockRecorder) ContainerWait(ctx, cid, opts any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerWait", reflect.TypeOf((*MockContainerRuntime)(nil).ContainerWait), ctx, cid, opts)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerStop", reflect.TypeOf((*MockContainerRuntime)(nil).ContainerStop), ctx, cid, opts)
 }
 
 // CopyFromContainer mocks base method.
-func (m *MockContainerRuntime) CopyFromContainer(ctx context.Context, cid, srcPath string) (io.ReadCloser, container.PathStat, error) {
+func (m *MockContainerRuntime) CopyFromContainer(ctx context.Context, cid, srcPath string) (io.ReadCloser, driver.ContainerPathStat, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CopyFromContainer", ctx, cid, srcPath)
 	ret0, _ := ret[0].(io.ReadCloser)
-	ret1, _ := ret[1].(container.PathStat)
+	ret1, _ := ret[1].(driver.ContainerPathStat)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -233,7 +175,7 @@ func (mr *MockContainerRuntimeMockRecorder) CopyFromContainer(ctx, cid, srcPath 
 }
 
 // CopyToContainer mocks base method.
-func (m *MockContainerRuntime) CopyToContainer(ctx context.Context, cid, path string, content io.Reader, opts container.CopyToContainerOptions) error {
+func (m *MockContainerRuntime) CopyToContainer(ctx context.Context, cid, path string, content io.Reader, opts driver.CopyToContainerOptions) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CopyToContainer", ctx, cid, path, content, opts)
 	ret0, _ := ret[0].(error)
@@ -262,7 +204,7 @@ func (mr *MockContainerRuntimeMockRecorder) ImageEnsure(ctx, opts any) *gomock.C
 }
 
 // ImageRemove mocks base method.
-func (m *MockContainerRuntime) ImageRemove(ctx context.Context, image string, opts image.RemoveOptions) (*driver.ImageRemoveResponse, error) {
+func (m *MockContainerRuntime) ImageRemove(ctx context.Context, image string, opts driver.ImageRemoveOptions) (*driver.ImageRemoveResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ImageRemove", ctx, image, opts)
 	ret0, _ := ret[0].(*driver.ImageRemoveResponse)
