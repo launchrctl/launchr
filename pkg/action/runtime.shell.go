@@ -31,6 +31,9 @@ func (r *runtimeShell) Init(_ context.Context, _ *Action) (err error) {
 }
 
 func (r *runtimeShell) Execute(ctx context.Context, a *Action) (err error) {
+	log := launchr.Log().With("run_env", "shell", "action_id", a.ID)
+	log.Debug("starting execution of the action")
+
 	streams := a.Input().Streams()
 	rt := a.RuntimeDef()
 	defaultShell := os.Getenv("SHELL")
@@ -53,7 +56,7 @@ func (r *runtimeShell) Execute(ctx context.Context, a *Action) (err error) {
 	// If we attached with TTY, all signals will be processed by a child process.
 	sigc := launchr.NotifySignals()
 	go launchr.HandleSignals(ctx, sigc, func(s os.Signal, _ string) error {
-		launchr.Log().Debug("forwarding signal for action", "sig", s, "pid", cmd.Process.Pid)
+		log.Debug("forwarding signal for action", "sig", s, "pid", cmd.Process.Pid)
 		return cmd.Process.Signal(s)
 	})
 	defer launchr.StopCatchSignals(sigc)
@@ -68,6 +71,7 @@ func (r *runtimeShell) Execute(ctx context.Context, a *Action) (err error) {
 			exitCode = 130
 			msg = fmt.Sprintf("action %q was interrupted, finished with exit code %d", a.ID, exitCode)
 		}
+		log.Info("action finished with the exit code", "exit_code", exitCode)
 		return launchr.NewExitError(exitCode, msg)
 	}
 	return cmdErr
