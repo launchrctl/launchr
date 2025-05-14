@@ -157,6 +157,16 @@ func MkdirTemp(pattern string) (string, error) {
 	if dirPath == "" {
 		return "", fmt.Errorf("failed to create temp directory")
 	}
+	return dirPath, nil
+}
+
+// MkdirTempWithCleanup creates a temporary directory with MkdirTemp.
+// The temp directory is removed when the app terminates.
+func MkdirTempWithCleanup(pattern string) (string, error) {
+	dirPath, err := MkdirTemp(pattern)
+	if err != nil {
+		return "", err
+	}
 
 	// Make sure the dir is cleaned on finish.
 	RegisterCleanupFn(func() error {
