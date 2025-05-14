@@ -1,0 +1,54 @@
+# DO NOT USE IT AS A REFERENCE!
+# This is a special test case
+# where we build the bin from the source.
+# See other files for examples.
+
+# Test 1: Check the version string when built with ldflags
+env APP_NAME=myapp
+env APP_VERSION='v1.1.0-testscript'
+env APP_BUILT_WITH='testscript v1.0.0'
+env ARCH_RGX=[a-z0-9]+/[a-z0-9]+
+env APP_VERSION_SHORT=$APP_NAME' version '${APP_VERSION@R}' '$ARCH_RGX
+
+# Build the binary.
+env HOME=$TMPDIR
+env APP_LDFLAGS=-X' '"$CORE_PKG.name=$APP_NAME"' -X '"$CORE_PKG.version=$APP_VERSION"' -X '"$CORE_PKG.builtWith=$APP_BUILT_WITH"
+exec go build -C $REPO_PATH -ldflags $APP_LDFLAGS -o $WORK/$APP_NAME ./cmd/launchr
+
+# Test 1: Check version output.
+exec ./$APP_NAME --version
+stdout ^$APP_VERSION_SHORT'\nBuilt with '${APP_BUILT_WITH@R}\z$
+! stderr .
+
+# Test 2: Build a new binary using the old, check the version string.
+# Replace the core to always build from the latest.
+env APP_NAME_2=${APP_NAME}new
+env APP_VERSION_2='v1.2.0-testscript'
+env APP_VERSION_CORE='Core version: v.*\nCore replace: '${CORE_PKG@R}' v.* => '${REPO_PATH@R}' \(devel\)'
+env APP_VERSION_FULL=$APP_NAME_2' version '$APP_VERSION_2' '$ARCH_RGX'\nBuilt with '${APP_VERSION_SHORT}'\n'$APP_VERSION_CORE
+
+exec ./$APP_NAME build --no-cache --tag nethttpomithttp2 -n $APP_NAME_2 -o $APP_NAME_2 -r $CORE_PKG=$REPO_PATH --build-version $APP_VERSION_2
+
+exec ./$APP_NAME_2 --version
+stdout ^$APP_VERSION_FULL'\z$'
+! stderr .
+
+# Test 3: Build a new binary with incorrect app name.
+! exec ./$APP_NAME build -n under_score -o under_score --build-version invalid
+stdout 'invalid application name "under_score"'
+
+# Test 4: Build with plugins and replace.
+# Add 1 arbitrary repository as a plugin, we need to test a public source but prevent possible build errors.
+# We will may have a bit broken version, but it's ok for the test.
+env APP_PLUGIN_1=golang.org/x/term
+# Add 1 test plugin from test data with replace.
+env APP_PLUGIN_2=example.com/genaction@v1.1.1
+exec ./$APP_NAME build -n $APP_NAME_2 -o $APP_NAME_2 -r $CORE_PKG=$REPO_PATH -p $APP_PLUGIN_1 -p $APP_PLUGIN_2 -r $APP_PLUGIN_2=$REPO_PATH/test/plugins/genaction --build-version $APP_VERSION_2
+
+exec ./$APP_NAME_2 --version
+stdout ^$APP_VERSION_FULL'\nPlugins:\n  - example\.com/genaction v1\.1\.1\n  - example\.com/genaction v1\.1\.1 => '$REPO_PATH'/test/genaction \(devel\)\n\z$'
+! stderr .
+
+# Test 5: Check the generated action is included and works well.
+exec ./$APP_NAME_2 genaction:example
+stdout 'hello world'

@@ -1,0 +1,80 @@
+exec launchr --help
+
+# Actions are grouped and sorted.
+stdout '^\s+Actions:\n\s+bar\s+$'
+
+# Valid discovered actions
+stdout '^\s+bar\s+bar$'
+stdout '^\s+foo\s+foo$'
+stdout '^\s+foo\.bar\.baz:fred\s+fred$'
+stdout '^\s+foo-bar_baz:waldo!fred:thud\.1\s+valid special chars'
+stdout '^\s+foo\.bar\.baz:waldo\s+waldo$'
+
+# Actions that must not appear
+! stdout '^\s+foo-bar_baz:waldo.fred\s+invalid special chars$'
+! stdout '^\s+(.)hidden:foo\s+foo hidden skipped$'
+! stdout '^\s+(.)hidden:bar\s+bar hidden skipped$'
+! stdout '^\s+foo\.bar\.baz:incorrect\s+incorrect actions path$'
+! stdout '^\s+foo\.bar\.baz:subdir.*$'
+
+! stderr .
+
+-- actions/foo/action.yaml --
+action:
+  title: foo
+runtime:
+  type: container
+  image: alpine
+  command: [/bin/sh, ls]
+
+-- actions/bar/action.yaml --
+action:
+  title: bar
+runtime:
+  type: shell
+  script: ls -al
+
+-- foo-bar_baz/actions/waldo!fred:thud.1/action.yaml --
+action: { title: valid special chars }
+runtime: plugin
+
+-- foo-bar_baz/actions/waldo fred/action.yaml --
+action: { title: invalid special chars }
+runtime: plugin
+
+-- foo/bar/baz/actions/waldo/action.yaml --
+action:
+  title: waldo
+runtime: plugin
+
+-- foo/bar/baz/actions/fred/action.yaml --
+action:
+  title: fred
+runtime: plugin
+
+-- foo/bar/baz/actions/broken/action.yaml --
+action:
+  title: broken
+runtime:
+  type: container
+  # missing container properties.
+
+-- .hidden/actions/foo/action.yaml --
+action:
+  title: foo hidden skipped
+runtime: plugin
+
+-- .hidden/actions/bar/action.yaml --
+action:
+  title: bar hidden skipped
+runtime: plugin
+
+-- foo/bar/baz/myactions/incorrect/action.yaml --
+action:
+  title: incorrect actions path
+runtime: plugin
+
+-- foo/bar/baz/actions/subdir/foo/action.yaml --
+action:
+  title: foo incorrect pos of yaml in subdir
+runtime: plugin

@@ -91,6 +91,7 @@ type AppVersion struct {
 	CoreVersion string
 	CoreReplace string
 	Plugins     []string
+	PluginsRepl []string
 }
 
 // PluginInfo provides information about the plugin and is used as a unique data to identify a plugin.
