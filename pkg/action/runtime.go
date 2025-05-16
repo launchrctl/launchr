@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/launchrctl/launchr/internal/launchr"
-	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 // Runtime is an interface for action execution environment.
@@ -24,14 +23,10 @@ type RuntimeFlags interface {
 	Runtime
 	// FlagsDefinition provides definitions for action environment specific flags.
 	FlagsDefinition() ParametersList
-	// UseFlags sets environment configuration.
-	UseFlags(flags InputParams) error
-	// ValidateInput validates input arguments in action definition.
-	ValidateInput(a *Action, input *Input) error
-	// JSONSchema returns json schema of runtime flags.
-	JSONSchema() jsonschema.Schema
-	// ValidateJSONSchema validates options according to a specified json schema of [RuntimeFlags]
-	ValidateJSONSchema(params InputParams) error
+	// ValidateFlags validates input flags of the runtime.
+	ValidateFlags(flags InputParams) error
+	// SetInput sets environment configuration.
+	SetInput(a *Action, input *Input, flags InputParams) error
 }
 
 // ContainerRuntime is an interface for container runtime.
