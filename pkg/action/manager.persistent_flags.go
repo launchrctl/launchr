@@ -118,17 +118,16 @@ func (p *PersistentFlags) AddDefinitions(opts ParametersList) {
 	}
 }
 
-// JSONSchema returns json schema of [PersistentFlags]
-func (p *PersistentFlags) JSONSchema() jsonschema.Schema {
+// ValidateFlags validates input flags.
+func (p *PersistentFlags) ValidateFlags(flags InputParams) error {
 	opts, optsReq := p.definitions.JSONSchema()
-
 	s := jsonschema.Schema{
 		Type:     jsonschema.Object,
 		Required: []string{jsonschemaPersistentOpts},
 		Properties: map[string]any{
 			jsonschemaPersistentOpts: map[string]any{
 				"type":                 "object",
-				"title":                "Persistent",
+				"title":                jsonschemaPersistentOpts,
 				"properties":           opts,
 				"required":             optsReq,
 				"additionalProperties": false,
@@ -136,15 +135,5 @@ func (p *PersistentFlags) JSONSchema() jsonschema.Schema {
 		},
 	}
 
-	return s
-}
-
-// ValidateJSONSchema validates params according to json schema of [PersistentFlags] definitions.
-func (p *PersistentFlags) ValidateJSONSchema(params InputParams) error {
-	return jsonschema.Validate(
-		p.JSONSchema(),
-		map[string]any{
-			jsonschemaPersistentOpts: params,
-		},
-	)
+	return jsonschema.Validate(s, map[string]any{jsonschemaPersistentOpts: flags})
 }

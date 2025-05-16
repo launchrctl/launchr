@@ -133,7 +133,27 @@ func (c *runtimeContainer) FlagsDefinition() ParametersList {
 	}
 }
 
-func (c *runtimeContainer) UseFlags(flags InputParams) error {
+func (c *runtimeContainer) ValidateFlags(flags InputParams) error {
+	def := c.FlagsDefinition()
+	opts, optsReq := def.JSONSchema()
+	s := jsonschema.Schema{
+		Type:     jsonschema.Object,
+		Required: []string{jsonschemaPersistentOpts},
+		Properties: map[string]any{
+			jsonschemaPersistentOpts: map[string]any{
+				"type":                 "object",
+				"title":                jsonschemaPersistentOpts,
+				"properties":           opts,
+				"required":             optsReq,
+				"additionalProperties": false,
+			},
+		},
+	}
+
+	return jsonschema.Validate(s, map[string]any{jsonschemaPersistentOpts: flags})
+}
+
+func (c *runtimeContainer) SetInput(_ *Action, input *Input, flags InputParams) error {
 	if v, ok := flags[containerFlagUseVolumeWD]; ok {
 		c.useVolWD = v.(bool)
 	}
@@ -155,44 +175,11 @@ func (c *runtimeContainer) UseFlags(flags InputParams) error {
 		c.exec = ex.(bool)
 	}
 
-	return nil
-}
-func (c *runtimeContainer) ValidateInput(_ *Action, input *Input) error {
 	if c.exec {
 		// Mark input as validated because arguments are passed directly to exec.
 		input.SetValidated(true)
 	}
 	return nil
-}
-
-func (c *runtimeContainer) JSONSchema() jsonschema.Schema {
-	def := c.FlagsDefinition()
-	opts, optsReq := def.JSONSchema()
-
-	s := jsonschema.Schema{
-		Type:     jsonschema.Object,
-		Required: []string{jsonschemaRuntimeOpts},
-		Properties: map[string]any{
-			jsonschemaRuntimeOpts: map[string]any{
-				"type":                 "object",
-				"title":                "Runtime",
-				"properties":           opts,
-				"required":             optsReq,
-				"additionalProperties": false,
-			},
-		},
-	}
-
-	return s
-}
-
-func (c *runtimeContainer) ValidateJSONSchema(params InputParams) error {
-	return jsonschema.Validate(
-		c.JSONSchema(),
-		map[string]any{
-			jsonschemaRuntimeOpts: params,
-		},
-	)
 }
 
 func (c *runtimeContainer) AddImageBuildResolver(r ImageBuildResolver) {
