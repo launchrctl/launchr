@@ -9,7 +9,7 @@ on:
 
 jobs:
   test:
-    name: Test on ${{ matrix.os }}
+    name: Test on ${{ matrix.os }} / ${{ matrix.arch }}
     strategy:
       matrix:
         include:
@@ -31,7 +31,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: 'stable'
-          architecture: ${{ matrix.arch }}
 
       - name: Test
         run: go test ./...
