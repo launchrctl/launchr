@@ -32,5 +32,8 @@ jobs:
         with:
           go-version: 'stable'
 
+      - name: Prepare dependencies
+        run: go mod download
+
       - name: Test
         run: go test ./...

@@ -46,7 +46,7 @@ env APP_PLUGIN_2=example.com/genaction@v1.1.1
 exec ./$APP_NAME build -n $APP_NAME_2 -o $APP_NAME_2 -r $CORE_PKG=$REPO_PATH -p $APP_PLUGIN_1 -p $APP_PLUGIN_2 -r $APP_PLUGIN_2=$REPO_PATH/test/plugins/genaction --build-version $APP_VERSION_2
 
 exec ./$APP_NAME_2 --version
-stdout ^$APP_VERSION_FULL'\nPlugins:\n  - example\.com/genaction v1\.1\.1\n  - example\.com/genaction v1\.1\.1 => '$REPO_PATH'/test/genaction \(devel\)\n\z$'
+stdout ^$APP_VERSION_FULL'\nPlugins:\n  - example\.com/genaction v1\.1\.1\n  - example\.com/genaction v1\.1\.1 => '$REPO_PATH'/test/plugins/genaction \(devel\)\n\z$'
 ! stderr .
 
 # Test 5: Check the generated action is included and works well.
