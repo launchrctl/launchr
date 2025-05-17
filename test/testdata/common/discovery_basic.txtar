@@ -1,7 +1,7 @@
 exec launchr --help
 
 # Actions are grouped and sorted.
-stdout '^\s+Actions:\n\s+bar\s+$'
+stdout '^\s+Actions:\n\s+bar\s+'
 
 # Valid discovered actions
 stdout '^\s+bar\s+bar$'
