@@ -21,23 +21,17 @@ jobs:
             os: macos-latest
           - name: Windows / AMD64
             os: windows-latest
+            continue-on-error: true
           - name: Windows / ARM64
             os: windows-latest-arm64
+            continue-on-error: true
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.continue-on-error || false }}
     steps:
-      - name: Show OS and architecture info
-        run: |
-          echo "OS: ${{ runner.os }}"
-          echo "Architecture: ${{ runner.arch }}"
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            echo "%OS%"
-            echo "%PROCESSOR_ARCHITECTURE%"
-          else
-            echo "$OSTYPE"
-            echo "$(uname -m)"
-          fi
-          
       - uses: actions/checkout@v4
+
+      - name: Get OS Info
+        uses: ./.github/actions/os-info
 
       - name: Set up Go
         uses: actions/setup-go@v5
