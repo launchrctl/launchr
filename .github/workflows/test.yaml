@@ -1,4 +1,4 @@
-name: Run tests
+name: Tests
 on:
   push:
     branches:
@@ -6,6 +6,7 @@ on:
   pull_request:
     branches:
       - '**'
+  workflow_call:
 
 jobs:
   test:
@@ -16,21 +17,21 @@ jobs:
           - name: Linux / AMD64
             os: ubuntu-latest
           - name: Linux / ARM64
-            os: ubuntu-latest-arm64
+            os: ubuntu-24.04-arm
           - name: MacOS / ARM64
             os: macos-latest
           - name: Windows / AMD64
             os: windows-latest
             continue-on-error: true
           - name: Windows / ARM64
-            os: windows-latest-arm64
+            os: windows-11-arm
             continue-on-error: true
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.continue-on-error || false }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get OS Info
+      - name: OS Info
         uses: ./.github/actions/os-info
 
       - name: Set up Go
@@ -42,4 +43,5 @@ jobs:
         run: go mod download
 
       - name: Test
-        run: go test ./...
+        run: |
+          go test ./...
