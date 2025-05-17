@@ -9,22 +9,34 @@ on:
 
 jobs:
   test:
-    name: Test on ${{ matrix.os }} / ${{ matrix.arch }}
+    name: Test on ${{ matrix.name }}
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
-            arch: amd64
-          - os: ubuntu-latest
-            arch: arm64
-          - os: macos-latest
-            arch: amd64
-          - os: macos-latest
-            arch: arm64
-          - os: windows-latest
-            arch: amd64
+          - name: Linux / AMD64
+            os: ubuntu-latest
+          - name: Linux / ARM64
+            os: ubuntu-latest-arm64
+          - name: MacOS / ARM64
+            os: macos-latest
+          - name: Windows / AMD64
+            os: windows-latest
+          - name: Windows / ARM64
+            os: windows-latest-arm64
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Show OS and architecture info
+        run: |
+          echo "OS: ${{ runner.os }}"
+          echo "Architecture: ${{ runner.arch }}"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            echo "%OS%"
+            echo "%PROCESSOR_ARCHITECTURE%"
+          else
+            echo "$OSTYPE"
+            echo "$(uname -m)"
+          fi
+          
       - uses: actions/checkout@v4
 
       - name: Set up Go
