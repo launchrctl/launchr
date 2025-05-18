@@ -1,3 +1,8 @@
+[unix] mkdir foo-bar_baz/actions/waldo*fred
+[unix] mkdir actions/waldo*fred
+[unix] cp 'foo-bar_baz/actions/waldo fred/action.yaml' foo-bar_baz/actions/waldo*fred/action.yaml
+[unix] cp 'actions/waldo fred/action.yaml' actions/waldo*fred/action.yaml
+
 exec launchr --help
 
 # Actions are grouped and sorted.
@@ -40,19 +45,11 @@ runtime:
 action: { title: valid special chars }
 runtime: plugin
 
--- foo-bar_baz/actions/waldo\ fred/action.yaml --
+-- foo-bar_baz/actions/waldo fred/action.yaml --
 action: { title: invalid special chars }
 runtime: plugin
 
--- foo-bar_baz/actions/waldo!fred/action.yaml --
-action: { title: invalid special chars }
-runtime: plugin
-
--- actions/waldo*fred/action.yaml --
-action: { title: invalid special chars }
-runtime: plugin
-
--- actions/waldo\\fred/action.yaml --
+-- actions/waldo fred/action.yaml --
 action: { title: invalid special chars }
 runtime: plugin
 
