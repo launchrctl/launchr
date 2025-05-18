@@ -7,11 +7,13 @@ stdout '^\s+Actions:\n\s+bar\s+'
 stdout '^\s+bar\s+bar$'
 stdout '^\s+foo\s+foo$'
 stdout '^\s+foo\.bar\.baz:fred\s+fred$'
-stdout '^\s+foo-bar_baz:waldo!fred:thud\.1\s+valid special chars'
+stdout '^\s+foo-bar_baz:waldo-fred.1\s+valid special chars'
 stdout '^\s+foo\.bar\.baz:waldo\s+waldo$'
 
 # Actions that must not appear
 ! stdout '^\s+foo-bar_baz:waldo.fred\s+invalid special chars$'
+! stdout '^\s+foo-bar_baz:waldo\s+invalid special chars$'
+! stdout '^\s+waldo.fred\s+invalid special chars$'
 ! stdout '^\s+(.)hidden:foo\s+foo hidden skipped$'
 ! stdout '^\s+(.)hidden:bar\s+bar hidden skipped$'
 ! stdout '^\s+foo\.bar\.baz:incorrect\s+incorrect actions path$'
@@ -34,11 +36,23 @@ runtime:
   type: shell
   script: ls -al
 
--- foo-bar_baz/actions/waldo!fred:thud.1/action.yaml --
+-- foo-bar_baz/actions/waldo-fred.1/action.yaml --
 action: { title: valid special chars }
 runtime: plugin
 
--- foo-bar_baz/actions/waldo fred/action.yaml --
+-- foo-bar_baz/actions/waldo\ fred/action.yaml --
+action: { title: invalid special chars }
+runtime: plugin
+
+-- foo-bar_baz/actions/waldo!fred/action.yaml --
+action: { title: invalid special chars }
+runtime: plugin
+
+-- actions/waldo*fred/action.yaml --
+action: { title: invalid special chars }
+runtime: plugin
+
+-- actions/waldo\\fred/action.yaml --
 action: { title: invalid special chars }
 runtime: plugin
 

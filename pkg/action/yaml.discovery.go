@@ -10,7 +10,7 @@ import (
 
 var (
 	// rgxYamlFilepath is a regex for a yaml path with unix and windows support.
-	rgxYamlFilepath = regexp.MustCompile(`(^actions|.*[\\/]actions)[\\/][^\\/]+[\\/]action\.y(a)?ml$`)
+	rgxYamlFilepath = regexp.MustCompile(`(^actions|[^!<>:"|?*]+[\\/]actions)[\\/][^\\/!<>:"|?*]+[\\/]action\.y(a)?ml$`)
 	// rgxYamlRootFile is a regex for a yaml file located in root dir only.
 	rgxYamlRootFile = regexp.MustCompile(`^action\.y(a)?ml$`)
 )

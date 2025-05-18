@@ -1,6 +1,7 @@
 package launchr
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/rogpeppe/go-internal/testscript"
@@ -12,11 +13,13 @@ func TestMain(m *testing.M) {
 	})
 }
 
-// TODO: Implement test groups build/runtime/unit
 // TestScriptBuild tests how binary builds and outputs version.
 func TestScriptBuild(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping test in short mode.")
+		t.Skip("skipping test in short mode")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping test on Windows")
 	}
 	testscript.Run(t, testscript.Params{
 		Dir:                 "test/testdata/build",
@@ -35,9 +38,6 @@ func TestScriptBuild(t *testing.T) {
 }
 
 func TestScriptCommon(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping test in short mode.")
-	}
 	t.Parallel()
 	testscript.Run(t, testscript.Params{
 		Dir:                 "test/testdata/common",

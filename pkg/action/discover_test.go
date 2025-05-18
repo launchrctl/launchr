@@ -120,6 +120,10 @@ func Test_Discover_isValid(t *testing.T) {
 		{"incorrect hidden subdir path", "1/2/.github/actions/3/action.yml", false}, // Invalid hidden subdirectory.
 		{"nested action", "1/2/actions/3/4/5/action.yaml", false},                   // There is a deeper nesting in actions directory.
 		{"root action", "actions/verb/action.yaml", true},                           // Actions are located in root.
+		{"special chars action in root", "actions/foo!bar/action.yaml", false},      // Actions are located in root and with special characters.
+		{"special chars action 1", "?/actions/foo/action.yaml", false},              // Actions are located in root and with special characters.
+		{"special chars action 2", "foo/actions/foo<>bar/action.yaml", false},       // Actions are located in root and with special characters.
+		{"special chars action 3", "foo/!<>/actions/foo\\bar/action.yaml", false},   // Actions are located in root and with special characters.
 		{"root myactions", "myactions/verb/action.yaml", false},                     // Actions are located in dir ending with actions.
 		{"dir", "1/2/actions/3", false},                                             // A directory is given.
 	}
