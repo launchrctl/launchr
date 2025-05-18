@@ -70,7 +70,7 @@ func isDotPath(path string) bool {
 	if path == "." {
 		return false
 	}
-	dirs := strings.Split(path, string(filepath.Separator))
+	dirs := strings.Split(filepath.ToSlash(path), "/")
 	for _, v := range dirs {
 		if v[0] == '.' {
 			return true

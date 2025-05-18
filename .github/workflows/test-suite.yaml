@@ -15,18 +15,18 @@ jobs:
     strategy:
       matrix:
         include:
-          - name: Linux / AMD64
+          - name: Linux (amd64)
             os: ubuntu-latest
-          - name: Linux / ARM64
+          - name: Linux (arm64)
             os: ubuntu-24.04-arm
-          - name: MacOS / AMD64
+          - name: MacOS (amd64)
             os: macos-13
-          - name: MacOS / ARM64
+          - name: MacOS (arm64)
             os: macos-latest
-          - name: Windows / AMD64
+          - name: Windows (arm64)
             os: windows-latest
-            continue-on-error: true
-          - name: Windows / ARM64
+            continue-on-error: true # TODO: Windows is not well supported
+          - name: Windows (arm64)
             os: windows-11-arm
             continue-on-error: true
     runs-on: ${{ matrix.os }}
