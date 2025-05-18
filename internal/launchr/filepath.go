@@ -7,6 +7,7 @@ import (
 	osuser "os/user"
 	"path/filepath"
 	"reflect"
+	"strings"
 )
 
 // MustAbs returns absolute filepath and panics on error.
@@ -62,7 +63,20 @@ func EnsurePath(parts ...string) error {
 
 // IsHiddenPath checks if a path is hidden path.
 func IsHiddenPath(path string) bool {
-	return isHiddenPath(path)
+	return isDotPath(path) || isHiddenPath(path)
+}
+
+func isDotPath(path string) bool {
+	if path == "." {
+		return false
+	}
+	dirs := strings.Split(path, string(filepath.Separator))
+	for _, v := range dirs {
+		if v[0] == '.' {
+			return true
+		}
+	}
+	return false
 }
 
 // IsSystemPath checks if a path is a system path.
@@ -174,4 +188,13 @@ func MkdirTempWithCleanup(pattern string) (string, error) {
 	})
 
 	return dirPath, nil
+}
+
+// EscapePathString escapes characters that may be
+// incorrectly treated as a string like backshash "\" in a Windows path.
+func EscapePathString(s string) string {
+	if filepath.Separator == '/' {
+		return s
+	}
+	return strings.Replace(s, "\\", "\\\\", -1)
 }
