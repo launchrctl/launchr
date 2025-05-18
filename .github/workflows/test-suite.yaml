@@ -1,12 +1,13 @@
 name: Test suite
 on:
   workflow_call:
-    test-run:
-      description: 'Custom command to run'
-      default: |
-        go test ./...
-      required: false
-      type: string
+    inputs:
+      test-run:
+        description: 'Custom command to run'
+        default: |
+          go test ./...
+        required: false
+        type: string
 
 jobs:
   test:
