@@ -1,13 +1,7 @@
-name: Tests
+name: Test suite
 on:
-  push:
-    branches:
-      - '**'
-  pull_request:
-    branches:
-      - '**'
   workflow_call:
-    run:
+    test-run:
       description: 'Custom command to run'
       default: |
         go test ./...
@@ -52,4 +46,22 @@ jobs:
 
       - name: Test
         id: run-tests
-        run: ${{ inputs.run }}
+        run: ${{ inputs.test-run }}
+
+  lint:
+    name: Lint code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Prepare dependencies
+        run: go mod download
+
+      - name: Test
+        id: run-tests
+        run: make lint
