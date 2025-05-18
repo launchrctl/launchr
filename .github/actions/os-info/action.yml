@@ -1,0 +1,41 @@
+name: 'OS Info'
+description: 'Get information about the current operating system and architecture'
+
+runs:
+  using: "composite"
+  steps:
+    - name: OS and Architecture (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        # Set OS
+        echo "OS Type: Linux"
+        echo "Architecture: $(uname -m)"
+        echo "Kernel version: $(uname -r)"
+        if [ -f /etc/os-release ]; then
+          . /etc/os-release
+          echo "OS Version: $NAME $VERSION_ID"
+        else
+          echo "OS Version: unknown"
+        fi
+
+    - name: OS and Architecture (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        echo "OS: macOS"
+        echo "Architecture: $(uname -m)"
+        # Get OS Version
+        OS_VERSION="$(sw_vers -productName) $(sw_vers -productVersion)"
+        echo "OS Version: $OS_VERSION"
+
+    - name: OS and Architecture (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $arch = [System.Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE")
+        $winVer = [System.Environment]::OSVersion.Version.ToString()
+        
+        Write-Host "OS: Windows"
+        Write-Host "Architecture: $arch"
+        Write-Host "OS Version: Windows $winVer"

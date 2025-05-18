@@ -1,0 +1,68 @@
+name: Test suite
+on:
+  workflow_call:
+    inputs:
+      test-run:
+        description: 'Custom command to run'
+        default: |
+          go test ./...
+        required: false
+        type: string
+
+jobs:
+  test:
+    name: Test on ${{ matrix.name }}
+    strategy:
+      matrix:
+        include:
+          - name: Linux (amd64)
+            os: ubuntu-latest
+          - name: Linux (arm64)
+            os: ubuntu-24.04-arm
+          - name: MacOS (amd64)
+            os: macos-13
+          - name: MacOS (arm64)
+            os: macos-latest
+          - name: Windows (arm64)
+            os: windows-latest
+            continue-on-error: true # TODO: Windows is not well supported
+          - name: Windows (arm64)
+            os: windows-11-arm
+            continue-on-error: true
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.continue-on-error || false }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: OS Info
+        uses: ./.github/actions/os-info
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Prepare dependencies
+        run: go mod download
+
+      - name: Test
+        id: run-tests
+        run: ${{ inputs.test-run }}
+
+  lint:
+    name: Lint code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Prepare dependencies
+        run: go mod download
+
+      - name: Test
+        id: run-tests
+        run: make lint

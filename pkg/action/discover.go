@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -16,7 +15,7 @@ import (
 
 const actionsDirname = "actions"
 
-var actionsSubdir = strings.Join([]string{"", actionsDirname, ""}, string(filepath.Separator))
+var actionsSubdir = filepath.FromSlash("/" + actionsDirname + "/")
 
 // DiscoveryPlugin is a launchr plugin to discover actions.
 type DiscoveryPlugin interface {
