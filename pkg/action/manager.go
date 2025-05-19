@@ -29,7 +29,7 @@ type Manager interface {
 
 	// AddDecorators adds new decorators to manager.
 	AddDecorators(withFns ...DecorateWithFn)
-	// Decorate decorates an action with given behaviors and returns its copy.
+	// Decorate decorates an action with given behaviors.
 	// If functions withFn are not provided, default functions are applied.
 	Decorate(a *Action, withFn ...DecorateWithFn)
 
@@ -105,14 +105,6 @@ type actionManagerMap struct {
 	persistentFlags *PersistentFlags
 
 	runManagerMap
-}
-
-func (m *actionManagerMap) AddDecorators(withFns ...DecorateWithFn) {
-	m.dwFns = append(m.dwFns, withFns...)
-}
-
-func (m *actionManagerMap) GetPersistentFlags() *PersistentFlags {
-	return m.persistentFlags
 }
 
 // NewManager constructs a new action manager.
@@ -331,6 +323,14 @@ func (m *actionManagerMap) SetActionIDProvider(p IDProvider) {
 		p = DefaultIDProvider{}
 	}
 	m.idProvider = p
+}
+
+func (m *actionManagerMap) AddDecorators(withFns ...DecorateWithFn) {
+	m.dwFns = append(m.dwFns, withFns...)
+}
+
+func (m *actionManagerMap) GetPersistentFlags() *PersistentFlags {
+	return m.persistentFlags
 }
 
 // RunInfo stores information about a running action.

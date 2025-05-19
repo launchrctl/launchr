@@ -31,8 +31,8 @@ const (
 )
 
 type runtimeContainer struct {
-	LoggerAware
-	TermAware
+	WithLogger
+	WithTerm
 
 	// crt is a container runtime.
 	crt driver.ContainerRunner
@@ -138,11 +138,11 @@ func (c *runtimeContainer) ValidateFlags(flags InputParams) error {
 	opts, optsReq := def.JSONSchema()
 	s := jsonschema.Schema{
 		Type:     jsonschema.Object,
-		Required: []string{jsonschemaPersistentOpts},
+		Required: []string{jsonschemaPropPersistent},
 		Properties: map[string]any{
-			jsonschemaPersistentOpts: map[string]any{
+			jsonschemaPropPersistent: map[string]any{
 				"type":                 "object",
-				"title":                jsonschemaPersistentOpts,
+				"title":                jsonschemaPropPersistent,
 				"properties":           opts,
 				"required":             optsReq,
 				"additionalProperties": false,
@@ -150,7 +150,7 @@ func (c *runtimeContainer) ValidateFlags(flags InputParams) error {
 		},
 	}
 
-	return jsonschema.Validate(s, map[string]any{jsonschemaPersistentOpts: flags})
+	return jsonschema.Validate(s, map[string]any{jsonschemaPropPersistent: flags})
 }
 
 func (c *runtimeContainer) SetInput(_ *Action, input *Input, flags InputParams) error {

@@ -33,8 +33,8 @@ func (p *PersistentFlags) Clone() *PersistentFlags {
 }
 
 // GetAll returns latest state of flags.
-func (p *PersistentFlags) GetAll() map[string]any {
-	result := make(map[string]any)
+func (p *PersistentFlags) GetAll() InputParams {
+	result := make(InputParams)
 	for name, value := range p.defaults {
 		if _, ok := p.values[name]; !ok {
 			result[name] = value
@@ -46,8 +46,7 @@ func (p *PersistentFlags) GetAll() map[string]any {
 	return result
 }
 
-// Exists checks if flag exists.
-func (p *PersistentFlags) Exists(name string) bool {
+func (p *PersistentFlags) exists(name string) bool {
 	_, ok := p.defaults[name]
 	return ok
 }
@@ -55,7 +54,7 @@ func (p *PersistentFlags) Exists(name string) bool {
 // Get returns state of named flag.
 // Return false if flag doesn't exist.
 func (p *PersistentFlags) Get(name string) (any, bool) {
-	if !p.Exists(name) {
+	if !p.exists(name) {
 		return nil, false
 	}
 
@@ -71,12 +70,8 @@ func (p *PersistentFlags) Get(name string) (any, bool) {
 
 // Set sets new state value for a flag. Does nothing if flag doesn't exist.
 func (p *PersistentFlags) Set(name string, value any) {
-	if !p.Exists(name) {
+	if !p.exists(name) {
 		return
-	}
-
-	if value == nil {
-		panic(fmt.Sprintf("flag `%s` cannot be nil", name))
 	}
 
 	p.values[name] = value
@@ -123,11 +118,11 @@ func (p *PersistentFlags) ValidateFlags(flags InputParams) error {
 	opts, optsReq := p.definitions.JSONSchema()
 	s := jsonschema.Schema{
 		Type:     jsonschema.Object,
-		Required: []string{jsonschemaPersistentOpts},
+		Required: []string{jsonschemaPropPersistent},
 		Properties: map[string]any{
-			jsonschemaPersistentOpts: map[string]any{
+			jsonschemaPropPersistent: map[string]any{
 				"type":                 "object",
-				"title":                jsonschemaPersistentOpts,
+				"title":                jsonschemaPropPersistent,
 				"properties":           opts,
 				"required":             optsReq,
 				"additionalProperties": false,
@@ -135,5 +130,5 @@ func (p *PersistentFlags) ValidateFlags(flags InputParams) error {
 		},
 	}
 
-	return jsonschema.Validate(s, map[string]any{jsonschemaPersistentOpts: flags})
+	return jsonschema.Validate(s, map[string]any{jsonschemaPropPersistent: flags})
 }

@@ -26,9 +26,9 @@ type Input struct {
 	args InputParams
 	// opts contains parsed options with default values.
 	opts InputParams
-	// persistent contains passed persistent flags values.
+	// persistent contains application and overridden by action persistent flag values.
 	persistent InputParams
-	// io contains out/in/err destinations. @todo should it be in Input?
+	// io contains out/in/err destinations.
 	io launchr.Streams
 
 	// argsPos contains raw positional arguments.
@@ -47,7 +47,6 @@ func NewInput(a *Action, args InputParams, opts InputParams, io launchr.Streams)
 	argsPos := argsNamedToPos(args, def.Arguments)
 	// Make sure the special key doesn't leak.
 	delete(args, inputMapKeyArgsPos)
-
 	return &Input{
 		action:     a,
 		args:       setParamDefaults(args, def.Arguments),

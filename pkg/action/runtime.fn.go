@@ -9,8 +9,8 @@ type FnRuntimeCallback func(ctx context.Context, a *Action) error
 
 // FnRuntime is a function type implementing [Runtime].
 type FnRuntime struct {
-	LoggerAware
-	TermAware
+	WithLogger
+	WithTerm
 
 	fn FnRuntimeCallback
 }

@@ -39,6 +39,9 @@ func CobraImpl(a *action.Action, streams launchr.Streams, manager action.Manager
 				}
 			}
 
+			// Retrieve current persistent flags state and pass to action. It will be later used during decorate or
+			// other action steps.
+			// Flags are immutable in action.
 			for k, v := range manager.GetPersistentFlags().GetAll() {
 				input.SetPersistentFlag(k, v)
 			}
@@ -48,6 +51,9 @@ func CobraImpl(a *action.Action, streams launchr.Streams, manager action.Manager
 				return err
 			}
 
+			// Re-apply all registered decorators to action before it's executed.
+			// Triggered after action.SetInput to ensure decorators have access to all necessary data from the input
+			// to proceed.
 			manager.Decorate(a)
 
 			return nil

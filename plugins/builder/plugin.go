@@ -35,6 +35,9 @@ func (p *Plugin) PluginInfo() launchr.PluginInfo {
 }
 
 type builderInput struct {
+	action.WithLogger
+	action.WithTerm
+
 	name    string
 	out     string
 	timeout string
@@ -70,20 +73,19 @@ func (p *Plugin) DiscoverActions(_ context.Context) ([]*action.Action, error) {
 			nocache: input.Opt("no-cache").(bool),
 		}
 
-		log := launchr.Log().With()
+		log := launchr.Log()
 		if rt, ok := a.Runtime().(action.RuntimeLoggerAware); ok {
 			log = rt.LogWith()
 		}
+		flags.WithLogger.SetLogger(log)
 
 		term := launchr.Term()
 		if rt, ok := a.Runtime().(action.RuntimeTermAware); ok {
 			term = rt.Term()
 		}
+		flags.WithTerm.SetTerm(term)
 
-		return Execute(ctx, p.app.Streams(), &flags, &buildUtilities{
-			log:  log,
-			term: term,
-		})
+		return Execute(ctx, p.app.Streams(), &flags)
 	}))
 	return []*action.Action{a}, nil
 }
@@ -101,7 +103,7 @@ func (p *Plugin) Generate(config launchr.GenerateConfig) error {
 }
 
 // Execute runs launchr and executes build of launchr.
-func Execute(ctx context.Context, streams launchr.Streams, flags *builderInput, utilities *buildUtilities) error {
+func Execute(ctx context.Context, streams launchr.Streams, flags *builderInput) error {
 	// Set build timeout.
 	timeout, err := time.ParseDuration(flags.timeout)
 	if err != nil {
@@ -146,10 +148,13 @@ func Execute(ctx context.Context, streams launchr.Streams, flags *builderInput, 
 		return err
 	}
 
-	builder, err := NewBuilder(opts, utilities)
+	builder, err := NewBuilder(opts)
 	if err != nil {
 		return err
 	}
+	builder.WithLogger = flags.WithLogger
+	builder.WithTerm = flags.WithTerm
+
 	defer builder.Close()
 	return builder.Build(ctx, streams)
 }

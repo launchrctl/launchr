@@ -49,32 +49,36 @@ type RuntimeLoggerAware interface {
 	// Log returns runtime logger
 	Log() *launchr.Logger
 	// LogWith returns runtime logger with attributes
-	LogWith(attrs ...any) *launchr.Slog
+	LogWith(attrs ...any) *launchr.Logger
 }
 
-// LoggerAware provides a runtime composition with log utilities.
-type LoggerAware struct {
+// WithLogger provides a composition with log utilities.
+type WithLogger struct {
 	logger *launchr.Logger
 	// logWith contains context arguments for a structured logger.
 	logWith []any
 }
 
 // SetLogger implements [RuntimeLoggerAware] interface
-func (c *LoggerAware) SetLogger(l *launchr.Logger) {
+func (c *WithLogger) SetLogger(l *launchr.Logger) {
 	c.logger = l
 }
 
 // Log implements [RuntimeLoggerAware] interface
-func (c *LoggerAware) Log() *launchr.Logger {
+func (c *WithLogger) Log() *launchr.Logger {
 	return c.logger
 }
 
 // LogWith implements [RuntimeLoggerAware] interface
-func (c *LoggerAware) LogWith(attrs ...any) *launchr.Slog {
+func (c *WithLogger) LogWith(attrs ...any) *launchr.Logger {
 	if attrs != nil {
 		c.logWith = append(c.logWith, attrs...)
 	}
-	return c.logger.With(c.logWith...)
+
+	return &launchr.Logger{
+		Slog:       c.logger.With(c.logWith...),
+		LogOptions: c.logger.LogOptions,
+	}
 }
 
 // RuntimeTermAware is an interface for term runtime.
@@ -86,17 +90,17 @@ type RuntimeTermAware interface {
 	Term() *launchr.Terminal
 }
 
-// TermAware provides a runtime composition with term utilities.
-type TermAware struct {
+// WithTerm provides a composition with term utilities.
+type WithTerm struct {
 	term *launchr.Terminal
 }
 
 // SetTerm implements [RuntimeTermAware] interface
-func (c *TermAware) SetTerm(t *launchr.Terminal) {
+func (c *WithTerm) SetTerm(t *launchr.Terminal) {
 	c.term = t
 }
 
 // Term implements [RuntimeTermAware] interface
-func (c *TermAware) Term() *launchr.Terminal {
+func (c *WithTerm) Term() *launchr.Terminal {
 	return c.term
 }

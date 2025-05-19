@@ -9,6 +9,7 @@ import (
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/action"
+	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 func init() {
@@ -145,8 +146,11 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	out := streams.Out()
 	// Set terminal output.
 	launchr.Term().SetOutput(out)
+	// if some library, that we don't control, uses a std log
+	// We ensure that std lib logger has the same output level as the Terminal. It is NOT our app specific logger.
 	log.SetOutput(out)
 
+	// Enable logger.
 	logger := NewLogger(logFormat, logLevel, out)
 	launchr.SetLogger(logger)
 
@@ -161,13 +165,16 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	var am action.Manager
 	app.GetService(&am)
 
+	// Retrieve and expand application persistent flags with new log and term related options.
 	persistentFlags := am.GetPersistentFlags()
-	persistentFlags.AddDefinitions(p.getPluginPersistentFlags())
+	persistentFlags.AddDefinitions(getVerbosityPersistentFlags())
 
+	// Store initial values of persistent flags.
 	persistentFlags.Set("log-level", logger.Level().String())
 	persistentFlags.Set("log-format", logFormat.String())
 	persistentFlags.Set("quiet", quiet)
 
+	// Add new decorators which provide automatic logger and term creation for action based on persistent flags state.
 	am.AddDecorators(withCustomLogger, withCustomTerm)
 
 	return nil
@@ -208,5 +215,80 @@ func logLevelFlagInt(v int) launchr.LogLevel {
 		return launchr.LogLevelDebug
 	default:
 		return launchr.LogLevelDisabled
+	}
+}
+
+// withCustomLogger decorator adds a new logger for [RuntimeLoggerAware] runtime.
+func withCustomLogger(_ action.Manager, a *action.Action) {
+	if a.Runtime() == nil {
+		return
+	}
+
+	if !a.Input().IsValidated() {
+		return
+	}
+
+	if rt, ok := a.Runtime().(action.RuntimeLoggerAware); ok {
+		var logFormat LogFormat
+		if lfStr, ok := a.Input().PersistentFlag("log-format").(string); ok {
+			logFormat = LogFormat(lfStr)
+		}
+
+		var logLevel launchr.LogLevel
+		if llStr, ok := a.Input().PersistentFlag("log-level").(string); ok {
+			logLevel = launchr.LogLevelFromString(llStr)
+		}
+
+		logger := NewLogger(logFormat, logLevel, a.Input().Streams().Out())
+		rt.SetLogger(logger)
+	}
+}
+
+// withCustomTerm decorator adds a new term for [RuntimeTermAware] runtime.
+func withCustomTerm(_ action.Manager, a *action.Action) {
+	if a.Runtime() == nil {
+		return
+	}
+
+	if !a.Input().IsValidated() {
+		return
+	}
+
+	if rt, ok := a.Runtime().(action.RuntimeTermAware); ok {
+		term := launchr.NewTerminal()
+		term.SetOutput(a.Input().Streams().Out())
+		if quiet, ok := a.Input().PersistentFlag("log-level").(bool); ok && quiet {
+			term.DisableOutput()
+		}
+
+		rt.SetTerm(term)
+	}
+}
+
+func getVerbosityPersistentFlags() action.ParametersList {
+	return action.ParametersList{
+		&action.DefParameter{
+			Name:        "log-level",
+			Title:       "Log level",
+			Description: "Log level, can be: DEBUG, INFO, WARN, ERROR or NONE",
+			Type:        jsonschema.String,
+			Default:     "NONE",
+			Enum:        []any{"DEBUG", "INFO", "WARN", "ERROR", "NONE"},
+		},
+		&action.DefParameter{
+			Name:        "log-format",
+			Title:       "Log format",
+			Description: "Log format, can be: pretty, plain or json",
+			Type:        jsonschema.String,
+			Default:     "pretty",
+			Enum:        []any{"pretty", "plain", "json"},
+		},
+		&action.DefParameter{
+			Name:        "quiet",
+			Title:       "Quiet",
+			Description: "Disable output to the console",
+			Type:        jsonschema.Boolean,
+			Default:     false,
+		},
 	}
 }
