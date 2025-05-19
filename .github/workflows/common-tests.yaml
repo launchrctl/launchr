@@ -1,17 +1,10 @@
-name: Test suite
+name: Test
 on:
   workflow_call:
-    inputs:
-      test-run:
-        description: 'Custom command to run'
-        default: |
-          go test ./...
-        required: false
-        type: string
 
 jobs:
   test:
-    name: Test on ${{ matrix.name }}
+    name: Test ${{ matrix.name }}
     strategy:
       matrix:
         include:
@@ -23,7 +16,7 @@ jobs:
             os: macos-13
           - name: MacOS (arm64)
             os: macos-latest
-          - name: Windows (arm64)
+          - name: Windows (amd64)
             os: windows-latest
             continue-on-error: true # TODO: Windows is not well supported
           - name: Windows (arm64)
@@ -47,7 +40,8 @@ jobs:
 
       - name: Test
         id: run-tests
-        run: ${{ inputs.test-run }}
+        run: |
+          go test ./...
 
   lint:
     name: Lint code
@@ -59,9 +53,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: 'stable'
-
-      - name: Prepare dependencies
-        run: go mod download
 
       - name: Test
         id: run-tests

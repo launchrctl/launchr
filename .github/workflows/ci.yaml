@@ -8,6 +8,6 @@ on:
       - '**'
 
 jobs:
-  run-tests:
+  common-tests:
     name: Test
-    uses: ./.github/workflows/test-suite.yaml
+    uses: ./.github/workflows/common-tests.yaml
