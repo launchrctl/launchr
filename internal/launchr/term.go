@@ -88,7 +88,9 @@ func (p *ptermPrinter) SetOutput(w io.Writer) {
 	if !method.IsValid() {
 		panic("WithWriter is not implemented for this pterm.TextPrinter")
 	}
-	method.Call([]reflect.Value{reflect.ValueOf(w)})
+	result := method.Call([]reflect.Value{reflect.ValueOf(w)})
+	// Replace old printer by new one as WithWriter returns fresh copy of struct.
+	p.pterm = result[0].Interface().(pterm.TextPrinter)
 }
 
 // Terminal prints formatted text to the console.
