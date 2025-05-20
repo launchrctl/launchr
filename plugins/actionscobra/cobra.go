@@ -34,7 +34,7 @@ func CobraImpl(a *action.Action, streams launchr.Streams, manager action.Manager
 			// Set runtime opts.
 			if r, ok := a.Runtime().(action.RuntimeFlags); ok {
 				runOpts = derefOpts(filterChangedFlags(cmd, runOpts))
-				if err = r.SetInput(a, input, runOpts); err != nil {
+				if err = r.SetFlags(a, input, runOpts); err != nil {
 					return err
 				}
 			}

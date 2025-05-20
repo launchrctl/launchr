@@ -153,7 +153,7 @@ func (c *runtimeContainer) ValidateFlags(flags InputParams) error {
 	return jsonschema.Validate(s, map[string]any{jsonschemaPropPersistent: flags})
 }
 
-func (c *runtimeContainer) SetInput(_ *Action, input *Input, flags InputParams) error {
+func (c *runtimeContainer) SetFlags(_ *Action, input *Input, flags InputParams) error {
 	if v, ok := flags[containerFlagUseVolumeWD]; ok {
 		c.useVolWD = v.(bool)
 	}
