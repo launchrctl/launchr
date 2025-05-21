@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/launchrctl/launchr/internal/launchr"
 )
 
 // ContainerRunner defines common interface for container environments.
@@ -136,7 +138,27 @@ type ContainerListResult struct {
 // ImageStatusResponse stores the response when getting the image.
 type ImageStatusResponse struct {
 	Status   ImageStatus
-	Progress io.ReadCloser
+	Progress *ImageProgressStream
+}
+
+// ImageProgressStream holds Image progress reader and a way to stream it to the given output.
+type ImageProgressStream struct {
+	io.ReadCloser
+	streamer func(io.Reader, *launchr.Out) error
+}
+
+// Stream outputs progress to the given output.
+func (p *ImageProgressStream) Stream(out *launchr.Out) error {
+	if p.streamer == nil {
+		_, err := io.Copy(out, p.ReadCloser)
+		return err
+	}
+	return p.streamer(p.ReadCloser, out)
+}
+
+// Close closes the reader.
+func (p *ImageProgressStream) Close() error {
+	return p.ReadCloser.Close()
 }
 
 // ImageRemoveResponse stores response when removing the image.

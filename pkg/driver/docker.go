@@ -6,16 +6,17 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/launchrctl/launchr/internal/launchr"
-	"github.com/launchrctl/launchr/pkg/archive"
-
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/errdefs"
+	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/docker/pkg/stdcopy"
+
+	"github.com/launchrctl/launchr/internal/launchr"
+	"github.com/launchrctl/launchr/pkg/archive"
 )
 
 const dockerNetworkModeHost = "host"
@@ -134,14 +135,26 @@ func (d *dockerRuntime) ImageEnsure(ctx context.Context, imgOpts ImageOptions) (
 		if errBuild != nil {
 			return nil, errBuild
 		}
-		return &ImageStatusResponse{Status: ImageBuild, Progress: resp.Body}, nil
+		return &ImageStatusResponse{
+			Status: ImageBuild,
+			Progress: &ImageProgressStream{
+				ReadCloser: resp.Body,
+				streamer:   dockerDisplayJSONMessages,
+			},
+		}, nil
 	}
 	// Pull the specified image.
 	reader, err := d.cli.ImagePull(ctx, imgOpts.Name, image.PullOptions{})
 	if err != nil {
 		return &ImageStatusResponse{Status: ImageUnexpectedError}, err
 	}
-	return &ImageStatusResponse{Status: ImagePull, Progress: reader}, nil
+	return &ImageStatusResponse{
+		Status: ImagePull,
+		Progress: &ImageProgressStream{
+			ReadCloser: reader,
+			streamer:   dockerDisplayJSONMessages,
+		},
+	}, nil
 }
 
 func (d *dockerRuntime) ImageRemove(ctx context.Context, img string, options ImageRemoveOptions) (*ImageRemoveResponse, error) {
@@ -361,4 +374,19 @@ func (d *dockerRuntime) doContainerWait(ctx context.Context, cid string) <-chan 
 	}()
 
 	return statusC
+}
+
+// dockerDisplayJSONMessages prints docker json output to streams.
+func dockerDisplayJSONMessages(in io.Reader, out *launchr.Out) error {
+	err := jsonmessage.DisplayJSONMessagesStream(in, out, out.FD(), out.IsTerminal(), nil)
+	if err != nil {
+		if jerr, ok := err.(*jsonmessage.JSONError); ok {
+			// If no error code is set, default to 1
+			if jerr.Code == 0 {
+				jerr.Code = 1
+			}
+			return jerr
+		}
+	}
+	return err
 }

@@ -3,12 +3,12 @@
 Service is a launchr interface to share functionality between plugins. It is a simple Dependency Injection mechanism.
 
 In launchr there are several core services:
-1. `launchr.Config` - stores global launchr configuration, see [config documentation](config.global.md).
-2. `action.Manager` - manages available actions, see [actions documentation](actions.md)
+1. `launchr.Config` - stores global launchr configuration, see [config documentation](../config.md).
+2. `action.Manager` - manages available actions, see [actions documentation](../actions.md)
 3. `launchr.PluginManager` - stores all registered plugins.
 
 Services available with plugins:
-1. [Keyring](https://github.com/launchrctl/keyring) - provides functionality to store passwords.
+1. [Keyring](https://github.com/launchrctl/keyring) - provides functionality to store credentials.
 
 ### How to use services
 

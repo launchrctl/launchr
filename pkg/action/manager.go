@@ -399,10 +399,10 @@ func (m *runManagerMap) RunInfoByID(id string) (RunInfo, bool) {
 // WithDefaultRuntime adds a default [Runtime] for an action.
 func WithDefaultRuntime(cfg launchr.Config) DecorateWithFn {
 	type configContainer struct {
-		Runtime string `yaml:"runtime"`
+		DefaultRuntime string `yaml:"default_runtime"`
 	}
 	var rtConfig configContainer
-	err := cfg.Get("container", &rtConfig)
+	err := cfg.Get("runtime.container", &rtConfig)
 	if err != nil {
 		launchr.Term().Warning().Printfln("configuration file field %q is malformed", "container")
 	}
@@ -414,7 +414,7 @@ func WithDefaultRuntime(cfg launchr.Config) DecorateWithFn {
 		switch def.Runtime.Type {
 		case runtimeTypeContainer:
 			var rt ContainerRuntime
-			switch driver.Type(rtConfig.Runtime) {
+			switch driver.Type(rtConfig.DefaultRuntime) {
 			case driver.Kubernetes:
 				rt = NewContainerRuntimeKubernetes()
 			case driver.Docker:

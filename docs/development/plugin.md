@@ -11,14 +11,16 @@ Available plugin types:
 2. `ActionDiscoveryPlugin` - discovers and provides actions
 3. `CobraPlugin` - adds cobra cli functionality. Use `ActionDiscoveryPlugin` to add new actions.
 4. `PersistentPreRunPlugin` - runs before cobra cobra command when all arguments are parsed.
-5. `GeneratePlugin` = generates supporting files before build.
+5. `GeneratePlugin` - generates arbitrarily required files before build.
 
 Plugin implementation examples:
 
-1. [Default plugins](../plugins)
+1. [Default plugins](../../plugins)
 2. [Keyring](https://github.com/launchrctl/keyring)
 3. [Compose](https://github.com/launchrctl/compose)
 4. [Web](https://github.com/launchrctl/web)
+5. [Plugin Example - Runtime Action](https://github.com/launchrctl/plugin-example-plugin-runtime)
+6. [Plugin Example - Container Runtime](https://github.com/launchrctl/plugin-example-container-runtime)
 
 ## Plugin declaration
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -513,6 +514,10 @@ func (k *k8sRuntime) addEphemeralContainer(ctx context.Context, cid string, opts
 			if containerStatus.Name == containerName {
 				if containerStatus.State.Terminated != nil {
 					return true, fmt.Errorf("ephemeral container %s has terminated with exit code %d", containerName, containerStatus.State.Terminated.ExitCode)
+				}
+				waitStatus := containerStatus.State.Waiting
+				if waitStatus != nil && strings.HasPrefix(waitStatus.Reason, "Err") {
+					return true, fmt.Errorf("failed to create ephemeral container (%s): %s", waitStatus.Reason, waitStatus.Message)
 				}
 				return containerStatus.State.Running != nil, nil
 			}

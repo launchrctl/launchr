@@ -10,7 +10,6 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -113,7 +112,10 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 		}
 		var r *driver.ImageStatusResponse
 		if s != -1 {
-			r = &driver.ImageStatusResponse{Status: s, Progress: p}
+			r = &driver.ImageStatusResponse{
+				Status:   s,
+				Progress: &driver.ImageProgressStream{ReadCloser: p},
+			}
 		}
 		return []any{r, err}
 	}
@@ -130,7 +132,7 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 			"image pulled",
 			&DefRuntimeContainer{Image: "pull"},
 			nil,
-			imgFn(driver.ImagePull, `{"stream":"Successfully pulled image\n"}`, nil),
+			imgFn(driver.ImagePull, `"Successfully pulled image"`, nil),
 		},
 		{
 			"image pulled error",
@@ -138,15 +140,15 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 			nil,
 			imgFn(
 				driver.ImagePull,
-				`{"errorDetail":{"code":1,"message":"fake pull error"},"error":"fake pull error"}`,
-				&jsonmessage.JSONError{Code: 1, Message: "fake pull error"},
+				"fake pull error",
+				fmt.Errorf("fake pull error"),
 			),
 		},
 		{
 			"image build local",
 			aconf,
 			actLoc.ImageBuildInfo(aconf.Image),
-			imgFn(driver.ImageBuild, `{"stream":"Successfully built image \"local\"\n"}`, nil),
+			imgFn(driver.ImageBuild, `Successfully built image "local"`, nil),
 		},
 		{
 			"image build local error",
@@ -154,15 +156,15 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 			actLoc.ImageBuildInfo(aconf.Image),
 			imgFn(
 				driver.ImageBuild,
-				`{"errorDetail":{"code":1,"message":"fake build error"},"error":"fake build error"}`,
-				&jsonmessage.JSONError{Code: 1, Message: "fake build error"},
+				"fake build error",
+				fmt.Errorf("fake build error"),
 			),
 		},
 		{
 			"image build config",
 			&DefRuntimeContainer{Image: "build:config"},
 			cfgImgRes.ImageBuildInfo("build:config"),
-			imgFn(driver.ImageBuild, `{"stream":"Successfully built image \"config\"\n"}`, nil),
+			imgFn(driver.ImageBuild, `Successfully built image "config"`, nil),
 		},
 		{
 			"container runtime error",
@@ -290,7 +292,7 @@ func Test_ContainerExec_createContainerDef(t *testing.T) {
 				return a
 			},
 			driver.ContainerDefinition{
-				ContainerName: driver.GetRandomName(0),
+				ContainerName: launchr.GetRandomString(4),
 				Command:       defaultCmd,
 				Entrypoint:    defaultEntrypoint,
 				Binds: []string{
@@ -316,7 +318,7 @@ func Test_ContainerExec_createContainerDef(t *testing.T) {
 				return a
 			},
 			driver.ContainerDefinition{
-				ContainerName: driver.GetRandomName(0),
+				ContainerName: launchr.GetRandomString(4),
 				Command:       defaultCmd,
 				Entrypoint:    defaultEntrypoint,
 				Binds: []string{
@@ -344,7 +346,7 @@ func Test_ContainerExec_createContainerDef(t *testing.T) {
 				return a
 			},
 			driver.ContainerDefinition{
-				ContainerName: driver.GetRandomName(0),
+				ContainerName: launchr.GetRandomString(4),
 				Command:       []string{"arg1", "arg2"},
 				Entrypoint:    []string{"/my/entrypoint"},
 				Volumes: containerAnonymousVolumes(

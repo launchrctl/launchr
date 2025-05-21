@@ -68,7 +68,7 @@ func (p ContainerNameProvider) Get(name string) string {
 	var rpl = strings.NewReplacer("_", "-", ":", "-", ".", "-")
 	suffix := ""
 	if p.RandomSuffix {
-		suffix = "_" + driver.GetRandomName(0)
+		suffix = "_" + launchr.GetRandomString(4)
 	}
 
 	return rpl.Replace(p.Prefix + name + suffix)
@@ -194,14 +194,13 @@ func (c *runtimeContainer) Init(ctx context.Context, _ *Action) (err error) {
 	}
 	// Check if the environment is remote.
 	info, err := c.crt.Info(ctx)
-	if err == nil {
-		c.isRemoteRuntime = info.Remote
-	} else {
+	if err != nil {
 		return err
 	}
+	c.isRemoteRuntime = info.Remote
 
 	// Set mount flag for SELinux.
-	if !c.isRemoteVolume() && c.isSELinuxEnabled(ctx) {
+	if !c.isRemote() && c.isSELinuxEnabled(ctx) {
 		// Check SELinux settings to allow reading the FS inside a container.
 		// Use the lowercase z flag to allow concurrent actions access to the FS.
 		c.volumeFlags += ":z"
@@ -257,9 +256,12 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 
 	// Remove the container after finish.
 	defer func() {
+		log.Debug("remove container after run")
 		errRm := c.crt.ContainerRemove(ctx, cid)
 		if errRm != nil {
 			log.Error("error on cleaning the running environment", "error", errRm)
+		} else {
+			log.Debug("container was successfully removed")
 		}
 	}()
 
@@ -299,7 +301,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 	log.Debug("starting container")
 	statusCh, cio, err := c.crt.ContainerStart(ctx, cid, runConfig)
 	if err != nil {
-		log.Debug("failed starting the container")
+		log.Error("failed to start the container", "err", err)
 		return err
 	}
 
@@ -353,6 +355,9 @@ func getCurrentUser() string {
 }
 
 func (c *runtimeContainer) Close() error {
+	if c.crt == nil {
+		return nil
+	}
 	return c.crt.Close()
 }
 
@@ -439,7 +444,7 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 		launchr.Term().Printfln("Image %q doesn't exist locally, pulling from the registry...", image)
 		log.Info("image doesn't exist locally, pulling from the registry")
 		// Output docker status only in Debug.
-		err = driver.DockerDisplayJSONMessages(status.Progress, streams)
+		err = status.Progress.Stream(streams.Out())
 		if err != nil {
 			launchr.Term().Error().Println("Error occurred while pulling the image %q", image)
 			log.Error("error while pulling the image", "error", err)
@@ -454,7 +459,7 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 		launchr.Term().Printfln("Image %q doesn't exist locally, building...", image)
 		log.Info("image doesn't exist locally, building the image")
 		// Output docker status only in Debug.
-		err = driver.DockerDisplayJSONMessages(status.Progress, streams)
+		err = status.Progress.Stream(streams.Out())
 		if err != nil {
 			launchr.Term().Error().Println("Error occurred while building the image %q", image)
 			log.Error("error while building the image", "error", err)
@@ -466,10 +471,6 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 
 func (c *runtimeContainer) containerCreate(ctx context.Context, a *Action, createOpts *driver.ContainerDefinition) (string, error) {
 	var err error
-	// Sync to disk virtual actions so the data is available in run.
-	if err = a.syncToDisk(); err != nil {
-		return "", err
-	}
 	if err = c.imageEnsure(ctx, a); err != nil {
 		return "", err
 	}
@@ -516,7 +517,7 @@ func (c *runtimeContainer) createContainerDef(a *Action, cname string) driver.Co
 		},
 	}
 
-	if c.isRemoteVolume() {
+	if c.isRemote() {
 		// Use anonymous volumes to be removed after finish.
 		createOpts.Volumes = containerAnonymousVolumes(
 			containerHostMount,
@@ -540,7 +541,7 @@ func containerAnonymousVolumes(paths ...string) []driver.ContainerVolume {
 }
 
 func (c *runtimeContainer) copyAllToContainer(ctx context.Context, cid string, a *Action) (err error) {
-	if !c.isRemoteVolume() {
+	if !c.isRemote() {
 		return nil
 	}
 	// @todo test somehow.
@@ -559,7 +560,7 @@ func (c *runtimeContainer) copyAllToContainer(ctx context.Context, cid string, a
 }
 
 func (c *runtimeContainer) copyAllFromContainer(ctx context.Context, cid string, a *Action) (err error) {
-	if !c.isRemoteVolume() || !c.copyBack {
+	if !c.isRemote() || !c.copyBack {
 		return nil
 	}
 	// @todo it's a bad implementation considering consequential runs, need to find a better way to sync with remote.
@@ -637,6 +638,6 @@ func (c *runtimeContainer) isSELinuxEnabled(ctx context.Context) bool {
 	return ok && launchr.IsSELinuxEnabled() && d.IsSELinuxSupported(ctx)
 }
 
-func (c *runtimeContainer) isRemoteVolume() bool {
+func (c *runtimeContainer) isRemote() bool {
 	return c.isRemoteRuntime || c.isSetRemote
 }

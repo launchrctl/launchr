@@ -174,7 +174,7 @@ func (t Template) WriteFile(name string) error {
 	return err
 }
 
-// GeneratePlugin is an interface to generate supporting files before build.
+// GeneratePlugin is an interface to generate arbitrarily required files before build.
 type GeneratePlugin interface {
 	Plugin
 	// Generate is a function called when application is generating code and assets for the build.

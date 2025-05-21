@@ -16,6 +16,30 @@ Actions give an ability to run arbitrary commands in containers.
 Container runtime is configured globally for all actions of type container. See [Global Configuration](config.md#container-runtime) definition.  
 If not specified, the action will use **Docker** as a default runtime.
 
+Docker or Kubernetes are not required to be installed to use containers. But the configuration must be present.
+
+### Docker
+
+Runtime tries to connect using the following configuration:
+
+1. `unix:///run/docker.sock` - default docker socket path
+2. Via [Docker environment variables](https://docs.docker.com/reference/cli/docker/#environment-variables), see the following variables: 
+   * `DOCKER_HOST`
+   * `DOCKER_API_VERSION`
+   * `DOCKER_CERT_PATH`
+   * `DOCKER_TLS_VERIFY`
+
+Normally, if the Docker installed locally, `unix:///run/docker.sock` will be present and used by default.  
+**NB!** If the docker is not running locally, you may have incorrect mounting of the paths. Consider using a flag `--remote-runtime`.
+
+### Kubernetes
+
+Runtime tries to connect using the following configuration:
+
+1. `~/.kube/config` - default kubectl configuration directory.
+2. `KUBECONFIG` environment variable, see [kuberenetes documentation](https://kubernetes.io/docs/concepts/configuration/organize-cluster-access-kubeconfig/#the-kubeconfig-environment-variable)
+    Usage example: `export KUBECONFIG="/etc/rancher/k3s/k3s.yaml"`
+
 ## Action definition
 
 Action configuration files are written in `yaml`, example declaration:
@@ -56,20 +80,20 @@ The action files must preserve a tree structure like `**/**/actions/*/action.yam
 Example:
 ```
 actions:
-└── upgrade
+└── foo
     └── action.yaml
-integration
-└── application
-    └── bus
+foo
+└── bar
+    └── buz
         └── actions
-            └── watch
+            └── waldo
                 └── action.yaml
-platform
+bar
 └── actions
-    ├── build
+    ├── foo
     │   ├── build.sh
     │   └── action.yaml
-    └── bump
+    └── buz
         ├── bump.py
         └── action.yaml
 ```
@@ -81,11 +105,10 @@ $ launchr --help
 launchr is a versatile CLI action runner that executes tasks defined in local or embeded yaml files across multiple runtimes
 ...
 Actions:
-  upgrade                           Upgrade: description functionality
-  foundation.software.flatcar:bump  Bump: foundation.software.flatcar:bump description
-  integration.application.bus:watch Watch: integration.application.bus:watch description
-  platform:build                    Platform Build: platform:build description
-  platform:bump                     Platform Bump: platform:bump description
+  foo                foo: foo description
+  foo.bar.buz:waldo  foo bar buz waldo: foo.bar.buz:waldo description
+  bar:foo            bar foo: bar:foo description
+  bar:buz            bar buz: bar:buz description
 ...
 ```
 
@@ -93,19 +116,19 @@ Actions:
 
 To run the command simply run:
 ```shell
-$ launchr platform:build [args...] [--options...]
+$ launchr foo:bar [args...] [--options...]
 ```
 
 To get more help for the action:
 
 
 ```shell
-$ launchr platform:build --help
+$ launchr foo:bar --help
 
-Platform build: platform:build description
+Foo Bar: foo:bar description
 
 Usage:
-  launchr example.actions.platform:build argStr [argInt] [flags]
+  launchr foo:bar argStr [argInt] [flags]
 
 Arguments:
       argInt int      Argument Integer: This is an optional integer argument

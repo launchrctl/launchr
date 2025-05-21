@@ -2,7 +2,9 @@
 package launchr
 
 import (
+	"crypto/rand"
 	"errors"
+	"fmt"
 	"os"
 	"reflect"
 	"sort"
@@ -146,4 +148,18 @@ Loop:
 	}
 
 	return commands
+}
+
+// GetRandomString generates a random alphanumeric string of the given length.
+func GetRandomString(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, length)
+	_, err := rand.Read(b)
+	if err != nil {
+		panic(fmt.Errorf("failed to generate random name: %w", err))
+	}
+	for i := range b {
+		b[i] = charset[int(b[i])%len(charset)]
+	}
+	return string(b)
 }
