@@ -26,9 +26,13 @@ type Manager interface {
 	Add(*Action) error
 	// Delete deletes the action from the manager.
 	Delete(id string)
-	// Decorate decorates an action with given behaviors and returns its copy.
+
+	// AddDecorators adds new decorators to manager.
+	AddDecorators(withFns ...DecorateWithFn)
+	// Decorate decorates an action with given behaviors.
 	// If functions withFn are not provided, default functions are applied.
-	Decorate(a *Action, withFn ...DecorateWithFn) *Action
+	Decorate(a *Action, withFn ...DecorateWithFn)
+
 	// GetIDFromAlias returns a real action ID by its alias. If not, returns alias.
 	GetIDFromAlias(alias string) string
 
@@ -37,6 +41,10 @@ type Manager interface {
 	// SetActionIDProvider sets global application action id provider.
 	// This id provider will be used as default on [Action] discovery process.
 	SetActionIDProvider(p IDProvider)
+
+	// GetPersistentFlags retrieves the instance of PersistentFlags containing global flag definitions and their
+	// current state.
+	GetPersistentFlags() *PersistentFlags
 
 	// AddValueProcessor adds processor to list of available processors
 	AddValueProcessor(name string, vp ValueProcessor)
@@ -94,6 +102,8 @@ type actionManagerMap struct {
 	discoverySeq *launchr.SliceSeqStateful[DiscoverActionsFn]
 	discTimeout  time.Duration
 
+	persistentFlags *PersistentFlags
+
 	runManagerMap
 }
 
@@ -104,6 +114,8 @@ func NewManager(withFns ...DecorateWithFn) Manager {
 		actionAliases: make(map[string]string),
 		dwFns:         withFns,
 		processors:    make(map[string]ValueProcessor),
+
+		persistentFlags: NewPersistentFlags(),
 
 		discTimeout: 10 * time.Second,
 
@@ -143,6 +155,7 @@ func (m *actionManagerMap) add(a *Action) error {
 		// Skip action because the definition is not correct.
 		return err
 	}
+
 	if dup, ok := m.actionStore[a.ID]; ok {
 		launchr.Log().Debug("action was overridden by another declaration",
 			"action_id", a.ID,
@@ -188,7 +201,9 @@ func (m *actionManagerMap) Delete(id string) {
 func (m *actionManagerMap) All() map[string]*Action {
 	ret := m.AllUnsafe()
 	for k, v := range ret {
-		ret[k] = m.Decorate(v, m.dwFns...)
+		a := v.Clone()
+		m.Decorate(a, m.dwFns...)
+		ret[k] = a
 	}
 	return ret
 }
@@ -196,7 +211,9 @@ func (m *actionManagerMap) All() map[string]*Action {
 func (m *actionManagerMap) Get(id string) (*Action, bool) {
 	a, ok := m.GetUnsafe(id)
 	// Process action with default decorators and return a copy to have an isolated scope.
-	return m.Decorate(a, m.dwFns...), ok
+	a = a.Clone()
+	m.Decorate(a, m.dwFns...)
+	return a, ok
 }
 
 func (m *actionManagerMap) GetUnsafe(id string) (a *Action, ok bool) {
@@ -281,18 +298,21 @@ func (m *actionManagerMap) GetValueProcessors() map[string]ValueProcessor {
 	return m.processors
 }
 
-func (m *actionManagerMap) Decorate(a *Action, withFns ...DecorateWithFn) *Action {
+func (m *actionManagerMap) AddDecorators(withFns ...DecorateWithFn) {
+	m.dwFns = append(m.dwFns, withFns...)
+}
+
+func (m *actionManagerMap) Decorate(a *Action, withFns ...DecorateWithFn) {
 	if a == nil {
-		return nil
+		return
 	}
 	if withFns == nil {
 		withFns = m.dwFns
 	}
-	a = a.Clone()
+
 	for _, fn := range withFns {
 		fn(m, a)
 	}
-	return a
 }
 
 func (m *actionManagerMap) GetActionIDProvider() IDProvider {
@@ -307,6 +327,10 @@ func (m *actionManagerMap) SetActionIDProvider(p IDProvider) {
 		p = DefaultIDProvider{}
 	}
 	m.idProvider = p
+}
+
+func (m *actionManagerMap) GetPersistentFlags() *PersistentFlags {
+	return m.persistentFlags
 }
 
 // RunInfo stores information about a running action.
