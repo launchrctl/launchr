@@ -298,6 +298,10 @@ func (m *actionManagerMap) GetValueProcessors() map[string]ValueProcessor {
 	return m.processors
 }
 
+func (m *actionManagerMap) AddDecorators(withFns ...DecorateWithFn) {
+	m.dwFns = append(m.dwFns, withFns...)
+}
+
 func (m *actionManagerMap) Decorate(a *Action, withFns ...DecorateWithFn) {
 	if a == nil {
 		return
@@ -323,10 +327,6 @@ func (m *actionManagerMap) SetActionIDProvider(p IDProvider) {
 		p = DefaultIDProvider{}
 	}
 	m.idProvider = p
-}
-
-func (m *actionManagerMap) AddDecorators(withFns ...DecorateWithFn) {
-	m.dwFns = append(m.dwFns, withFns...)
 }
 
 func (m *actionManagerMap) GetPersistentFlags() *PersistentFlags {
