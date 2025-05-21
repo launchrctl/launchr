@@ -32,16 +32,16 @@ It's possible to replace parts of the original action ID to receive prettier nam
 # ...
 launchrctl:
   actions_naming:
-    - search: ".roles."
+    - search: ".replaceme."
       replace: "."
     - search: "_"
       replace: "-"
 # ...
 ```
 
-In the given example, if an action is located in `plaform/roles/my_dir/actions/build/action.yaml`
-  * Before: `platform.roles.my_dir:build`
-  * After: `platform.my-dir:build`
+In the given example, if an action is located in `foo/replaceme/bar_buz/actions/fred/action.yaml`
+  * Before: `foo.replaceme.bar_buz:fred`
+  * After: `foo.bar-buz:fred`
 
 ## Build images
 
