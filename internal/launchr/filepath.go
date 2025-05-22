@@ -40,7 +40,8 @@ func FsRealpath(fsys fs.FS) string {
 			return MustAbs(fspath)
 		}
 	}
-	if typeString(fsys) == "*fs.subFS" {
+	switch typeString(fsys) {
+	case "*fs.subFS":
 		pfs := privateFieldValue[fs.FS](fsys, "fsys")
 		dir := privateFieldValue[string](fsys, "dir")
 		path := FsRealpath(pfs)

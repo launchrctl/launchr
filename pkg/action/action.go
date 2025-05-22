@@ -157,7 +157,8 @@ func (a *Action) syncToDisk() (err error) {
 	if err != nil {
 		return
 	}
-	fsys, err := fs.Sub(a.fs.fs, a.Dir())
+	// We use subpath if there are multiple directories in the FS.
+	fsys, err := fs.Sub(a.fs.fs, filepath.Dir(a.Filepath()))
 	if err != nil {
 		return
 	}
@@ -177,7 +178,14 @@ func (a *Action) Filepath() string {
 }
 
 // Dir returns an action file directory.
-func (a *Action) Dir() string { return filepath.Dir(a.Filepath()) }
+func (a *Action) Dir() string {
+	// Sync to disk virtual actions so the data is available in run.
+	if err := a.syncToDisk(); err != nil {
+		launchr.Log().Error("failed to sync plugin action to disc", "action", a.ID, "err", err)
+		return ""
+	}
+	return filepath.Dir(a.Filepath())
+}
 
 // Runtime returns environment to run the action.
 func (a *Action) Runtime() Runtime { return a.runtime }
