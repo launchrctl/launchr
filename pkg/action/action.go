@@ -251,13 +251,13 @@ func (a *Action) SetInput(input *Input) (err error) {
 	def := a.ActionDef()
 
 	// Process arguments.
-	err = a.processInputParams(def.Arguments, input.Args(), input.ArgsChanged())
+	err = a.processInputParams(def.Arguments, input.Args(), input.ArgsChanged(), input)
 	if err != nil {
 		return err
 	}
 
 	// Process options.
-	err = a.processInputParams(def.Options, input.Opts(), input.OptsChanged())
+	err = a.processInputParams(def.Options, input.Opts(), input.OptsChanged(), input)
 	if err != nil {
 		return err
 	}
@@ -273,7 +273,7 @@ func (a *Action) SetInput(input *Input) (err error) {
 	return a.EnsureLoaded()
 }
 
-func (a *Action) processInputParams(def ParametersList, inp InputParams, changed InputParams) error {
+func (a *Action) processInputParams(def ParametersList, inp InputParams, changed InputParams, input *Input) error {
 	var err error
 	for _, p := range def {
 		_, isChanged := changed[p.Name]
@@ -283,6 +283,7 @@ func (a *Action) processInputParams(def ParametersList, inp InputParams, changed
 			res, err = handler(res, ValueProcessorContext{
 				ValOrig:   inp[p.Name],
 				IsChanged: isChanged,
+				Input:     input,
 				DefParam:  p,
 				Action:    a,
 			})
