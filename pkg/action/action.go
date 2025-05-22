@@ -250,14 +250,16 @@ func (a *Action) ImageBuildInfo(image string) *driver.BuildDefinition {
 func (a *Action) SetInput(input *Input) (err error) {
 	def := a.ActionDef()
 
+	isTerminal := input.Streams().In().IsTerminal()
+
 	// Process arguments.
-	err = a.processInputParams(def.Arguments, input.Args(), input.ArgsChanged())
+	err = a.processInputParams(def.Arguments, input.Args(), input.ArgsChanged(), isTerminal)
 	if err != nil {
 		return err
 	}
 
 	// Process options.
-	err = a.processInputParams(def.Options, input.Opts(), input.OptsChanged())
+	err = a.processInputParams(def.Options, input.Opts(), input.OptsChanged(), isTerminal)
 	if err != nil {
 		return err
 	}
@@ -273,7 +275,7 @@ func (a *Action) SetInput(input *Input) (err error) {
 	return a.EnsureLoaded()
 }
 
-func (a *Action) processInputParams(def ParametersList, inp InputParams, changed InputParams) error {
+func (a *Action) processInputParams(def ParametersList, inp InputParams, changed InputParams, isTerminal bool) error {
 	var err error
 	for _, p := range def {
 		_, isChanged := changed[p.Name]
@@ -281,10 +283,11 @@ func (a *Action) processInputParams(def ParametersList, inp InputParams, changed
 		for i, procDef := range p.Process {
 			handler := p.processors[i]
 			res, err = handler(res, ValueProcessorContext{
-				ValOrig:   inp[p.Name],
-				IsChanged: isChanged,
-				DefParam:  p,
-				Action:    a,
+				ValOrig:    inp[p.Name],
+				IsChanged:  isChanged,
+				IsTerminal: isTerminal,
+				DefParam:   p,
+				Action:     a,
 			})
 			if err != nil {
 				return ErrValueProcessorHandler{

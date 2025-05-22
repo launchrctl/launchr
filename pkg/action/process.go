@@ -18,10 +18,11 @@ type ValueProcessor interface {
 
 // ValueProcessorContext is related context data for ValueProcessor.
 type ValueProcessorContext struct {
-	ValOrig   any           // ValOrig is the value before processing.
-	IsChanged bool          // IsChanged indicates if the value was input by user.
-	DefParam  *DefParameter // DefParam is the definition of the currently processed parameter.
-	Action    *Action       // Action is the related action definition.
+	ValOrig    any           // ValOrig is the value before processing.
+	IsChanged  bool          // IsChanged indicates if the value was input by user.
+	IsTerminal bool          // IsTerminal indicates if input has access to terminal.
+	DefParam   *DefParameter // DefParam is the definition of the currently processed parameter.
+	Action     *Action       // Action is the related action definition.
 }
 
 // ValueProcessorHandler is an actual implementation of [ValueProcessor] that processes the incoming value.
