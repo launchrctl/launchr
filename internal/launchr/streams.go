@@ -19,10 +19,11 @@ type Streams interface {
 }
 
 type commonStream struct {
-	fd         uintptr
+	fd    uintptr
+	state *mobyterm.State
+
 	isDiscard  bool
 	isTerminal bool
-	state      *mobyterm.State
 }
 
 // FD returns the file descriptor number for this stream.
@@ -38,15 +39,6 @@ func (s *commonStream) IsDiscard() bool {
 // IsTerminal returns true if this stream is connected to a terminal.
 func (s *commonStream) IsTerminal() bool {
 	return s.isTerminal
-}
-
-// SetRawTerminal sets raw mode on the terminal.
-func (s *commonStream) SetRawTerminal() (err error) {
-	if !s.IsTerminal() {
-		return nil
-	}
-	s.state, err = mobyterm.SetRawTerminal(s.fd)
-	return err
 }
 
 // RestoreTerminal restores normal mode to the terminal.
@@ -74,6 +66,15 @@ func (o *Out) Write(p []byte) (int, error) {
 		return len(p), nil
 	}
 	return o.out.Write(p)
+}
+
+// SetRawTerminal sets raw mode on the input terminal.
+func (o *Out) SetRawTerminal() (err error) {
+	if !o.commonStream.IsTerminal() {
+		return nil
+	}
+	o.commonStream.state, err = mobyterm.SetRawTerminalOutput(o.commonStream.fd)
+	return err
 }
 
 // GetTtySize returns the height and width in characters of the tty.
@@ -109,8 +110,12 @@ func NewOut(out io.Writer) *Out {
 	fd, isTerminal := mobyterm.GetFdInfo(out)
 	isDiscard := out == nil
 	return &Out{
-		commonStream: commonStream{fd: fd, isTerminal: isTerminal, isDiscard: isDiscard},
-		out:          out,
+		commonStream: commonStream{
+			fd:         fd,
+			isTerminal: isTerminal,
+			isDiscard:  isDiscard,
+		},
+		out: out,
 	}
 }
 
@@ -136,6 +141,15 @@ func (i *In) Close() error {
 	return i.in.Close()
 }
 
+// SetRawTerminal sets raw mode on the input terminal.
+func (i *In) SetRawTerminal() (err error) {
+	if !i.commonStream.IsTerminal() {
+		return nil
+	}
+	i.commonStream.state, err = mobyterm.SetRawTerminal(i.commonStream.fd)
+	return err
+}
+
 // Reader returns the wrapped reader.
 func (i *In) Reader() io.ReadCloser {
 	return i.in
@@ -146,8 +160,12 @@ func NewIn(in io.ReadCloser) *In {
 	fd, isTerminal := mobyterm.GetFdInfo(in)
 	isDiscard := in == nil
 	return &In{
-		commonStream: commonStream{fd: fd, isTerminal: isTerminal, isDiscard: isDiscard},
-		in:           in,
+		commonStream: commonStream{
+			fd:         fd,
+			isTerminal: isTerminal,
+			isDiscard:  isDiscard,
+		},
+		in: in,
 	}
 }
 
