@@ -18,9 +18,13 @@ const (
 	genPathTypeValid     genPathType = iota // genPathTypeValid is a valid actions path
 	genPathTypeArbitrary                    // genPathTypeArbitrary is a random string without actions directory.
 	genPathTypeGHActions                    // genPathTypeGHActions is an incorrect hidden path but with actions directory.
+	genPathTypeRoot                         // genPathTypeRoot is a path in root.
 )
 
 func genActionPath(d int, pathType genPathType) string {
+	if pathType == genPathTypeRoot {
+		d = 0
+	}
 	elems := make([]string, 0, d+3)
 	for i := 0; i < d; i++ {
 		elems = append(elems, driver.GetRandomName(0))

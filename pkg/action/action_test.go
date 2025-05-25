@@ -3,7 +3,6 @@ package action
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,20 +100,11 @@ func Test_Action(t *testing.T) {
 
 func Test_Action_NewYAMLFromFS(t *testing.T) {
 	t.Parallel()
-	// Prepare FS.
-	fsys := genFsTestMapActions(1, validFullYaml, genPathTypeArbitrary)
-	// Get first key to make subdir.
-	var key string
-	for key = range fsys {
-		// There is only 1 entry, we get the only key.
-		break
-	}
-
-	// Create action.
-	subfs, _ := fs.Sub(fsys, filepath.Dir(key))
-	a, err := NewYAMLFromFS("test", subfs)
-	require.NotNil(t, a)
+	// Create action in memory FS.
+	fsys := genFsTestMapActions(1, validFullYaml, genPathTypeRoot)
+	a, err := NewYAMLFromFS("test", fsys)
 	require.NoError(t, err)
+	require.NotNil(t, a)
 	assert.Equal(t, "test", a.ID)
 	require.NoError(t, a.EnsureLoaded())
 	assert.Equal(t, "Title", a.ActionDef().Title)
