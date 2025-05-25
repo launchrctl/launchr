@@ -1,0 +1,55 @@
+name: Debug with SSH Access
+
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        description: 'Operating System'
+        required: true
+        default: 'Ubuntu LTS (amd64)'
+        type: choice
+        options:
+          - 'Ubuntu LTS (amd64)'
+          - 'Ubuntu LTS (arm64)'
+          - 'macOS Latest (arm64)'
+          - 'macOS 13 (amd64)'
+          - 'Windows Latest (amd64)'
+          - 'Windows Latest (arm64)'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  debug:
+    name: Debug Environment
+    runs-on: >-
+      ${{
+        {
+          'Ubuntu LTS (amd64)': 'ubuntu-latest',
+          'Ubuntu LTS (arm64)': 'ubuntu-24.04-arm',
+          'macOS Latest (arm64)': 'macos-latest',
+          'macOS 13 (amd64)': 'macos-13',
+          'Windows Latest (amd64)': 'windows-latest'
+          'Windows Latest (arm64)': 'windows-11-arm'
+        }[github.event.inputs.os]
+      }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Install dependencies
+        run: |
+          go mod download
+          go install github.com/go-delve/delve/cmd/dlv@latest
+      
+      - name: Setup debug session
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+          timeout-minutes: 30
