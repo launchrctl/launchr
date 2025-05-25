@@ -16,9 +16,6 @@ on:
           - 'Windows Latest (amd64)'
           - 'Windows Latest (arm64)'
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 jobs:
   debug:
     name: Debug Environment
