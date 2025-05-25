@@ -187,13 +187,13 @@ func addPredefinedVariables(data map[string]any, a *Action) {
 		data["current_uid"] = s[0]
 		data["current_gid"] = s[1]
 	}
-	data["current_working_dir"] = a.wd         // app working directory
-	data["actions_base_dir"] = a.fs.Realpath() // root directory where the action was found
-	data["action_dir"] = a.Dir()               // directory of action file
+	data["current_working_dir"] = launchr.EscapePathString(a.wd)         // app working directory
+	data["actions_base_dir"] = launchr.EscapePathString(a.fs.Realpath()) // root directory where the action was found
+	data["action_dir"] = launchr.EscapePathString(a.Dir())               // directory of action file
 	// Get the path of the executable on the host.
 	bin, err := os.Executable()
 	if err != nil {
 		bin = launchr.Version().Name
 	}
-	data["current_bin"] = bin
+	data["current_bin"] = launchr.EscapePathString(bin)
 }

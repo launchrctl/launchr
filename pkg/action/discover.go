@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -16,7 +15,7 @@ import (
 
 const actionsDirname = "actions"
 
-var actionsSubdir = strings.Join([]string{"", actionsDirname, ""}, string(filepath.Separator))
+var actionsSubdir = filepath.FromSlash("/" + actionsDirname + "/")
 
 // DiscoveryPlugin is a launchr plugin to discover actions.
 type DiscoveryPlugin interface {
@@ -183,6 +182,19 @@ func (ad *Discovery) Discover(ctx context.Context) ([]*Action, error) {
 
 	// Traverse the FS.
 	chFiles, chErr := ad.findFiles(ctx)
+
+	// Check traversing the tree didn't have error.
+	// Usually no error, because we check for permissions.
+	var discoverErr error
+	errDone := make(chan struct{})
+	go func() {
+		defer close(errDone)
+		if err := <-chErr; err != nil {
+			discoverErr = err
+		}
+	}()
+
+	// Process files.
 	for f := range chFiles {
 		wg.Add(1)
 		go func(f string) {
@@ -196,10 +208,9 @@ func (ad *Discovery) Discover(ctx context.Context) ([]*Action, error) {
 	}
 
 	wg.Wait()
-	// Check traversing the tree didn't have error.
-	// Usually no error, because we check for permissions.
-	if err := <-chErr; err != nil {
-		return nil, err
+	// Wait for error handling to complete
+	if <-errDone; discoverErr != nil {
+		return nil, discoverErr
 	}
 
 	// Sort alphabetically.

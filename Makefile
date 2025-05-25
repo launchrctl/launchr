@@ -38,7 +38,7 @@ deps:
 .PHONY: test
 test:
 	$(info Running tests...)
-	go test ./...
+	go test -short ./...
 
 # Build launchr
 .PHONY: build

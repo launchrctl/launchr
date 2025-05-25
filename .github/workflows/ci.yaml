@@ -1,0 +1,16 @@
+name: CI
+on:
+  push:
+    branches:
+      - '**'
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'example/**'
+      - 'docs/**'
+
+jobs:
+  common-tests:
+    name: Test
+    uses: ./.github/workflows/common-tests.yaml

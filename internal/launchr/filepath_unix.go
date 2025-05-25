@@ -4,7 +4,6 @@ package launchr
 
 import (
 	"path/filepath"
-	"strings"
 )
 
 var skipRootDirs = []string{
@@ -46,17 +45,7 @@ var skipUserDirs = []string{
 }
 
 func isHiddenPath(path string) bool {
-	if path == "." {
-		return false
-	}
-	dirs := strings.Split(path, string(filepath.Separator))
-	for _, v := range dirs {
-		if v[0] == '.' {
-			return true
-		}
-	}
-
-	return false
+	return isDotPath(path)
 }
 
 func isRootPath(path string) bool {

@@ -1,0 +1,16 @@
+exec launchr --help
+stdout '^\s+foo\.baz\.bar-bar:waldo-fred-thud\s+foo$'
+! stderr .
+
+-- foo/bar/baz/bar/bar_bar/actions/waldo-fred_thud/action.yaml --
+action:
+  title: foo
+runtime: plugin
+
+-- .launchr/config.yaml --
+launchrctl:
+  actions_naming:
+    - search: ".bar."
+      replace: "."
+    - search: "_"
+      replace: "-"

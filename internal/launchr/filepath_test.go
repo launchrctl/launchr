@@ -11,7 +11,7 @@ import (
 
 func TestMkdirTemp(t *testing.T) {
 	t.Parallel()
-	dir, err := MkdirTemp("test")
+	dir, err := MkdirTempWithCleanup("test")
 	require.NoError(t, err)
 	require.NotEmpty(t, dir)
 	stat, err := os.Stat(dir)
