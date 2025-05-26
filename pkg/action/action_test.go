@@ -29,11 +29,13 @@ func Test_Action(t *testing.T) {
 	require.NoError(err)
 	require.NotEmpty(actions)
 	act := actions[0]
+	// Override the real path to skip [Action.syncToDisc].
+	act.fs.real = "/fstest/"
 
 	// Test dir
-	assert.Equal(filepath.Dir(act.fpath), act.Dir())
+	assert.Equal(act.fs.real+filepath.Dir(act.fpath), act.Dir())
 	act.fpath = "test/file/path/action.yaml"
-	assert.Equal("test/file/path", act.Dir())
+	assert.Equal(act.fs.real+"test/file/path", act.Dir())
 
 	// Test arguments and options.
 	inputArgs := InputParams{"arg1": "arg1", "arg2": "arg2", "arg-1": "arg-1", "arg_12": "arg_12_enum1"}

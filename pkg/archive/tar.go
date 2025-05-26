@@ -9,11 +9,12 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/docker/docker/pkg/archive"
+	"github.com/moby/go-archive"
+	"github.com/moby/go-archive/compression"
 )
 
 // Compression is the state represents if compressed or not.
-type Compression archive.Compression
+type Compression compression.Compression
 
 // Compressions types.
 const (
@@ -69,7 +70,7 @@ func Tar(src CopyInfo, dst CopyInfo, opts *TarOptions) (io.ReadCloser, error) {
 	tarOpts := archive.TarResourceRebaseOpts(sourceBase, srcInfo.RebaseName)
 	tarOpts.ExcludePatterns = opts.ExcludePatterns
 	maps.Insert(tarOpts.RebaseNames, maps.All(opts.RebaseNames))
-	tarOpts.Compression = archive.Compression(opts.Compression)
+	tarOpts.Compression = compression.Compression(opts.Compression)
 	slices.AppendSeq(tarOpts.IncludeFiles, slices.Values(opts.IncludeFiles))
 
 	r, err := archive.TarWithOptions(sourceDir, tarOpts)
@@ -119,7 +120,7 @@ func Untar(content io.ReadCloser, dstPath string, opts *TarOptions) error {
 		return err
 	}
 
-	dstDir, copyArchive, err := archive.PrepareArchiveCopy(content, srcInfo, dstInfo)
+	dstDir, copyArchive, err := archive.PrepareArchiveCopy(preArchive, srcInfo, dstInfo)
 	if err != nil {
 		return err
 	}

@@ -3,9 +3,8 @@ package driver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
-
-	"github.com/launchrctl/launchr/pkg/archive"
 
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -13,29 +12,46 @@ import (
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/errdefs"
+	"github.com/docker/docker/pkg/jsonmessage"
+	"github.com/docker/docker/pkg/stdcopy"
+
+	"github.com/launchrctl/launchr/internal/launchr"
+	"github.com/launchrctl/launchr/pkg/archive"
 )
 
-type dockerDriver struct {
-	cli client.APIClient
+const dockerNetworkModeHost = "host"
+
+// ContainerWaitResponse stores response given by wait result.
+type dockerWaitResponse struct {
+	StatusCode int
+	Error      error
 }
 
-// NewDockerDriver creates a docker driver.
-func NewDockerDriver() (ContainerRunner, error) {
+type dockerRuntime struct {
+	cli  client.APIClient
+	info SystemInfo
+}
+
+// NewDockerRuntime creates a docker runtime.
+func NewDockerRuntime() (ContainerRunner, error) {
 	// @todo it doesn't work with Colima or with non-default context.
 	c, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 
 	if err != nil {
 		return nil, err
 	}
-	return &dockerDriver{cli: c}, nil
+	return &dockerRuntime{cli: c}, nil
 }
 
-func (d *dockerDriver) Info(ctx context.Context) (SystemInfo, error) {
+func (d *dockerRuntime) Info(ctx context.Context) (SystemInfo, error) {
+	if d.info.ID != "" {
+		return d.info, nil
+	}
 	info, err := d.cli.Info(ctx)
 	if err != nil {
 		return SystemInfo{}, err
 	}
-	return SystemInfo{
+	d.info = SystemInfo{
 		ID:              info.ID,
 		Name:            info.Name,
 		ServerVersion:   info.ServerVersion,
@@ -47,10 +63,13 @@ func (d *dockerDriver) Info(ctx context.Context) (SystemInfo, error) {
 		NCPU:            info.NCPU,
 		MemTotal:        info.MemTotal,
 		SecurityOptions: info.SecurityOptions,
-	}, nil
+		// @todo consider remote environments where we can't directly bind local dirs.
+		Remote: false,
+	}
+	return d.info, nil
 }
 
-func (d *dockerDriver) IsSELinuxSupported(ctx context.Context) bool {
+func (d *dockerRuntime) IsSELinuxSupported(ctx context.Context) bool {
 	info, errInfo := d.cli.Info(ctx)
 	if errInfo != nil {
 		return false
@@ -63,7 +82,7 @@ func (d *dockerDriver) IsSELinuxSupported(ctx context.Context) bool {
 	return false
 }
 
-func (d *dockerDriver) ContainerList(ctx context.Context, opts ContainerListOptions) []ContainerListResult {
+func (d *dockerRuntime) ContainerList(ctx context.Context, opts ContainerListOptions) []ContainerListResult {
 	f := filters.NewArgs()
 	f.Add("name", opts.SearchName)
 	l, err := d.cli.ContainerList(ctx, container.ListOptions{
@@ -84,9 +103,9 @@ func (d *dockerDriver) ContainerList(ctx context.Context, opts ContainerListOpti
 	return lp
 }
 
-func (d *dockerDriver) ImageEnsure(ctx context.Context, imgOpts ImageOptions) (*ImageStatusResponse, error) {
+func (d *dockerRuntime) ImageEnsure(ctx context.Context, imgOpts ImageOptions) (*ImageStatusResponse, error) {
 	// Check if the image already exists.
-	insp, _, err := d.cli.ImageInspectWithRaw(ctx, imgOpts.Name)
+	insp, err := d.cli.ImageInspect(ctx, imgOpts.Name)
 	if err != nil {
 		if !errdefs.IsNotFound(err) {
 			return nil, err
@@ -116,18 +135,32 @@ func (d *dockerDriver) ImageEnsure(ctx context.Context, imgOpts ImageOptions) (*
 		if errBuild != nil {
 			return nil, errBuild
 		}
-		return &ImageStatusResponse{Status: ImageBuild, Progress: resp.Body}, nil
+		return &ImageStatusResponse{
+			Status: ImageBuild,
+			Progress: &ImageProgressStream{
+				ReadCloser: resp.Body,
+				streamer:   dockerDisplayJSONMessages,
+			},
+		}, nil
 	}
 	// Pull the specified image.
 	reader, err := d.cli.ImagePull(ctx, imgOpts.Name, image.PullOptions{})
 	if err != nil {
 		return &ImageStatusResponse{Status: ImageUnexpectedError}, err
 	}
-	return &ImageStatusResponse{Status: ImagePull, Progress: reader}, nil
+	return &ImageStatusResponse{
+		Status: ImagePull,
+		Progress: &ImageProgressStream{
+			ReadCloser: reader,
+			streamer:   dockerDisplayJSONMessages,
+		},
+	}, nil
 }
 
-func (d *dockerDriver) ImageRemove(ctx context.Context, img string, options ImageRemoveOptions) (*ImageRemoveResponse, error) {
-	_, err := d.cli.ImageRemove(ctx, img, image.RemoveOptions(options))
+func (d *dockerRuntime) ImageRemove(ctx context.Context, img string, options ImageRemoveOptions) (*ImageRemoveResponse, error) {
+	_, err := d.cli.ImageRemove(ctx, img, image.RemoveOptions{
+		Force: options.Force,
+	})
 
 	if err != nil {
 		return nil, err
@@ -136,26 +169,35 @@ func (d *dockerDriver) ImageRemove(ctx context.Context, img string, options Imag
 	return &ImageRemoveResponse{Status: ImageRemoved}, nil
 }
 
-func (d *dockerDriver) CopyToContainer(ctx context.Context, cid string, path string, content io.Reader, opts CopyToContainerOptions) error {
+func (d *dockerRuntime) CopyToContainer(ctx context.Context, cid string, path string, content io.Reader, opts CopyToContainerOptions) error {
 	return d.cli.CopyToContainer(ctx, cid, path, content, container.CopyToContainerOptions(opts))
 }
 
-func (d *dockerDriver) CopyFromContainer(ctx context.Context, cid, srcPath string) (io.ReadCloser, ContainerPathStat, error) {
+func (d *dockerRuntime) CopyFromContainer(ctx context.Context, cid, srcPath string) (io.ReadCloser, ContainerPathStat, error) {
 	r, stat, err := d.cli.CopyFromContainer(ctx, cid, srcPath)
 	return r, ContainerPathStat(stat), err
 }
 
-func (d *dockerDriver) ContainerStatPath(ctx context.Context, cid string, path string) (ContainerPathStat, error) {
+func (d *dockerRuntime) ContainerStatPath(ctx context.Context, cid string, path string) (ContainerPathStat, error) {
 	res, err := d.cli.ContainerStatPath(ctx, cid, path)
 	return ContainerPathStat(res), err
 }
 
-func (d *dockerDriver) ContainerCreate(ctx context.Context, opts ContainerCreateOptions) (string, error) {
+func (d *dockerRuntime) ContainerCreate(ctx context.Context, opts ContainerDefinition) (string, error) {
 	hostCfg := &container.HostConfig{
-		AutoRemove:  opts.AutoRemove,
 		ExtraHosts:  opts.ExtraHosts,
-		NetworkMode: container.NetworkMode(opts.NetworkMode),
+		NetworkMode: dockerNetworkModeHost,
 		Binds:       opts.Binds,
+	}
+
+	// Prepare volumes.
+	volumes := make(map[string]struct{}, len(opts.Volumes))
+	for i := 0; i < len(opts.Volumes); i++ {
+		volume := ""
+		if opts.Volumes[i].Name != "" {
+			volume += opts.Volumes[i].Name + ":"
+		}
+		volume += opts.Volumes[i].MountPath
 	}
 
 	resp, err := d.cli.ContainerCreate(
@@ -163,17 +205,16 @@ func (d *dockerDriver) ContainerCreate(ctx context.Context, opts ContainerCreate
 		&container.Config{
 			Hostname:     opts.Hostname,
 			Image:        opts.Image,
-			Cmd:          opts.Cmd,
+			Cmd:          opts.Command,
 			WorkingDir:   opts.WorkingDir,
-			OpenStdin:    opts.OpenStdin,
-			StdinOnce:    opts.StdinOnce,
-			AttachStdin:  opts.AttachStdin,
-			AttachStdout: opts.AttachStdout,
-			AttachStderr: opts.AttachStderr,
-			Tty:          opts.Tty,
+			OpenStdin:    opts.Streams.Stdin,
+			AttachStdin:  opts.Streams.Stdin,
+			AttachStdout: opts.Streams.Stdout,
+			AttachStderr: opts.Streams.Stderr,
+			Tty:          opts.Streams.TTY,
 			Env:          opts.Env,
 			User:         opts.User,
-			Volumes:      opts.Volumes,
+			Volumes:      volumes,
 			Entrypoint:   opts.Entrypoint,
 		},
 		hostCfg,
@@ -186,21 +227,41 @@ func (d *dockerDriver) ContainerCreate(ctx context.Context, opts ContainerCreate
 	return resp.ID, nil
 }
 
-func (d *dockerDriver) ContainerStart(ctx context.Context, cid string, _ ContainerStartOptions) error {
-	return d.cli.ContainerStart(ctx, cid, container.StartOptions{})
+func (d *dockerRuntime) ContainerStart(ctx context.Context, cid string, runConfig ContainerDefinition) (<-chan int, *ContainerInOut, error) {
+	// Attach streams to the terminal.
+	launchr.Log().Debug("attaching container streams")
+	cio, err := d.ContainerAttach(ctx, cid, runConfig.Streams)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to attach to the container: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = cio.Close()
+		}
+	}()
+
+	launchr.Log().Debug("watching run status of container")
+	statusCh := d.doContainerWait(ctx, cid)
+
+	err = d.cli.ContainerStart(ctx, cid, container.StartOptions{})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return statusCh, cio, nil
 }
 
-func (d *dockerDriver) ContainerWait(ctx context.Context, cid string, opts ContainerWaitOptions) (<-chan ContainerWaitResponse, <-chan error) {
-	statusCh, errCh := d.cli.ContainerWait(ctx, cid, container.WaitCondition(opts.Condition))
+func (d *dockerRuntime) containerWait(ctx context.Context, cid string) (<-chan dockerWaitResponse, <-chan error) {
+	statusCh, errCh := d.cli.ContainerWait(ctx, cid, container.WaitConditionNextExit)
 
-	wrappedStCh := make(chan ContainerWaitResponse)
+	wrappedStCh := make(chan dockerWaitResponse)
 	go func() {
 		st := <-statusCh
 		var err error
 		if st.Error != nil {
 			err = errors.New(st.Error.Message)
 		}
-		wrappedStCh <- ContainerWaitResponse{
+		wrappedStCh <- dockerWaitResponse{
 			StatusCode: int(st.StatusCode),
 			Error:      err,
 		}
@@ -209,36 +270,123 @@ func (d *dockerDriver) ContainerWait(ctx context.Context, cid string, opts Conta
 	return wrappedStCh, errCh
 }
 
-func (d *dockerDriver) ContainerAttach(ctx context.Context, containerID string, options ContainerAttachOptions) (*ContainerInOut, error) {
-	resp, err := d.cli.ContainerAttach(ctx, containerID, container.AttachOptions(options))
+func (d *dockerRuntime) ContainerAttach(ctx context.Context, cid string, options ContainerStreamsOptions) (*ContainerInOut, error) {
+	resp, err := d.cli.ContainerAttach(ctx, cid, container.AttachOptions{
+		Stream: true,
+		Stdin:  options.Stdin,
+		Stdout: options.Stdout,
+		Stderr: options.Stderr,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	return &ContainerInOut{In: resp.Conn, Out: resp.Reader}, nil
+	cio := &ContainerInOut{
+		In:   resp.Conn,
+		Out:  resp.Reader,
+		Opts: options,
+	}
+
+	// Resize TTY on window resize.
+	if options.TTY {
+		cio.TtyMonitor = NewTtySizeMonitor(func(ctx context.Context, ropts terminalSize) error {
+			return d.cli.ContainerResize(ctx, cid, container.ResizeOptions(ropts))
+		})
+	}
+
+	// Only need to demultiplex if we have multiplexed output
+	if !options.TTY && resp.Reader != nil && options.Stdout {
+		// Create pipes for stdout and stderr
+		stdoutReader, stdoutWriter := io.Pipe()
+		stderrReader, stderrWriter := io.Pipe()
+
+		// Start demultiplexing in a goroutine
+		go func() {
+			defer stdoutWriter.Close()
+			defer stderrWriter.Close()
+
+			// Demultiplex the output stream into our pipes
+			_, err := stdcopy.StdCopy(stdoutWriter, stderrWriter, resp.Reader)
+			if err != nil {
+				// If an error occurs during demultiplexing, write it to the stderr pipe
+				launchr.Log().Error("\"error demultiplexing container output", "error", err)
+			}
+		}()
+		cio.Out = stdoutReader
+		cio.Err = stderrReader
+
+		// Return the ContainerInOut with demultiplexed streams
+		return cio, nil
+	}
+
+	// If no demultiplexing is needed, return the raw connection
+	return cio, nil
+
 }
 
-func (d *dockerDriver) ContainerStop(ctx context.Context, cid string) error {
-	return d.cli.ContainerStop(ctx, cid, container.StopOptions{})
+func (d *dockerRuntime) ContainerStop(ctx context.Context, cid string, opts ContainerStopOptions) error {
+	var timeout *int
+	if opts.Timeout != nil {
+		t := int(opts.Timeout.Seconds())
+		timeout = &t
+	}
+	return d.cli.ContainerStop(ctx, cid, container.StopOptions{
+		Timeout: timeout,
+	})
 }
 
-func (d *dockerDriver) ContainerRemove(ctx context.Context, cid string, _ ContainerRemoveOptions) error {
-	return d.cli.ContainerRemove(ctx, cid, container.RemoveOptions{})
+func (d *dockerRuntime) ContainerRemove(ctx context.Context, cid string) error {
+	return d.cli.ContainerRemove(ctx, cid, container.RemoveOptions{
+		RemoveVolumes: true,
+	})
 }
 
-func (d *dockerDriver) ContainerKill(ctx context.Context, containerID, signal string) error {
+func (d *dockerRuntime) ContainerKill(ctx context.Context, containerID, signal string) error {
 	return d.cli.ContainerKill(ctx, containerID, signal)
 }
 
-func (d *dockerDriver) ContainerResize(ctx context.Context, cid string, opts ResizeOptions) error {
-	return d.cli.ContainerResize(ctx, cid, container.ResizeOptions(opts))
-}
-
-func (d *dockerDriver) ContainerExecResize(ctx context.Context, cid string, opts ResizeOptions) error {
-	return d.cli.ContainerExecResize(ctx, cid, container.ResizeOptions(opts))
-}
-
 // Close closes docker cli connection.
-func (d *dockerDriver) Close() error {
+func (d *dockerRuntime) Close() error {
 	return d.cli.Close()
+}
+
+func (d *dockerRuntime) doContainerWait(ctx context.Context, cid string) <-chan int {
+	// Wait for the container to stop or catch error.
+	resCh, errCh := d.containerWait(ctx, cid)
+	statusC := make(chan int)
+	go func() {
+		select {
+		case err := <-errCh:
+			launchr.Log().Error("error waiting for container", "error", err)
+			statusC <- 125
+		case res := <-resCh:
+			if res.Error != nil {
+				launchr.Log().Error("error in container run", "error", res.Error)
+				statusC <- 125
+			} else {
+				launchr.Log().Debug("received run status code", "exit_code", res.StatusCode)
+				statusC <- res.StatusCode
+			}
+		case <-ctx.Done():
+			launchr.Log().Debug("stop waiting for container on context finish")
+			statusC <- 125
+		}
+	}()
+
+	return statusC
+}
+
+// dockerDisplayJSONMessages prints docker json output to streams.
+func dockerDisplayJSONMessages(in io.Reader, out *launchr.Out) error {
+	err := jsonmessage.DisplayJSONMessagesStream(in, out, out.FD(), out.IsTerminal(), nil)
+	if err != nil {
+		if jerr, ok := err.(*jsonmessage.JSONError); ok {
+			// If no error code is set, default to 1
+			if jerr.Code == 0 {
+				jerr.Code = 1
+			}
+			return jerr
+		}
+	}
+	return err
 }
