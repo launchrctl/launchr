@@ -31,12 +31,13 @@ const (
 )
 
 type runtimeContainer struct {
+	WithLogger
+	WithTerm
+
 	// crt is a container runtime.
 	crt driver.ContainerRunner
 	// rtype is a container runtime type string.
 	rtype driver.Type
-	// logWith contains context arguments for a structured logger.
-	logWith []any
 	// isRemoteRuntime checks if a container is run remotely.
 	isRemoteRuntime bool
 
@@ -142,7 +143,27 @@ func (c *runtimeContainer) FlagsDefinition() ParametersList {
 	}
 }
 
-func (c *runtimeContainer) UseFlags(flags InputParams) error {
+func (c *runtimeContainer) ValidateFlags(flags InputParams) error {
+	def := c.FlagsDefinition()
+	opts, optsReq := def.JSONSchema()
+	s := jsonschema.Schema{
+		Type:     jsonschema.Object,
+		Required: []string{jsonschemaPropPersistent},
+		Properties: map[string]any{
+			jsonschemaPropPersistent: map[string]any{
+				"type":                 "object",
+				"title":                jsonschemaPropPersistent,
+				"properties":           opts,
+				"required":             optsReq,
+				"additionalProperties": false,
+			},
+		},
+	}
+
+	return jsonschema.Validate(s, map[string]any{jsonschemaPropPersistent: flags})
+}
+
+func (c *runtimeContainer) SetFlags(_ *Action, input *Input, flags InputParams) error {
 	if v, ok := flags[containerFlagRemote]; ok {
 		c.isSetRemote = v.(bool)
 	}
@@ -168,15 +189,13 @@ func (c *runtimeContainer) UseFlags(flags InputParams) error {
 		c.exec = ex.(bool)
 	}
 
-	return nil
-}
-func (c *runtimeContainer) ValidateInput(_ *Action, input *Input) error {
 	if c.exec {
 		// Mark input as validated because arguments are passed directly to exec.
 		input.SetValidated(true)
 	}
 	return nil
 }
+
 func (c *runtimeContainer) AddImageBuildResolver(r ImageBuildResolver) {
 	c.imgres = append(c.imgres, r)
 }
@@ -209,17 +228,10 @@ func (c *runtimeContainer) Init(ctx context.Context, _ *Action) (err error) {
 				"This process may take time or potentially break existing permissions.",
 			c.volumeFlags,
 		)
-		c.log().Warn("using selinux flags", "flags", c.volumeFlags)
+		c.Log().Warn("using selinux flags", "flags", c.volumeFlags)
 	}
 
 	return nil
-}
-
-func (c *runtimeContainer) log(attrs ...any) *launchr.Slog {
-	if attrs != nil {
-		c.logWith = append(c.logWith, attrs...)
-	}
-	return launchr.Log().With(c.logWith...)
 }
 
 func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
@@ -232,7 +244,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 	if runDef.Container == nil {
 		return errors.New("action container configuration is not set, use different runtime")
 	}
-	log := c.log("action_id", a.ID)
+	log := c.LogWith("action_id", a.ID)
 	log.Debug("starting execution of the action")
 
 	// Generate a container name.
@@ -244,7 +256,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 
 	// Create a container.
 	runConfig := c.createContainerDef(a, name)
-	log = c.log("image", runConfig.Image, "command", runConfig.Command, "entrypoint", runConfig.Entrypoint)
+	log = c.LogWith("image", runConfig.Image, "command", runConfig.Command, "entrypoint", runConfig.Entrypoint)
 	log.Debug("creating a container for an action")
 	cid, err := c.containerCreate(ctx, a, &runConfig)
 	if err != nil {
@@ -279,7 +291,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 		}
 	}()
 
-	log = c.log("container_id", cid)
+	log = c.LogWith("container_id", cid)
 	log.Debug("successfully created a container for an action")
 
 	// Copy working dirs to the container.
@@ -398,7 +410,7 @@ func (c *runtimeContainer) isRebuildRequired(bi *driver.BuildDefinition) (bool, 
 	}
 
 	if errCache := c.imgccres.Save(); errCache != nil {
-		c.log().Warn("failed to update actions.sum file", "error", errCache)
+		c.Log().Warn("failed to update actions.sum file", "error", errCache)
 	}
 
 	return doRebuild, nil
@@ -430,7 +442,7 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 		return err
 	}
 
-	log := c.log()
+	log := c.Log()
 	switch status.Status {
 	case driver.ImageExists:
 		log.Debug("image exists locally")
@@ -441,12 +453,12 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 		defer func() {
 			_ = status.Progress.Close()
 		}()
-		launchr.Term().Printfln("Image %q doesn't exist locally, pulling from the registry...", image)
+		c.Term().Printfln("Image %q doesn't exist locally, pulling from the registry...", image)
 		log.Info("image doesn't exist locally, pulling from the registry")
 		// Output docker status only in Debug.
 		err = status.Progress.Stream(streams.Out())
 		if err != nil {
-			launchr.Term().Error().Println("Error occurred while pulling the image %q", image)
+			c.Term().Error().Println("Error occurred while pulling the image %q", image)
 			log.Error("error while pulling the image", "error", err)
 		}
 	case driver.ImageBuild:
@@ -456,12 +468,12 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 		defer func() {
 			_ = status.Progress.Close()
 		}()
-		launchr.Term().Printfln("Image %q doesn't exist locally, building...", image)
+		c.Term().Printfln("Image %q doesn't exist locally, building...", image)
 		log.Info("image doesn't exist locally, building the image")
 		// Output docker status only in Debug.
 		err = status.Progress.Stream(streams.Out())
 		if err != nil {
-			launchr.Term().Error().Println("Error occurred while building the image %q", image)
+			c.Term().Error().Println("Error occurred while building the image %q", image)
 			log.Error("error while building the image", "error", err)
 		}
 	}

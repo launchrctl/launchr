@@ -2,7 +2,6 @@ package launchr
 
 import (
 	"io"
-	"log"
 	"reflect"
 
 	"github.com/pterm/pterm"
@@ -19,7 +18,14 @@ var DefaultTextPrinter = message.NewPrinter(language.English)
 
 func init() {
 	// Initialize the default printer.
-	defaultTerm = &Terminal{
+	defaultTerm = NewTerminal()
+	// Do not output anything when not in the app, e.g. in tests.
+	defaultTerm.DisableOutput()
+}
+
+// NewTerminal creates a new instance of [Terminal]
+func NewTerminal() *Terminal {
+	return &Terminal{
 		p: []TextPrinter{
 			printerBasic:   newPTermBasicPrinter(pterm.DefaultBasicText),
 			printerInfo:    newPTermPrefixPrinter(pterm.Info),
@@ -29,8 +35,6 @@ func init() {
 		},
 		enabled: true,
 	}
-	// Do not output anything when not in the app, e.g. in tests.
-	defaultTerm.DisableOutput()
 }
 
 // Predefined keys of terminal printers.
@@ -84,7 +88,9 @@ func (p *ptermPrinter) SetOutput(w io.Writer) {
 	if !method.IsValid() {
 		panic("WithWriter is not implemented for this pterm.TextPrinter")
 	}
-	method.Call([]reflect.Value{reflect.ValueOf(w)})
+	result := method.Call([]reflect.Value{reflect.ValueOf(w)})
+	// Replace old printer by new one as WithWriter returns fresh copy of struct.
+	p.pterm = result[0].Interface().(pterm.TextPrinter)
 }
 
 // Terminal prints formatted text to the console.
@@ -115,8 +121,6 @@ func (t *Terminal) DisableOutput() {
 // SetOutput sets an output to target writer.
 func (t *Terminal) SetOutput(w io.Writer) {
 	t.w = w
-	// If some library uses std log, redirect as well.
-	log.SetOutput(w)
 	// Ensure underlying printers use self.
 	// Used to simplify update of writers in the printers.
 	for i := 0; i < len(t.p); i++ {
