@@ -90,22 +90,22 @@ func (p *PersistentFlags) GetDefinitions() ParametersList {
 
 // AddDefinitions adds new flag definition.
 func (p *PersistentFlags) AddDefinitions(opts ParametersList) {
-	itemMap := make(map[string]int)
+	registered := make(map[string]struct{})
 
-	for index, item := range p.definitions {
-		itemMap[item.Name] = index
+	for _, def := range p.definitions {
+		registered[def.Name] = struct{}{}
 	}
 
-	for _, item := range opts {
-		if item.Name == "" {
+	for _, opt := range opts {
+		if opt.Name == "" {
 			panic("persistent flag name cannot be empty")
 		}
 
-		if _, exists := itemMap[item.Name]; exists {
-			panic(fmt.Sprintf("duplicate persistent flag has been detected %s", item.Name))
+		if _, exists := registered[opt.Name]; exists {
+			panic(fmt.Sprintf("duplicate persistent flag has been detected %s", opt.Name))
 		}
 
-		p.definitions = append(p.definitions, item)
+		p.definitions = append(p.definitions, opt)
 	}
 
 	for _, d := range p.definitions {
