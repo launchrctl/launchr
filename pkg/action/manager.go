@@ -159,7 +159,6 @@ func (m *actionManagerMap) add(a *Action) error {
 		// Skip action because the definition is not correct.
 		return err
 	}
-
 	if dup, ok := m.actionStore[a.ID]; ok {
 		launchr.Log().Debug("action was overridden by another declaration",
 			"action_id", a.ID,
