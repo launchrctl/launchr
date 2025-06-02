@@ -23,10 +23,10 @@ type RuntimeFlags interface {
 	Runtime
 	// FlagsDefinition provides definitions for action environment specific flags.
 	FlagsDefinition() ParametersList
-	// UseFlags sets environment configuration.
-	UseFlags(input *Input) error
+	// SetFlags sets environment configuration.
+	SetFlags(input *Input) error
 	// ValidateInput validates input arguments in action definition.
-	ValidateInput(a *Action, input *Input) error
+	ValidateInput(input *Input) error
 }
 
 // ContainerRuntime is an interface for container runtime.

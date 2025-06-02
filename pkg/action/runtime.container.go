@@ -143,17 +143,16 @@ func (c *runtimeContainer) FlagsDefinition() ParametersList {
 	}
 }
 
-func (c *runtimeContainer) ValidateInput(_ *Action, input *Input) error {
-	// @todo move to separate service with full input validation and maybe combine with persistent input check.
+func (c *runtimeContainer) ValidateInput(input *Input) error {
 	def := c.FlagsDefinition()
 	opts, optsReq := def.JSONSchema()
 	s := jsonschema.Schema{
 		Type:     jsonschema.Object,
-		Required: []string{jsonschemaPropPersistent},
+		Required: []string{jsonschemaPropRuntime},
 		Properties: map[string]any{
-			jsonschemaPropPersistent: map[string]any{
+			jsonschemaPropRuntime: map[string]any{
 				"type":                 "object",
-				"title":                jsonschemaPropPersistent,
+				"title":                jsonschemaPropRuntime,
 				"properties":           opts,
 				"required":             optsReq,
 				"additionalProperties": false,
@@ -161,10 +160,10 @@ func (c *runtimeContainer) ValidateInput(_ *Action, input *Input) error {
 		},
 	}
 
-	return jsonschema.Validate(s, map[string]any{jsonschemaPropPersistent: input.RuntimeFlags()})
+	return jsonschema.Validate(s, map[string]any{jsonschemaPropRuntime: input.RuntimeFlags()})
 }
 
-func (c *runtimeContainer) UseFlags(input *Input) error {
+func (c *runtimeContainer) SetFlags(input *Input) error {
 	flags := input.RuntimeFlags()
 
 	if v, ok := flags[containerFlagRemote]; ok {
@@ -192,7 +191,6 @@ func (c *runtimeContainer) UseFlags(input *Input) error {
 		c.exec = ex.(bool)
 	}
 
-	// @todo think about more elegant solution as right now it forces us to build workarounds for validation.
 	if c.exec {
 		// Mark input as validated because arguments are passed directly to exec.
 		input.SetValidated(true)

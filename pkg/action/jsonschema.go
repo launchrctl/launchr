@@ -10,6 +10,7 @@ import (
 const (
 	jsonschemaPropArgs       = "arguments"
 	jsonschemaPropOpts       = "options"
+	jsonschemaPropRuntime    = "runtime"
 	jsonschemaPropPersistent = "persistent"
 )
 

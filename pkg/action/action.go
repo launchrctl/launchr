@@ -28,9 +28,8 @@ type Action struct {
 	def    *Definition // def is an action definition. Loaded by [Loader], may be nil when not initialized.
 	defRaw *Definition // defRaw is a raw action definition. Loaded by [Loader], may be nil when not initialized.
 
-	runtime    Runtime                   // runtime is the [Runtime] to execute the action.
-	input      *Input                    // input is a storage for arguments and options used in runtime.
-	processors map[string]ValueProcessor // processors are [ValueProcessor] for manipulating input.
+	runtime Runtime // runtime is the [Runtime] to execute the action.
+	input   *Input  // input is a storage for arguments and options used in runtime.
 }
 
 // New creates a new action.
@@ -107,12 +106,6 @@ func (a *Action) SetProcessors(list map[string]ValueProcessor) error {
 	}
 
 	return nil
-}
-
-// GetProcessors returns processors map.
-func (a *Action) GetProcessors() map[string]ValueProcessor {
-	// @todo do we need it ?
-	return a.processors
 }
 
 // Reset unsets loaded action to force reload.
@@ -256,6 +249,10 @@ func (a *Action) ImageBuildInfo(image string) *driver.BuildDefinition {
 
 // SetInput saves arguments and options for later processing in run, templates, etc.
 func (a *Action) SetInput(input *Input) (err error) {
+	if !input.IsValidated() {
+		return fmt.Errorf("input is not validated")
+	}
+
 	a.input = input
 	// Reset to load the action file again with new replacements.
 	a.Reset()

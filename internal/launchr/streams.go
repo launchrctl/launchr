@@ -31,6 +31,11 @@ func (s *commonStream) FD() uintptr {
 	return s.fd
 }
 
+// Fd returns the file descriptor number for this stream.
+func (o *Out) Fd() uintptr {
+	return o.fd
+}
+
 // IsDiscard returns if read/write is discarded.
 func (s *commonStream) IsDiscard() bool {
 	return s.isDiscard
@@ -58,11 +63,6 @@ func (s *commonStream) SetIsTerminal(isTerminal bool) {
 type Out struct {
 	commonStream
 	out io.Writer
-}
-
-// Fd returns the file descriptor number for this stream.
-func (o *Out) Fd() uintptr {
-	return o.commonStream.FD()
 }
 
 func (o *Out) Write(p []byte) (int, error) {

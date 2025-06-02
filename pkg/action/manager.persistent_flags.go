@@ -104,8 +104,7 @@ func (p *PersistentFlags) AddDefinitions(opts ParametersList) {
 }
 
 // ValidateInput validates input flags.
-func (p *PersistentFlags) ValidateInput(_ *Action, input *Input) error {
-	// @todo move to separate service with full input validation and maybe combine with runtime input check.
+func (p *PersistentFlags) ValidateInput(input *Input) error {
 	opts, optsReq := p.definitions.JSONSchema()
 	s := jsonschema.Schema{
 		Type:     jsonschema.Object,

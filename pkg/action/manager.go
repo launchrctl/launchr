@@ -57,14 +57,15 @@ type Manager interface {
 	// SetDiscoveryTimeout sets discovery timeout to stop on long-running callbacks.
 	SetDiscoveryTimeout(timeout time.Duration)
 
+	// ValidateInput validates an action input.
+	// @todo think about decoupling it from manager to separate service
+	ValidateInput(a *Action, input *Input) error
+
 	RunManager
 }
 
 // RunManager runs actions and stores runtime information about them.
 type RunManager interface {
-	// ValidateInput validates an action input.
-	// @todo think about decoupling it from manager to separate service
-	ValidateInput(a *Action, input *Input) error
 	// Run executes an action in foreground.
 	Run(ctx context.Context, a *Action) (RunInfo, error)
 	// RunBackground executes an action in background.
@@ -337,14 +338,34 @@ func (m *actionManagerMap) GetPersistentFlags() *PersistentFlags {
 }
 
 func (m *actionManagerMap) ValidateInput(a *Action, input *Input) error {
+	// @todo move to separate service with full input validation. See notes below.
+	// @todo think about more elegant solution as right now it forces us to build workarounds for validation.
+	// Currently, input validation includes 3 types of validations:
+	// 1) Validation of runtime flags
+	// 2) Validation of persistent flags
+	// 3) Validation of arguments and options
+	//
+	// At present, this approach is neither flexible nor elegant enough.
+	// Ideally, all 3 steps should be validated with a single jsonschema.validate call,
+	// but each part of the input has unique properties that must be respected.
+	//
+	// For example, some runtimes may allow skipping further validation and proceeding without
+	// executing the action.
+	//
+	// Persistent flags are not related to the action itself; they exist separately and cannot
+	// be combined with runtime flags due to the partial validation described above.
+	//
+	// The ideal solution would be to combine all properties within a JSON schema and validate it.
+	// Runtime properties that allow skipping validation and provide completely different behavior
+	// should be implemented differently - such as through a special launcher flag, action, or
+	// new functionality specifically for debugging runtimes.
 	if r, ok := a.Runtime().(RuntimeFlags); ok {
-		err := r.ValidateInput(a, input)
+		err := r.ValidateInput(input)
 		if err != nil {
 			return err
 		}
 
-		// @todo move to decorators ?
-		if err = r.UseFlags(input); err != nil {
+		if err = r.SetFlags(input); err != nil {
 			return err
 		}
 	}
@@ -353,7 +374,7 @@ func (m *actionManagerMap) ValidateInput(a *Action, input *Input) error {
 		return nil
 	}
 
-	err := m.GetPersistentFlags().ValidateInput(a, input)
+	err := m.GetPersistentFlags().ValidateInput(input)
 	if err != nil {
 		return err
 	}
@@ -361,13 +382,13 @@ func (m *actionManagerMap) ValidateInput(a *Action, input *Input) error {
 	def := a.ActionDef()
 
 	// Process arguments.
-	err = input.ProcessInputParams(def.Arguments, input.Args(), input.ArgsChanged())
+	err = input.processInputParams(def.Arguments, input.Args(), input.ArgsChanged())
 	if err != nil {
 		return err
 	}
 
 	// Process options.
-	err = input.ProcessInputParams(def.Options, input.Opts(), input.OptsChanged())
+	err = input.processInputParams(def.Options, input.Opts(), input.OptsChanged())
 	if err != nil {
 		return err
 	}

@@ -96,8 +96,8 @@ func castArgStrToType(v string, pdef *DefParameter) (any, error) {
 	return res, nil
 }
 
-// ProcessInputParams applies value processors to input parameters.
-func (input *Input) ProcessInputParams(def ParametersList, inp InputParams, changed InputParams) error {
+// processInputParams applies value processors to input parameters.
+func (input *Input) processInputParams(def ParametersList, inp InputParams, changed InputParams) error {
 	var err error
 	for _, p := range def {
 		_, isChanged := changed[p.Name]
