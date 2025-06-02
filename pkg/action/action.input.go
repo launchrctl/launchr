@@ -26,6 +26,8 @@ type Input struct {
 	args InputParams
 	// opts contains parsed options with default values.
 	opts InputParams
+	// runtime contains runtime related values.
+	runtime InputParams
 	// persistent contains application and overridden by action persistent flag values.
 	persistent InputParams
 	// io contains out/in/err destinations.
@@ -54,6 +56,7 @@ func NewInput(a *Action, args InputParams, opts InputParams, io launchr.Streams)
 		argsPos:    argsPos,
 		opts:       setParamDefaults(opts, def.Options),
 		optsRaw:    opts,
+		runtime:    make(InputParams),
 		persistent: make(InputParams),
 		io:         io,
 	}
@@ -91,6 +94,42 @@ func castArgStrToType(v string, pdef *DefParameter) (any, error) {
 		}
 	}
 	return res, nil
+}
+
+// ProcessInputParams applies value processors to input parameters.
+func (input *Input) ProcessInputParams(def ParametersList, inp InputParams, changed InputParams) error {
+	var err error
+	for _, p := range def {
+		_, isChanged := changed[p.Name]
+		res := inp[p.Name]
+		for i, procDef := range p.Process {
+			handler := p.processors[i]
+			res, err = handler(res, ValueProcessorContext{
+				ValOrig:   inp[p.Name],
+				IsChanged: isChanged,
+				DefParam:  p,
+				Action:    input.action,
+			})
+			if err != nil {
+				return ErrValueProcessorHandler{
+					Processor: procDef.ID,
+					Param:     p.Name,
+					Err:       err,
+				}
+			}
+		}
+		// Cast to []any slice because jsonschema validator supports only this type.
+		if p.Type == jsonschema.Array {
+			res = CastSliceTypedToAny(res)
+		}
+		// If the value was changed, we can safely override the value.
+		// If the value was not changed and processed is nil, do not add it.
+		if isChanged || res != nil {
+			inp[p.Name] = res
+		}
+	}
+
+	return nil
 }
 
 // IsValidated returns input status.
@@ -150,6 +189,21 @@ func (input *Input) UnsetOpt(name string) {
 func (input *Input) IsOptChanged(name string) bool {
 	_, ok := input.optsRaw[name]
 	return ok
+}
+
+// RuntimeFlags returns stored runtime flags values.
+func (input *Input) RuntimeFlags() InputParams {
+	return input.runtime
+}
+
+// RuntimeFlag returns a runtime flag by name.
+func (input *Input) RuntimeFlag(name string) any {
+	return input.RuntimeFlags()[name]
+}
+
+// SetRuntimeFlag sets runtime flag value.
+func (input *Input) SetRuntimeFlag(name string, val any) {
+	input.runtime[name] = val
 }
 
 // PersistentFlags returns stored persistent flags values.

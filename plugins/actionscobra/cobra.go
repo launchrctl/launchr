@@ -31,27 +31,30 @@ func CobraImpl(a *action.Action, streams launchr.Streams, manager action.Manager
 			optsChanged := derefOpts(filterChangedFlags(cmd, options))
 			input := action.NewInput(a, argsNamed, optsChanged, streams)
 
-			// Set runtime opts.
-			if r, ok := a.Runtime().(action.RuntimeFlags); ok {
-				runOpts = derefOpts(filterChangedFlags(cmd, runOpts))
-				if err = r.SetFlags(a, input, runOpts); err != nil {
-					return err
-				}
+			// Store runtime flags in the input.
+			runOpts = derefOpts(filterChangedFlags(cmd, runOpts))
+			for k, v := range runOpts {
+				input.SetRuntimeFlag(k, v)
 			}
 
-			// Retrieve current persistent flags state and pass to action. It will be later used during decorate or
-			// other action steps.
+			// Retrieve the current persistent flags state and pass to action. It will be later used during decorating
+			// or other action steps.
 			// Flags are immutable in action.
 			for k, v := range manager.GetPersistentFlags().GetAll() {
 				input.SetPersistentFlag(k, v)
 			}
 
-			// Set and validate input.
+			// Validate input before setting to action.
+			if err = manager.ValidateInput(a, input); err != nil {
+				return err
+			}
+
+			// Set input.
 			if err = a.SetInput(input); err != nil {
 				return err
 			}
 
-			// Re-apply all registered decorators to action before it's executed.
+			// Re-apply all registered decorators to action before its execution.
 			// Triggered after action.SetInput to ensure decorators have access to all necessary data from the input
 			// to proceed.
 			manager.Decorate(a)

@@ -22,17 +22,7 @@ func NewPersistentFlags() *PersistentFlags {
 	}
 }
 
-// Clone creates a copy of the [PersistentFlags] instance.
-func (p *PersistentFlags) Clone() *PersistentFlags {
-	result := NewPersistentFlags()
-	result.AddDefinitions(p.definitions)
-	for name, value := range p.values {
-		result.Set(name, value)
-	}
-	return result
-}
-
-// GetAll returns latest state of flags.
+// GetAll returns the latest state of flags.
 func (p *PersistentFlags) GetAll() InputParams {
 	result := make(InputParams)
 	for name, value := range p.defaults {
@@ -51,8 +41,8 @@ func (p *PersistentFlags) exists(name string) bool {
 	return ok
 }
 
-// Get returns state of named flag.
-// Return false if flag doesn't exist.
+// Get returns state of a named flag.
+// Return false if a flag doesn't exist.
 func (p *PersistentFlags) Get(name string) (any, bool) {
 	if !p.exists(name) {
 		return nil, false
@@ -77,8 +67,8 @@ func (p *PersistentFlags) Set(name string, value any) {
 	p.values[name] = value
 }
 
-// Unset removes flag value.
-// Default value will be returned during [PersistentFlags.GetAll] if flag is not set.
+// Unset removes the flag value.
+// The default value will be returned during [PersistentFlags.GetAll] if flag is not set.
 func (p *PersistentFlags) Unset(name string) {
 	delete(p.values, name)
 }
@@ -113,8 +103,9 @@ func (p *PersistentFlags) AddDefinitions(opts ParametersList) {
 	}
 }
 
-// ValidateFlags validates input flags.
-func (p *PersistentFlags) ValidateFlags(flags InputParams) error {
+// ValidateInput validates input flags.
+func (p *PersistentFlags) ValidateInput(_ *Action, input *Input) error {
+	// @todo move to separate service with full input validation and maybe combine with runtime input check.
 	opts, optsReq := p.definitions.JSONSchema()
 	s := jsonschema.Schema{
 		Type:     jsonschema.Object,
@@ -130,5 +121,5 @@ func (p *PersistentFlags) ValidateFlags(flags InputParams) error {
 		},
 	}
 
-	return jsonschema.Validate(s, map[string]any{jsonschemaPropPersistent: flags})
+	return jsonschema.Validate(s, map[string]any{jsonschemaPropPersistent: input.PersistentFlags()})
 }

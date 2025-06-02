@@ -60,6 +60,7 @@ type Out struct {
 	out io.Writer
 }
 
+// Fd returns the file descriptor number for this stream.
 func (o *Out) Fd() uintptr {
 	return o.commonStream.FD()
 }

@@ -62,6 +62,9 @@ type Manager interface {
 
 // RunManager runs actions and stores runtime information about them.
 type RunManager interface {
+	// ValidateInput validates an action input.
+	// @todo think about decoupling it from manager to separate service
+	ValidateInput(a *Action, input *Input) error
 	// Run executes an action in foreground.
 	Run(ctx context.Context, a *Action) (RunInfo, error)
 	// RunBackground executes an action in background.
@@ -332,6 +335,56 @@ func (m *actionManagerMap) SetActionIDProvider(p IDProvider) {
 
 func (m *actionManagerMap) GetPersistentFlags() *PersistentFlags {
 	return m.persistentFlags
+}
+
+func (m *actionManagerMap) ValidateInput(a *Action, input *Input) error {
+	if r, ok := a.Runtime().(RuntimeFlags); ok {
+		err := r.ValidateInput(a, input)
+		if err != nil {
+			return err
+		}
+
+		// @todo move to decorators ?
+		if err = r.UseFlags(input); err != nil {
+			return err
+		}
+	}
+
+	if input.IsValidated() {
+		return nil
+	}
+
+	err := m.GetPersistentFlags().ValidateInput(a, input)
+	if err != nil {
+		return err
+	}
+
+	def := a.ActionDef()
+
+	// Process arguments.
+	err = input.ProcessInputParams(def.Arguments, input.Args(), input.ArgsChanged())
+	if err != nil {
+		return err
+	}
+
+	// Process options.
+	err = input.ProcessInputParams(def.Options, input.Opts(), input.OptsChanged())
+	if err != nil {
+		return err
+	}
+
+	argsDefLen := len(a.ActionDef().Arguments)
+	argsPosLen := len(input.ArgsPositional())
+	if argsPosLen > argsDefLen {
+		return fmt.Errorf("accepts %d arg(s), received %d", argsDefLen, argsPosLen)
+	}
+	err = validateJSONSchema(a, input)
+	if err != nil {
+		return err
+	}
+	input.SetValidated(true)
+
+	return nil
 }
 
 // RunInfo stores information about a running action.

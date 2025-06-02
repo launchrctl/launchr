@@ -77,13 +77,13 @@ func (p *Plugin) DiscoverActions(_ context.Context) ([]*action.Action, error) {
 		if rt, ok := a.Runtime().(action.RuntimeLoggerAware); ok {
 			log = rt.LogWith()
 		}
-		flags.WithLogger.SetLogger(log)
+		flags.SetLogger(log)
 
 		term := launchr.Term()
 		if rt, ok := a.Runtime().(action.RuntimeTermAware); ok {
 			term = rt.Term()
 		}
-		flags.WithTerm.SetTerm(term)
+		flags.SetTerm(term)
 
 		return Execute(ctx, p.app.Streams(), &flags)
 	}))

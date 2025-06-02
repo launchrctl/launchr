@@ -91,7 +91,7 @@ func (e *logLevelStr) Type() string {
 func (p Plugin) OnAppInit(app launchr.App) error {
 	verbosity := 0
 	quiet := false
-	var logFormat LogFormat
+	var logFormatStr LogFormat
 	var logLvlStr logLevelStr
 
 	// Assert we are able to access internal functionality.
@@ -107,7 +107,7 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	pflags.ParseErrorsWhitelist.UnknownFlags = true
 	pflags.CountVarP(&verbosity, "verbose", "v", "log verbosity level, use -vvvv DEBUG, -vvv INFO, -vv WARN, -v ERROR")
 	pflags.VarP(&logLvlStr, "log-level", "", "log level, same as -v, can be: DEBUG, INFO, WARN, ERROR or NONE (default NONE)")
-	pflags.VarP(&logFormat, "log-format", "", "log format, can be: pretty, plain or json (default pretty)")
+	pflags.VarP(&logFormatStr, "log-format", "", "log format, can be: pretty, plain or json (default pretty)")
 	pflags.BoolVarP(&quiet, "quiet", "q", false, "disable output to the console")
 
 	// Parse available flags.
@@ -142,6 +142,12 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 		logLevel = launchr.LogLevelFromString(logLvlEnv)
 	}
 
+	// ensure logFormat always has a value
+	logFormat := LogFormatPretty
+	if pflags.Changed("log-format") {
+		logFormat = logFormatStr
+	}
+
 	streams := app.Streams()
 	out := streams.Out()
 	// Set terminal output.
@@ -165,7 +171,7 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	var am action.Manager
 	app.GetService(&am)
 
-	// Retrieve and expand application persistent flags with new log and term related options.
+	// Retrieve and expand application persistent flags with new log and term-related options.
 	persistentFlags := am.GetPersistentFlags()
 	persistentFlags.AddDefinitions(getVerbosityPersistentFlags())
 

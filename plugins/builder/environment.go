@@ -164,7 +164,7 @@ func (env *buildEnvironment) execGoGet(ctx context.Context, args ...string) erro
 }
 
 func (env *buildEnvironment) RunCmd(ctx context.Context, cmd *exec.Cmd) error {
-	env.WithLogger.Log().Debug("executing shell", "cmd", cmd)
+	env.Log().Debug("executing shell", "cmd", cmd)
 	err := cmd.Start()
 	if err != nil {
 		return err

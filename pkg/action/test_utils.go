@@ -103,11 +103,13 @@ func (tt TestCaseValueProcessor) Test(t *testing.T, am Manager) {
 	}
 	// Run processors.
 	input := NewInput(a, tt.Args, tt.Opts, nil)
-	err = a.SetInput(input)
+	err = am.ValidateInput(a, input)
 	assertIsSameError(t, tt.ErrProc, err)
 	if tt.ErrProc != nil {
 		return
 	}
+	// @todo check? probably not for this one.
+	_ = a.SetInput(input)
 	// Test input is processed.
 	input = a.Input()
 	if tt.ExpArgs == nil {
