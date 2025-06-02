@@ -107,6 +107,7 @@ func (input *Input) ProcessInputParams(def ParametersList, inp InputParams, chan
 			res, err = handler(res, ValueProcessorContext{
 				ValOrig:   inp[p.Name],
 				IsChanged: isChanged,
+				Input:     input,
 				DefParam:  p,
 				Action:    input.action,
 			})
