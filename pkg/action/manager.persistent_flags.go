@@ -104,8 +104,8 @@ func (p *PersistentFlags) AddDefinitions(opts ParametersList) {
 	}
 }
 
-// ValidateInput validates input flags.
-func (p *PersistentFlags) ValidateInput(input *Input) error {
+// ValidateFlags validates input flags.
+func (p *PersistentFlags) ValidateFlags(params InputParams) error {
 	opts, optsReq := p.definitions.JSONSchema()
 	s := jsonschema.Schema{
 		Type:     jsonschema.Object,
@@ -121,5 +121,5 @@ func (p *PersistentFlags) ValidateInput(input *Input) error {
 		},
 	}
 
-	return jsonschema.Validate(s, map[string]any{jsonschemaPropPersistent: input.PersistentFlags()})
+	return jsonschema.Validate(s, map[string]any{jsonschemaPropPersistent: params})
 }

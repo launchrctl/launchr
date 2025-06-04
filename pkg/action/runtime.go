@@ -104,3 +104,17 @@ func (c *WithTerm) SetTerm(t *launchr.Terminal) {
 func (c *WithTerm) Term() *launchr.Terminal {
 	return c.term
 }
+
+// WithFlags provides a composition with flags utilities.
+type WithFlags struct {
+	flags *PersistentFlags
+}
+
+// GetFlags returns flags struct to work with.
+func (c *WithFlags) GetFlags() *PersistentFlags {
+	if c.flags == nil {
+		c.flags = NewPersistentFlags()
+	}
+
+	return c.flags
+}

@@ -375,7 +375,7 @@ func (m *actionManagerMap) ValidateInput(a *Action, input *Input) error {
 		return nil
 	}
 
-	err := m.GetPersistentFlags().ValidateInput(input)
+	err := m.GetPersistentFlags().ValidateFlags(input.PersistentFlags())
 	if err != nil {
 		return err
 	}

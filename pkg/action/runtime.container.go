@@ -33,6 +33,7 @@ const (
 type runtimeContainer struct {
 	WithLogger
 	WithTerm
+	WithFlags
 
 	// crt is a container runtime.
 	crt driver.ContainerRunner
@@ -98,69 +99,60 @@ func (c *runtimeContainer) Clone() Runtime {
 }
 
 func (c *runtimeContainer) FlagsDefinition() ParametersList {
-	return ParametersList{
-		&DefParameter{
-			Name:        containerFlagRemote,
-			Title:       "Remote runtime",
-			Description: "Forces the container runtime to be used as remote. Copies the working directory to a container volume. Local binds are not used.",
-			Type:        jsonschema.Boolean,
-			Default:     false,
-		},
-		&DefParameter{
-			Name:        containerFlagCopyBack,
-			Title:       "Remote copy back",
-			Description: "Copies the working directory back from the container. Works only if the runtime is remote.",
-			Type:        jsonschema.Boolean,
-		},
-		&DefParameter{
-			Name:        containerFlagRemoveImage,
-			Title:       "Remove Image",
-			Description: "Remove an image after execution of action",
-			Type:        jsonschema.Boolean,
-			Default:     false,
-		},
-		&DefParameter{
-			Name:        containerFlagNoCache,
-			Title:       "No cache",
-			Description: "Send command to build container without cache",
-			Type:        jsonschema.Boolean,
-			Default:     false,
-		},
-		&DefParameter{
-			Name:        containerFlagEntrypoint,
-			Title:       "Image Entrypoint",
-			Description: `Overwrite the default ENTRYPOINT of the image. Example: --entrypoint "/bin/sh"`,
-			Type:        jsonschema.String,
-			Default:     "",
-		},
-		&DefParameter{
-			Name:        containerFlagExec,
-			Title:       "Exec command",
-			Description: "Overwrite the command of the action. Argument and options are not validated, sets container CMD directly. Example usage: --exec -- ls -lah",
-			Type:        jsonschema.Boolean,
-			Default:     false,
-		},
+	flags := c.GetFlags()
+	if len(flags.GetDefinitions()) == 0 {
+		definitions := ParametersList{
+			&DefParameter{
+				Name:        containerFlagRemote,
+				Title:       "Remote runtime",
+				Description: "Forces the container runtime to be used as remote. Copies the working directory to a container volume. Local binds are not used.",
+				Type:        jsonschema.Boolean,
+				Default:     false,
+			},
+			&DefParameter{
+				Name:        containerFlagCopyBack,
+				Title:       "Remote copy back",
+				Description: "Copies the working directory back from the container. Works only if the runtime is remote.",
+				Type:        jsonschema.Boolean,
+			},
+			&DefParameter{
+				Name:        containerFlagRemoveImage,
+				Title:       "Remove Image",
+				Description: "Remove an image after execution of action",
+				Type:        jsonschema.Boolean,
+				Default:     false,
+			},
+			&DefParameter{
+				Name:        containerFlagNoCache,
+				Title:       "No cache",
+				Description: "Send command to build container without cache",
+				Type:        jsonschema.Boolean,
+				Default:     false,
+			},
+			&DefParameter{
+				Name:        containerFlagEntrypoint,
+				Title:       "Image Entrypoint",
+				Description: `Overwrite the default ENTRYPOINT of the image. Example: --entrypoint "/bin/sh"`,
+				Type:        jsonschema.String,
+				Default:     "",
+			},
+			&DefParameter{
+				Name:        containerFlagExec,
+				Title:       "Exec command",
+				Description: "Overwrite the command of the action. Argument and options are not validated, sets container CMD directly. Example usage: --exec -- ls -lah",
+				Type:        jsonschema.Boolean,
+				Default:     false,
+			},
+		}
+
+		flags.AddDefinitions(definitions)
 	}
+
+	return flags.GetDefinitions()
 }
 
 func (c *runtimeContainer) ValidateInput(input *Input) error {
-	def := c.FlagsDefinition()
-	opts, optsReq := def.JSONSchema()
-	s := jsonschema.Schema{
-		Type:     jsonschema.Object,
-		Required: []string{jsonschemaPropRuntime},
-		Properties: map[string]any{
-			jsonschemaPropRuntime: map[string]any{
-				"type":                 "object",
-				"title":                jsonschemaPropRuntime,
-				"properties":           opts,
-				"required":             optsReq,
-				"additionalProperties": false,
-			},
-		},
-	}
-
-	err := jsonschema.Validate(s, map[string]any{jsonschemaPropRuntime: input.RuntimeFlags()})
+	err := c.flags.ValidateFlags(input.RuntimeFlags())
 	if err != nil {
 		return err
 	}
