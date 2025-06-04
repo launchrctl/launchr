@@ -96,43 +96,6 @@ func castArgStrToType(v string, pdef *DefParameter) (any, error) {
 	return res, nil
 }
 
-// processInputParams applies value processors to input parameters.
-func (input *Input) processInputParams(def ParametersList, inp InputParams, changed InputParams) error {
-	var err error
-	for _, p := range def {
-		_, isChanged := changed[p.Name]
-		res := inp[p.Name]
-		for i, procDef := range p.Process {
-			handler := p.processors[i]
-			res, err = handler(res, ValueProcessorContext{
-				ValOrig:   inp[p.Name],
-				IsChanged: isChanged,
-				Input:     input,
-				DefParam:  p,
-				Action:    input.action,
-			})
-			if err != nil {
-				return ErrValueProcessorHandler{
-					Processor: procDef.ID,
-					Param:     p.Name,
-					Err:       err,
-				}
-			}
-		}
-		// Cast to []any slice because jsonschema validator supports only this type.
-		if p.Type == jsonschema.Array {
-			res = CastSliceTypedToAny(res)
-		}
-		// If the value was changed, we can safely override the value.
-		// If the value was not changed and processed is nil, do not add it.
-		if isChanged || res != nil {
-			inp[p.Name] = res
-		}
-	}
-
-	return nil
-}
-
 // IsValidated returns input status.
 func (input *Input) IsValidated() bool {
 	return input.validated

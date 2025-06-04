@@ -32,8 +32,8 @@ func (s *commonStream) FD() uintptr {
 }
 
 // Fd returns the file descriptor number for this stream.
-func (o *Out) Fd() uintptr {
-	return o.fd
+func (s *commonStream) Fd() uintptr {
+	return s.fd
 }
 
 // IsDiscard returns if read/write is discarded.

@@ -56,7 +56,7 @@ func Test_Action(t *testing.T) {
 	require.NotNil(act.input)
 
 	// Option is not defined, but should be there
-	// because [Action.ValidateInput] decides if the input correct or not.
+	// because [manager.ValidateInput] decides if the input correct or not.
 	_, okOpt := act.input.Opts()["opt6"]
 	assert.True(okOpt)
 	assert.Equal(inputArgs, act.input.Args())

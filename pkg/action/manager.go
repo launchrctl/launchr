@@ -11,6 +11,7 @@ import (
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/driver"
+	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 // DiscoverActionsFn defines a function to discover actions.
@@ -338,8 +339,8 @@ func (m *actionManagerMap) GetPersistentFlags() *PersistentFlags {
 }
 
 func (m *actionManagerMap) ValidateInput(a *Action, input *Input) error {
-	// @todo move to separate service with full input validation. See notes below.
-	// @todo think about more elegant solution as right now it forces us to build workarounds for validation.
+	// @todo move to a separate service with full input validation. See notes below.
+	// @todo think about a more elegant solution as right now it forces us to build workarounds for validation.
 	// Currently, input validation includes 3 types of validations:
 	// 1) Validation of runtime flags
 	// 2) Validation of persistent flags
@@ -382,13 +383,13 @@ func (m *actionManagerMap) ValidateInput(a *Action, input *Input) error {
 	def := a.ActionDef()
 
 	// Process arguments.
-	err = input.processInputParams(def.Arguments, input.Args(), input.ArgsChanged())
+	err = m.processInputParams(def.Arguments, input.Args(), input.ArgsChanged(), input)
 	if err != nil {
 		return err
 	}
 
 	// Process options.
-	err = input.processInputParams(def.Options, input.Opts(), input.OptsChanged())
+	err = m.processInputParams(def.Options, input.Opts(), input.OptsChanged(), input)
 	if err != nil {
 		return err
 	}
@@ -403,6 +404,44 @@ func (m *actionManagerMap) ValidateInput(a *Action, input *Input) error {
 		return err
 	}
 	input.SetValidated(true)
+
+	return nil
+}
+
+// processInputParams applies value processors to input parameters.
+func (m *actionManagerMap) processInputParams(def ParametersList, inp InputParams, changed InputParams, input *Input) error {
+	// @todo move to a separate service with full input validation. See notes in actionManagerMap.ValidateFlags.
+	var err error
+	for _, p := range def {
+		_, isChanged := changed[p.Name]
+		res := inp[p.Name]
+		for i, procDef := range p.Process {
+			handler := p.processors[i]
+			res, err = handler(res, ValueProcessorContext{
+				ValOrig:   inp[p.Name],
+				IsChanged: isChanged,
+				Input:     input,
+				DefParam:  p,
+				Action:    input.action,
+			})
+			if err != nil {
+				return ErrValueProcessorHandler{
+					Processor: procDef.ID,
+					Param:     p.Name,
+					Err:       err,
+				}
+			}
+		}
+		// Cast to []any slice because jsonschema validator supports only this type.
+		if p.Type == jsonschema.Array {
+			res = CastSliceTypedToAny(res)
+		}
+		// If the value was changed, we can safely override the value.
+		// If the value was not changed and processed is nil, do not add it.
+		if isChanged || res != nil {
+			inp[p.Name] = res
+		}
+	}
 
 	return nil
 }

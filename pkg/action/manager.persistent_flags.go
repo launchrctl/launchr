@@ -7,6 +7,7 @@ import (
 )
 
 // PersistentFlags holds definitions, current state, and default values of flags.
+// @todo think about moving it to new input validation service alongside. See notes in actionManagerMap.ValidateFlags.
 type PersistentFlags struct {
 	definitions ParametersList
 	values      map[string]any

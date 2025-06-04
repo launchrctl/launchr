@@ -160,7 +160,18 @@ func (c *runtimeContainer) ValidateInput(input *Input) error {
 		},
 	}
 
-	return jsonschema.Validate(s, map[string]any{jsonschemaPropRuntime: input.RuntimeFlags()})
+	err := jsonschema.Validate(s, map[string]any{jsonschemaPropRuntime: input.RuntimeFlags()})
+	if err != nil {
+		return err
+	}
+
+	// early peak for an exec flag.
+	if c.exec {
+		// Mark input as validated because arguments are passed directly to exec.
+		input.SetValidated(true)
+	}
+
+	return nil
 }
 
 func (c *runtimeContainer) SetFlags(input *Input) error {
@@ -191,10 +202,6 @@ func (c *runtimeContainer) SetFlags(input *Input) error {
 		c.exec = ex.(bool)
 	}
 
-	if c.exec {
-		// Mark input as validated because arguments are passed directly to exec.
-		input.SetValidated(true)
-	}
 	return nil
 }
 
