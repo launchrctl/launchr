@@ -9,10 +9,14 @@ import (
 	"strings"
 
 	"github.com/launchrctl/launchr/internal/launchr"
+	"github.com/launchrctl/launchr/pkg/action"
 )
 
 // Builder is the orchestrator to fetch dependencies and build launchr.
 type Builder struct {
+	action.WithLogger
+	action.WithTerm
+
 	*BuildOptions
 	wd  string
 	env *buildEnvironment
@@ -91,7 +95,7 @@ func NewBuilder(opts *BuildOptions) (*Builder, error) {
 
 // Build prepares build environment, generates go files and build the binary.
 func (b *Builder) Build(ctx context.Context, streams launchr.Streams) error {
-	launchr.Term().Info().Printfln("Starting to build %s", b.PkgName)
+	b.Term().Info().Printfln("Starting to build %s", b.PkgName)
 	// Prepare build environment dir and go executable.
 	var err error
 	b.env, err = newBuildEnvironment(streams)
@@ -99,16 +103,19 @@ func (b *Builder) Build(ctx context.Context, streams launchr.Streams) error {
 		return err
 	}
 
+	b.env.SetLogger(b.Log())
+	b.env.SetTerm(b.Term())
+
 	// Delete temp files in case of error.
 	defer func() {
 		if err != nil {
 			_ = b.Close()
 		}
 	}()
-	launchr.Log().Debug("creating build environment", "temp_dir", b.env.wd, "env", b.env.env)
+	b.Log().Debug("creating build environment", "temp_dir", b.env.wd, "env", b.env.env)
 
 	// Write files to dir and generate go mod.
-	launchr.Term().Info().Println("Creating the project files and fetching dependencies")
+	b.Term().Info().Println("Creating the project files and fetching dependencies")
 	b.env.SetEnv("CGO_ENABLED", "0")
 	err = b.env.CreateModFile(ctx, b.BuildOptions)
 	if err != nil {
@@ -129,7 +136,7 @@ func (b *Builder) Build(ctx context.Context, streams launchr.Streams) error {
 		{launchr.Template{Tmpl: tmplGen, Data: &mainVars}, "gen.go"},
 	}
 
-	launchr.Term().Info().Println("Generating the go files")
+	b.Term().Info().Println("Generating the go files")
 	for _, f := range files {
 		// Generate the file.
 		err = f.WriteFile(filepath.Join(b.env.wd, f.file))
@@ -139,27 +146,27 @@ func (b *Builder) Build(ctx context.Context, streams launchr.Streams) error {
 	}
 
 	// Generate code for provided plugins.
-	launchr.Term().Info().Println("Running plugin generation")
+	b.Term().Info().Println("Running plugin generation")
 	err = b.runGoRun(ctx, b.env.wd, "gen.go", "--work-dir="+b.wd, "--build-dir="+b.env.wd, "--release")
 	if err != nil {
 		return err
 	}
 
 	// Build the main go package.
-	launchr.Term().Info().Printfln("Building %s", b.PkgName)
+	b.Term().Info().Printfln("Building %s", b.PkgName)
 	err = b.goBuild(ctx)
 	if err != nil {
 		return err
 	}
 
-	launchr.Term().Success().Printfln("Build complete: %s", b.BuildOutput)
+	b.Term().Success().Printfln("Build complete: %s", b.BuildOutput)
 	return nil
 }
 
 // Close does cleanup after build.
 func (b *Builder) Close() error {
 	if b.env != nil && !b.Debug {
-		launchr.Log().Debug("cleaning build environment directory", "dir", b.env.wd)
+		b.Log().Debug("cleaning build environment directory", "dir", b.env.wd)
 		return b.env.Close()
 	}
 	return nil

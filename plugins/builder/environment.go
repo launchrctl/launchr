@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/launchrctl/launchr/internal/launchr"
+	"github.com/launchrctl/launchr/pkg/action"
 )
 
 type envVars []string
@@ -53,6 +54,9 @@ func (a *envVars) Unset(k string) {
 }
 
 type buildEnvironment struct {
+	action.WithLogger
+	action.WithTerm
+
 	wd      string
 	env     envVars
 	streams launchr.Streams
@@ -160,7 +164,7 @@ func (env *buildEnvironment) execGoGet(ctx context.Context, args ...string) erro
 }
 
 func (env *buildEnvironment) RunCmd(ctx context.Context, cmd *exec.Cmd) error {
-	launchr.Log().Debug("executing shell", "cmd", cmd)
+	env.Log().Debug("executing shell", "cmd", cmd)
 	err := cmd.Start()
 	if err != nil {
 		return err
