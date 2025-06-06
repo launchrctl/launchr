@@ -32,16 +32,20 @@ func CobraImpl(a *action.Action, streams launchr.Streams, manager action.Manager
 			input := action.NewInput(a, argsNamed, optsChanged, streams)
 
 			// Store runtime flags in the input.
-			runOpts = derefOpts(filterChangedFlags(cmd, runOpts))
-			for k, v := range runOpts {
-				input.SetRuntimeFlag(k, v)
+			if env, ok := a.Runtime().(action.RuntimeFlags); ok {
+				runtimeFlagsGroup := env.GetFlags()
+				runOpts = derefOpts(filterChangedFlags(cmd, runOpts))
+				for k, v := range runOpts {
+					input.SetGroupFlag(runtimeFlagsGroup.GetName(), k, v)
+				}
 			}
 
 			// Retrieve the current persistent flags state and pass to action. It will be later used during decorating
 			// or other action steps.
 			// Flags are immutable in action.
-			for k, v := range manager.GetPersistentFlags().GetAll() {
-				input.SetPersistentFlag(k, v)
+			persistentFlagsGroup := manager.GetPersistentFlags()
+			for k, v := range persistentFlagsGroup.GetAll() {
+				input.SetGroupFlag(persistentFlagsGroup.GetName(), k, v)
 			}
 
 			// Validate input before setting to action.
@@ -77,8 +81,8 @@ func CobraImpl(a *action.Action, streams launchr.Streams, manager action.Manager
 	}
 
 	if env, ok := a.Runtime().(action.RuntimeFlags); ok {
-		runtimeFlags := env.FlagsDefinition()
-		err = setCmdFlags(cmd.Flags(), runtimeFlags, runOpts)
+		runtimeFlagsGroup := env.GetFlags()
+		err = setCmdFlags(cmd.Flags(), runtimeFlagsGroup.GetDefinitions(), runOpts)
 		if err != nil {
 			return nil, err
 		}

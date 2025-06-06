@@ -21,8 +21,8 @@ type Runtime interface {
 // RuntimeFlags is an interface to define environment specific runtime configuration.
 type RuntimeFlags interface {
 	Runtime
-	// FlagsDefinition provides definitions for action environment specific flags.
-	FlagsDefinition() ParametersList
+	// GetFlags returns flags group of runtime configuration.
+	GetFlags() *FlagsGroup
 	// SetFlags sets environment configuration.
 	SetFlags(input *Input) error
 	// ValidateInput validates input arguments in action definition.
@@ -105,15 +105,15 @@ func (c *WithTerm) Term() *launchr.Terminal {
 	return c.term
 }
 
-// WithFlags provides a composition with flags utilities.
-type WithFlags struct {
-	flags *PersistentFlags
+// WithFlagsGroup provides a composition with flags utilities.
+type WithFlagsGroup struct {
+	flags *FlagsGroup
 }
 
-// GetFlags returns flags struct to work with.
-func (c *WithFlags) GetFlags() *PersistentFlags {
+// GetFlagsGroup returns flags group to work with. Creates new if it doesn't exist.
+func (c *WithFlagsGroup) GetFlagsGroup(name string) *FlagsGroup {
 	if c.flags == nil {
-		c.flags = NewPersistentFlags()
+		c.flags = NewFlagsGroup(name)
 	}
 
 	return c.flags

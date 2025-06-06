@@ -26,10 +26,8 @@ type Input struct {
 	args InputParams
 	// opts contains parsed options with default values.
 	opts InputParams
-	// runtime contains runtime related values.
-	runtime InputParams
-	// persistent contains application and overridden by action persistent flag values.
-	persistent InputParams
+	// groups contains input parameters grouped by unique name
+	groups map[string]InputParams
 	// io contains out/in/err destinations.
 	io launchr.Streams
 
@@ -50,15 +48,14 @@ func NewInput(a *Action, args InputParams, opts InputParams, io launchr.Streams)
 	// Make sure the special key doesn't leak.
 	delete(args, inputMapKeyArgsPos)
 	return &Input{
-		action:     a,
-		args:       setParamDefaults(args, def.Arguments),
-		argsRaw:    args,
-		argsPos:    argsPos,
-		opts:       setParamDefaults(opts, def.Options),
-		optsRaw:    opts,
-		runtime:    make(InputParams),
-		persistent: make(InputParams),
-		io:         io,
+		action:  a,
+		args:    setParamDefaults(args, def.Arguments),
+		argsRaw: args,
+		argsPos: argsPos,
+		opts:    setParamDefaults(opts, def.Options),
+		optsRaw: opts,
+		groups:  make(map[string]InputParams),
+		io:      io,
 	}
 }
 
@@ -155,34 +152,27 @@ func (input *Input) IsOptChanged(name string) bool {
 	return ok
 }
 
-// RuntimeFlags returns stored runtime flags values.
-func (input *Input) RuntimeFlags() InputParams {
-	return input.runtime
+// GroupFlags returns stored group flags values.
+func (input *Input) GroupFlags(group string) InputParams {
+	if gp, ok := input.groups[group]; ok {
+		return gp
+	}
+	return make(InputParams)
 }
 
-// RuntimeFlag returns a runtime flag by name.
-func (input *Input) RuntimeFlag(name string) any {
-	return input.RuntimeFlags()[name]
+// GroupFlag returns a group flag by name.
+func (input *Input) GroupFlag(group, name string) any {
+	return input.GroupFlags(group)[name]
 }
 
-// SetRuntimeFlag sets runtime flag value.
-func (input *Input) SetRuntimeFlag(name string, val any) {
-	input.runtime[name] = val
-}
-
-// PersistentFlags returns stored persistent flags values.
-func (input *Input) PersistentFlags() InputParams {
-	return input.persistent
-}
-
-// PersistentFlag returns persistent flag by name.
-func (input *Input) PersistentFlag(name string) any {
-	return input.PersistentFlags()[name]
-}
-
-// SetPersistentFlag sets persistent flag value.
-func (input *Input) SetPersistentFlag(name string, val any) {
-	input.persistent[name] = val
+// SetGroupFlag sets group flag value.
+func (input *Input) SetGroupFlag(group, name string, val any) {
+	gp, ok := input.groups[group]
+	if !ok {
+		gp = make(InputParams)
+		input.groups[group] = gp
+	}
+	gp[name] = val
 }
 
 // Args returns input named and processed arguments.

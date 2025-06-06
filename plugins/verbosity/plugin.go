@@ -225,7 +225,7 @@ func logLevelFlagInt(v int) launchr.LogLevel {
 }
 
 // withCustomLogger decorator adds a new logger for [RuntimeLoggerAware] runtime.
-func withCustomLogger(_ action.Manager, a *action.Action) {
+func withCustomLogger(m action.Manager, a *action.Action) {
 	if a.Runtime() == nil {
 		return
 	}
@@ -234,14 +234,15 @@ func withCustomLogger(_ action.Manager, a *action.Action) {
 		return
 	}
 
+	persistentFlags := m.GetPersistentFlags()
 	if rt, ok := a.Runtime().(action.RuntimeLoggerAware); ok {
 		var logFormat LogFormat
-		if lfStr, ok := a.Input().PersistentFlag("log-format").(string); ok {
+		if lfStr, ok := a.Input().GroupFlag(persistentFlags.GetName(), "log-format").(string); ok {
 			logFormat = LogFormat(lfStr)
 		}
 
 		var logLevel launchr.LogLevel
-		if llStr, ok := a.Input().PersistentFlag("log-level").(string); ok {
+		if llStr, ok := a.Input().GroupFlag(persistentFlags.GetName(), "log-level").(string); ok {
 			logLevel = launchr.LogLevelFromString(llStr)
 		}
 
@@ -251,7 +252,7 @@ func withCustomLogger(_ action.Manager, a *action.Action) {
 }
 
 // withCustomTerm decorator adds a new term for [RuntimeTermAware] runtime.
-func withCustomTerm(_ action.Manager, a *action.Action) {
+func withCustomTerm(m action.Manager, a *action.Action) {
 	if a.Runtime() == nil {
 		return
 	}
@@ -260,10 +261,11 @@ func withCustomTerm(_ action.Manager, a *action.Action) {
 		return
 	}
 
+	persistentFlags := m.GetPersistentFlags()
 	if rt, ok := a.Runtime().(action.RuntimeTermAware); ok {
 		term := launchr.NewTerminal()
 		term.SetOutput(a.Input().Streams().Out())
-		if quiet, ok := a.Input().PersistentFlag("log-level").(bool); ok && quiet {
+		if quiet, ok := a.Input().GroupFlag(persistentFlags.GetName(), "log-level").(bool); ok && quiet {
 			term.DisableOutput()
 		}
 

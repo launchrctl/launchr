@@ -33,7 +33,7 @@ const (
 type runtimeContainer struct {
 	WithLogger
 	WithTerm
-	WithFlags
+	WithFlagsGroup
 
 	// crt is a container runtime.
 	crt driver.ContainerRunner
@@ -98,8 +98,8 @@ func (c *runtimeContainer) Clone() Runtime {
 	return NewContainerRuntime(c.rtype)
 }
 
-func (c *runtimeContainer) FlagsDefinition() ParametersList {
-	flags := c.GetFlags()
+func (c *runtimeContainer) GetFlags() *FlagsGroup {
+	flags := c.GetFlagsGroup(jsonschemaPropRuntime)
 	if len(flags.GetDefinitions()) == 0 {
 		definitions := ParametersList{
 			&DefParameter{
@@ -148,11 +148,11 @@ func (c *runtimeContainer) FlagsDefinition() ParametersList {
 		flags.AddDefinitions(definitions)
 	}
 
-	return flags.GetDefinitions()
+	return flags
 }
 
 func (c *runtimeContainer) ValidateInput(input *Input) error {
-	err := c.flags.ValidateFlags(input.RuntimeFlags())
+	err := c.flags.ValidateFlags(input.GroupFlags(c.flags.GetName()))
 	if err != nil {
 		return err
 	}
@@ -167,7 +167,7 @@ func (c *runtimeContainer) ValidateInput(input *Input) error {
 }
 
 func (c *runtimeContainer) SetFlags(input *Input) error {
-	flags := input.RuntimeFlags()
+	flags := input.GroupFlags(c.flags.GetName())
 
 	if v, ok := flags[containerFlagRemote]; ok {
 		c.isSetRemote = v.(bool)

@@ -44,9 +44,9 @@ type Manager interface {
 	// This id provider will be used as default on [Action] discovery process.
 	SetActionIDProvider(p IDProvider)
 
-	// GetPersistentFlags retrieves the instance of PersistentFlags containing global flag definitions and their
+	// GetPersistentFlags retrieves the instance of FlagsGroup containing global flag definitions and their
 	// current state.
-	GetPersistentFlags() *PersistentFlags
+	GetPersistentFlags() *FlagsGroup
 
 	// AddValueProcessor adds processor to list of available processors
 	AddValueProcessor(name string, vp ValueProcessor)
@@ -108,7 +108,7 @@ type actionManagerMap struct {
 	discoverySeq *launchr.SliceSeqStateful[DiscoverActionsFn]
 	discTimeout  time.Duration
 
-	persistentFlags *PersistentFlags
+	persistentFlags *FlagsGroup
 
 	runManagerMap
 }
@@ -121,7 +121,7 @@ func NewManager(withFns ...DecorateWithFn) Manager {
 		dwFns:         withFns,
 		processors:    make(map[string]ValueProcessor),
 
-		persistentFlags: NewPersistentFlags(),
+		persistentFlags: NewFlagsGroup(jsonschemaPropPersistent),
 
 		discTimeout: 10 * time.Second,
 
@@ -334,7 +334,7 @@ func (m *actionManagerMap) SetActionIDProvider(p IDProvider) {
 	m.idProvider = p
 }
 
-func (m *actionManagerMap) GetPersistentFlags() *PersistentFlags {
+func (m *actionManagerMap) GetPersistentFlags() *FlagsGroup {
 	return m.persistentFlags
 }
 
@@ -375,7 +375,8 @@ func (m *actionManagerMap) ValidateInput(a *Action, input *Input) error {
 		return nil
 	}
 
-	err := m.GetPersistentFlags().ValidateFlags(input.PersistentFlags())
+	persistentFlags := m.GetPersistentFlags()
+	err := persistentFlags.ValidateFlags(input.GroupFlags(persistentFlags.GetName()))
 	if err != nil {
 		return err
 	}

@@ -6,25 +6,32 @@ import (
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
-// PersistentFlags holds definitions, current state, and default values of flags.
+// FlagsGroup holds definitions, current state, and default values of flags.
 // @todo think about moving it to new input validation service alongside. See notes in actionManagerMap.ValidateFlags.
-type PersistentFlags struct {
+type FlagsGroup struct {
+	name        string
 	definitions ParametersList
 	values      map[string]any
 	defaults    map[string]any
 }
 
-// NewPersistentFlags returns new instance of [PersistentFlags]
-func NewPersistentFlags() *PersistentFlags {
-	return &PersistentFlags{
+// NewFlagsGroup returns a new instance of [FlagsGroup]
+func NewFlagsGroup(name string) *FlagsGroup {
+	return &FlagsGroup{
+		name:        name,
 		definitions: make(ParametersList, 0),
 		values:      make(map[string]any),
 		defaults:    make(map[string]any),
 	}
 }
 
+// GetName returns the name of the flags group.
+func (p *FlagsGroup) GetName() string {
+	return p.name
+}
+
 // GetAll returns the latest state of flags.
-func (p *PersistentFlags) GetAll() InputParams {
+func (p *FlagsGroup) GetAll() InputParams {
 	result := make(InputParams)
 	for name, value := range p.defaults {
 		if _, ok := p.values[name]; !ok {
@@ -37,14 +44,14 @@ func (p *PersistentFlags) GetAll() InputParams {
 	return result
 }
 
-func (p *PersistentFlags) exists(name string) bool {
+func (p *FlagsGroup) exists(name string) bool {
 	_, ok := p.defaults[name]
 	return ok
 }
 
 // Get returns state of a named flag.
 // Return false if a flag doesn't exist.
-func (p *PersistentFlags) Get(name string) (any, bool) {
+func (p *FlagsGroup) Get(name string) (any, bool) {
 	if !p.exists(name) {
 		return nil, false
 	}
@@ -60,7 +67,7 @@ func (p *PersistentFlags) Get(name string) (any, bool) {
 }
 
 // Set sets new state value for a flag. Does nothing if flag doesn't exist.
-func (p *PersistentFlags) Set(name string, value any) {
+func (p *FlagsGroup) Set(name string, value any) {
 	if !p.exists(name) {
 		return
 	}
@@ -69,18 +76,18 @@ func (p *PersistentFlags) Set(name string, value any) {
 }
 
 // Unset removes the flag value.
-// The default value will be returned during [PersistentFlags.GetAll] if flag is not set.
-func (p *PersistentFlags) Unset(name string) {
+// The default value will be returned during [FlagsGroup.GetAll] if flag is not set.
+func (p *FlagsGroup) Unset(name string) {
 	delete(p.values, name)
 }
 
 // GetDefinitions returns [ParametersList] with flags definitions.
-func (p *PersistentFlags) GetDefinitions() ParametersList {
+func (p *FlagsGroup) GetDefinitions() ParametersList {
 	return p.definitions
 }
 
 // AddDefinitions adds new flag definition.
-func (p *PersistentFlags) AddDefinitions(opts ParametersList) {
+func (p *FlagsGroup) AddDefinitions(opts ParametersList) {
 	registered := make(map[string]struct{})
 
 	for _, def := range p.definitions {
@@ -89,11 +96,11 @@ func (p *PersistentFlags) AddDefinitions(opts ParametersList) {
 
 	for _, opt := range opts {
 		if opt.Name == "" {
-			panic("persistent flag name cannot be empty")
+			panic(fmt.Sprintf("%s flag name cannot be empty", p.name))
 		}
 
 		if _, exists := registered[opt.Name]; exists {
-			panic(fmt.Sprintf("duplicate persistent flag has been detected %s", opt.Name))
+			panic(fmt.Sprintf("duplicate %s flag has been detected %s", p.name, opt.Name))
 		}
 
 		p.definitions = append(p.definitions, opt)
@@ -104,22 +111,26 @@ func (p *PersistentFlags) AddDefinitions(opts ParametersList) {
 	}
 }
 
-// ValidateFlags validates input flags.
-func (p *PersistentFlags) ValidateFlags(params InputParams) error {
+// JSONSchema returns JSON schema of a flags group.
+func (p *FlagsGroup) JSONSchema() jsonschema.Schema {
 	opts, optsReq := p.definitions.JSONSchema()
-	s := jsonschema.Schema{
+	return jsonschema.Schema{
 		Type:     jsonschema.Object,
-		Required: []string{jsonschemaPropPersistent},
+		Required: []string{p.name},
 		Properties: map[string]any{
-			jsonschemaPropPersistent: map[string]any{
+			p.name: map[string]any{
 				"type":                 "object",
-				"title":                jsonschemaPropPersistent,
+				"title":                p.name,
 				"properties":           opts,
 				"required":             optsReq,
 				"additionalProperties": false,
 			},
 		},
 	}
+}
 
-	return jsonschema.Validate(s, map[string]any{jsonschemaPropPersistent: params})
+// ValidateFlags validates input flags.
+func (p *FlagsGroup) ValidateFlags(params InputParams) error {
+	s := p.JSONSchema()
+	return jsonschema.Validate(s, map[string]any{p.name: params})
 }
