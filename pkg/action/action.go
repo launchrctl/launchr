@@ -10,7 +10,6 @@ import (
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/driver"
-	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 // Action is an action definition with a contextual id (name), working directory path
@@ -29,9 +28,8 @@ type Action struct {
 	def    *Definition // def is an action definition. Loaded by [Loader], may be nil when not initialized.
 	defRaw *Definition // defRaw is a raw action definition. Loaded by [Loader], may be nil when not initialized.
 
-	runtime    Runtime                   // runtime is the [Runtime] to execute the action.
-	input      *Input                    // input is a storage for arguments and options used in runtime.
-	processors map[string]ValueProcessor // processors are [ValueProcessor] for manipulating input.
+	runtime Runtime // runtime is the [Runtime] to execute the action.
+	input   *Input  // input is a storage for arguments and options used in runtime.
 }
 
 // New creates a new action.
@@ -108,11 +106,6 @@ func (a *Action) SetProcessors(list map[string]ValueProcessor) error {
 	}
 
 	return nil
-}
-
-// GetProcessors returns processors map.
-func (a *Action) GetProcessors() map[string]ValueProcessor {
-	return a.processors
 }
 
 // Reset unsets loaded action to force reload.
@@ -256,83 +249,14 @@ func (a *Action) ImageBuildInfo(image string) *driver.BuildDefinition {
 
 // SetInput saves arguments and options for later processing in run, templates, etc.
 func (a *Action) SetInput(input *Input) (err error) {
-	def := a.ActionDef()
-
-	// Process arguments.
-	err = a.processInputParams(def.Arguments, input.Args(), input.ArgsChanged(), input)
-	if err != nil {
-		return err
-	}
-
-	// Process options.
-	err = a.processInputParams(def.Options, input.Opts(), input.OptsChanged(), input)
-	if err != nil {
-		return err
-	}
-
-	// Validate the new input.
-	if err = a.ValidateInput(input); err != nil {
-		return err
+	if !input.IsValidated() {
+		return fmt.Errorf("input is not validated")
 	}
 
 	a.input = input
 	// Reset to load the action file again with new replacements.
 	a.Reset()
 	return a.EnsureLoaded()
-}
-
-func (a *Action) processInputParams(def ParametersList, inp InputParams, changed InputParams, input *Input) error {
-	var err error
-	for _, p := range def {
-		_, isChanged := changed[p.Name]
-		res := inp[p.Name]
-		for i, procDef := range p.Process {
-			handler := p.processors[i]
-			res, err = handler(res, ValueProcessorContext{
-				ValOrig:   inp[p.Name],
-				IsChanged: isChanged,
-				Input:     input,
-				DefParam:  p,
-				Action:    a,
-			})
-			if err != nil {
-				return ErrValueProcessorHandler{
-					Processor: procDef.ID,
-					Param:     p.Name,
-					Err:       err,
-				}
-			}
-		}
-		// Cast to []any slice because jsonschema validator supports only this type.
-		if p.Type == jsonschema.Array {
-			res = CastSliceTypedToAny(res)
-		}
-		// If the value was changed, we can safely override the value.
-		// If the value was not changed and processed is nil, do not add it.
-		if isChanged || res != nil {
-			inp[p.Name] = res
-		}
-	}
-
-	return nil
-}
-
-// ValidateInput validates action input.
-func (a *Action) ValidateInput(input *Input) error {
-	if input.IsValidated() {
-		return nil
-	}
-	argsDefLen := len(a.ActionDef().Arguments)
-	argsPosLen := len(input.ArgsPositional())
-	if argsPosLen > argsDefLen {
-		return fmt.Errorf("accepts %d arg(s), received %d", argsDefLen, argsPosLen)
-	}
-	err := validateJSONSchema(a, input)
-	if err != nil {
-		return err
-	}
-	input.SetValidated(true)
-	return nil
 }
 
 // Execute runs action in the specified environment.

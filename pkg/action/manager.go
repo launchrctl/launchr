@@ -11,6 +11,7 @@ import (
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/driver"
+	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 // DiscoverActionsFn defines a function to discover actions.
@@ -27,9 +28,13 @@ type Manager interface {
 	Add(*Action) error
 	// Delete deletes the action from the manager.
 	Delete(id string)
-	// Decorate decorates an action with given behaviors and returns its copy.
+
+	// AddDecorators adds new decorators to manager.
+	AddDecorators(withFns ...DecorateWithFn)
+	// Decorate decorates an action with given behaviors.
 	// If functions withFn are not provided, default functions are applied.
-	Decorate(a *Action, withFn ...DecorateWithFn) *Action
+	Decorate(a *Action, withFn ...DecorateWithFn)
+
 	// GetIDFromAlias returns a real action ID by its alias. If not, returns alias.
 	GetIDFromAlias(alias string) string
 
@@ -38,6 +43,10 @@ type Manager interface {
 	// SetActionIDProvider sets global application action id provider.
 	// This id provider will be used as default on [Action] discovery process.
 	SetActionIDProvider(p IDProvider)
+
+	// GetPersistentFlags retrieves the instance of FlagsGroup containing global flag definitions and their
+	// current state.
+	GetPersistentFlags() *FlagsGroup
 
 	// AddValueProcessor adds processor to list of available processors
 	AddValueProcessor(name string, vp ValueProcessor)
@@ -48,6 +57,10 @@ type Manager interface {
 	AddDiscovery(DiscoverActionsFn)
 	// SetDiscoveryTimeout sets discovery timeout to stop on long-running callbacks.
 	SetDiscoveryTimeout(timeout time.Duration)
+
+	// ValidateInput validates an action input.
+	// @todo think about decoupling it from manager to separate service
+	ValidateInput(a *Action, input *Input) error
 
 	RunManager
 }
@@ -95,6 +108,8 @@ type actionManagerMap struct {
 	discoverySeq *launchr.SliceSeqStateful[DiscoverActionsFn]
 	discTimeout  time.Duration
 
+	persistentFlags *FlagsGroup
+
 	runManagerMap
 }
 
@@ -105,6 +120,8 @@ func NewManager(withFns ...DecorateWithFn) Manager {
 		actionAliases: make(map[string]string),
 		dwFns:         withFns,
 		processors:    make(map[string]ValueProcessor),
+
+		persistentFlags: NewFlagsGroup(jsonschemaPropPersistent),
 
 		discTimeout: 10 * time.Second,
 
@@ -189,7 +206,9 @@ func (m *actionManagerMap) Delete(id string) {
 func (m *actionManagerMap) All() map[string]*Action {
 	ret := m.AllUnsafe()
 	for k, v := range ret {
-		ret[k] = m.Decorate(v, m.dwFns...)
+		a := v.Clone()
+		m.Decorate(a, m.dwFns...)
+		ret[k] = a
 	}
 	return ret
 }
@@ -197,7 +216,9 @@ func (m *actionManagerMap) All() map[string]*Action {
 func (m *actionManagerMap) Get(id string) (*Action, bool) {
 	a, ok := m.GetUnsafe(id)
 	// Process action with default decorators and return a copy to have an isolated scope.
-	return m.Decorate(a, m.dwFns...), ok
+	a = a.Clone()
+	m.Decorate(a, m.dwFns...)
+	return a, ok
 }
 
 func (m *actionManagerMap) GetUnsafe(id string) (a *Action, ok bool) {
@@ -282,18 +303,21 @@ func (m *actionManagerMap) GetValueProcessors() map[string]ValueProcessor {
 	return m.processors
 }
 
-func (m *actionManagerMap) Decorate(a *Action, withFns ...DecorateWithFn) *Action {
+func (m *actionManagerMap) AddDecorators(withFns ...DecorateWithFn) {
+	m.dwFns = append(m.dwFns, withFns...)
+}
+
+func (m *actionManagerMap) Decorate(a *Action, withFns ...DecorateWithFn) {
 	if a == nil {
-		return nil
+		return
 	}
 	if withFns == nil {
 		withFns = m.dwFns
 	}
-	a = a.Clone()
+
 	for _, fn := range withFns {
 		fn(m, a)
 	}
-	return a
 }
 
 func (m *actionManagerMap) GetActionIDProvider() IDProvider {
@@ -308,6 +332,119 @@ func (m *actionManagerMap) SetActionIDProvider(p IDProvider) {
 		p = DefaultIDProvider{}
 	}
 	m.idProvider = p
+}
+
+func (m *actionManagerMap) GetPersistentFlags() *FlagsGroup {
+	return m.persistentFlags
+}
+
+func (m *actionManagerMap) ValidateInput(a *Action, input *Input) error {
+	// @todo move to a separate service with full input validation. See notes below.
+	// @todo think about a more elegant solution as right now it forces us to build workarounds for validation.
+	// Currently, input validation includes 3 types of validations:
+	// 1) Validation of runtime flags
+	// 2) Validation of persistent flags
+	// 3) Validation of arguments and options
+	//
+	// At present, this approach is neither flexible nor elegant enough.
+	// Ideally, all 3 steps should be validated with a single jsonschema.validate call,
+	// but each part of the input has unique properties that must be respected.
+	//
+	// For example, some runtimes may allow skipping further validation and proceeding without
+	// executing the action.
+	//
+	// Persistent flags are not related to the action itself; they exist separately and cannot
+	// be combined with runtime flags due to the partial validation described above.
+	//
+	// The ideal solution would be to combine all properties within a JSON schema and validate it.
+	// Runtime properties that allow skipping validation and provide completely different behavior
+	// should be implemented differently - such as through a special launcher flag, action, or
+	// new functionality specifically for debugging runtimes.
+	if r, ok := a.Runtime().(RuntimeFlags); ok {
+		err := r.ValidateInput(input)
+		if err != nil {
+			return err
+		}
+
+		if err = r.SetFlags(input); err != nil {
+			return err
+		}
+	}
+
+	if input.IsValidated() {
+		return nil
+	}
+
+	persistentFlags := m.GetPersistentFlags()
+	err := persistentFlags.ValidateFlags(input.GroupFlags(persistentFlags.GetName()))
+	if err != nil {
+		return err
+	}
+
+	def := a.ActionDef()
+
+	// Process arguments.
+	err = m.processInputParams(def.Arguments, input.Args(), input.ArgsChanged(), input)
+	if err != nil {
+		return err
+	}
+
+	// Process options.
+	err = m.processInputParams(def.Options, input.Opts(), input.OptsChanged(), input)
+	if err != nil {
+		return err
+	}
+
+	argsDefLen := len(a.ActionDef().Arguments)
+	argsPosLen := len(input.ArgsPositional())
+	if argsPosLen > argsDefLen {
+		return fmt.Errorf("accepts %d arg(s), received %d", argsDefLen, argsPosLen)
+	}
+	err = validateJSONSchema(a, input)
+	if err != nil {
+		return err
+	}
+	input.SetValidated(true)
+
+	return nil
+}
+
+// processInputParams applies value processors to input parameters.
+func (m *actionManagerMap) processInputParams(def ParametersList, inp InputParams, changed InputParams, input *Input) error {
+	// @todo move to a separate service with full input validation. See notes in actionManagerMap.ValidateFlags.
+	var err error
+	for _, p := range def {
+		_, isChanged := changed[p.Name]
+		res := inp[p.Name]
+		for i, procDef := range p.Process {
+			handler := p.processors[i]
+			res, err = handler(res, ValueProcessorContext{
+				ValOrig:   inp[p.Name],
+				IsChanged: isChanged,
+				Input:     input,
+				DefParam:  p,
+				Action:    input.action,
+			})
+			if err != nil {
+				return ErrValueProcessorHandler{
+					Processor: procDef.ID,
+					Param:     p.Name,
+					Err:       err,
+				}
+			}
+		}
+		// Cast to []any slice because jsonschema validator supports only this type.
+		if p.Type == jsonschema.Array {
+			res = CastSliceTypedToAny(res)
+		}
+		// If the value was changed, we can safely override the value.
+		// If the value was not changed and processed is nil, do not add it.
+		if isChanged || res != nil {
+			inp[p.Name] = res
+		}
+	}
+
+	return nil
 }
 
 // RunInfo stores information about a running action.

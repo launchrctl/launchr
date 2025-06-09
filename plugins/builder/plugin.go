@@ -35,6 +35,9 @@ func (p *Plugin) PluginInfo() launchr.PluginInfo {
 }
 
 type builderInput struct {
+	action.WithLogger
+	action.WithTerm
+
 	name    string
 	out     string
 	timeout string
@@ -69,6 +72,18 @@ func (p *Plugin) DiscoverActions(_ context.Context) ([]*action.Action, error) {
 			debug:   input.Opt("debug").(bool),
 			nocache: input.Opt("no-cache").(bool),
 		}
+
+		log := launchr.Log()
+		if rt, ok := a.Runtime().(action.RuntimeLoggerAware); ok {
+			log = rt.LogWith()
+		}
+		flags.SetLogger(log)
+
+		term := launchr.Term()
+		if rt, ok := a.Runtime().(action.RuntimeTermAware); ok {
+			term = rt.Term()
+		}
+		flags.SetTerm(term)
 
 		return Execute(ctx, p.app.Streams(), &flags)
 	}))
@@ -137,6 +152,9 @@ func Execute(ctx context.Context, streams launchr.Streams, flags *builderInput) 
 	if err != nil {
 		return err
 	}
+	builder.WithLogger = flags.WithLogger
+	builder.WithTerm = flags.WithTerm
+
 	defer builder.Close()
 	return builder.Build(ctx, streams)
 }

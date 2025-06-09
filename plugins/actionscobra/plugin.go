@@ -95,7 +95,7 @@ func (p *Plugin) CobraAddCommands(rootCmd *launchr.Command) error {
 	}
 	streams := p.app.Streams()
 	for _, a := range actions {
-		cmd, err := CobraImpl(a, streams)
+		cmd, err := CobraImpl(a, streams, p.am)
 		if err != nil {
 			launchr.Log().Warn("action was skipped due to error", "action_id", a.ID, "error", err)
 			launchr.Term().Warning().Printfln("Action %q was skipped:\n%v", a.ID, err)

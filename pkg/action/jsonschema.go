@@ -8,8 +8,10 @@ import (
 )
 
 const (
-	jsonschemaPropArgs = "arguments"
-	jsonschemaPropOpts = "options"
+	jsonschemaPropArgs       = "arguments"
+	jsonschemaPropOpts       = "options"
+	jsonschemaPropRuntime    = "runtime"
+	jsonschemaPropPersistent = "persistent"
 )
 
 // validateJSONSchema validates arguments and options according to
@@ -85,5 +87,24 @@ func (l *ParametersList) JSONSchema() (map[string]any, []string) {
 
 // JSONSchema returns json schema definition of an option.
 func (p *DefParameter) JSONSchema() map[string]any {
-	return maps.Clone(p.raw)
+	if len(p.raw) != 0 {
+		return maps.Clone(p.raw)
+	}
+
+	// We copy to raw because the DefParameter can be created directly in runtime/persistent flags.
+	// It is different from when we parse a yaml file, that's why the raw may be empty here and needs to be recreated.
+	// TODO: Refactor how DefParameter is created in Persistent, Runtime and yaml, unify 2 cases. Maybe rethink how we create a DefParameter.
+	raw := make(map[string]any)
+	raw["title"] = p.Title
+	raw["type"] = p.Type
+	raw["default"] = p.Default
+
+	if len(p.Enum) > 0 {
+		raw["enum"] = p.Enum
+	}
+	if p.Description != "" {
+		raw["description"] = p.Description
+	}
+
+	return raw
 }

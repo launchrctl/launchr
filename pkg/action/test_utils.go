@@ -8,6 +8,7 @@ import (
 	"testing/fstest"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 )
@@ -103,11 +104,13 @@ func (tt TestCaseValueProcessor) Test(t *testing.T, am Manager) {
 	}
 	// Run processors.
 	input := NewInput(a, tt.Args, tt.Opts, nil)
-	err = a.SetInput(input)
+	err = am.ValidateInput(a, input)
 	assertIsSameError(t, tt.ErrProc, err)
 	if tt.ErrProc != nil {
 		return
 	}
+	err = a.SetInput(input)
+	require.NoError(t, err)
 	// Test input is processed.
 	input = a.Input()
 	if tt.ExpArgs == nil {
