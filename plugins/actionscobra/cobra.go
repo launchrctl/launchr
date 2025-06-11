@@ -35,8 +35,12 @@ func CobraImpl(a *action.Action, streams launchr.Streams, manager action.Manager
 			if rt, ok := a.Runtime().(action.RuntimeFlags); ok {
 				runtimeFlagsGroup := rt.GetFlags()
 				runOpts = derefOpts(filterChangedFlags(cmd, runOpts))
-				for k, v := range runOpts {
-					input.SetFlagInGroup(runtimeFlagsGroup.GetName(), k, v)
+				for flag, defaultValue := range runtimeFlagsGroup.GetAll() {
+					value := defaultValue
+					if runOpts[flag] != nil {
+						value = runOpts[flag]
+					}
+					input.SetFlagInGroup(runtimeFlagsGroup.GetName(), flag, value)
 				}
 			}
 
