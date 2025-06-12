@@ -117,6 +117,7 @@ func (c *runtimeContainer) GetFlags() *FlagsGroup {
 				Title:       "Remote copy back",
 				Description: "Copies the working directory back from the container. Works only if the runtime is remote.",
 				Type:        jsonschema.Boolean,
+				Default:     false,
 			},
 			&DefParameter{
 				Name:        containerFlagRemoveImage,
@@ -161,7 +162,8 @@ func (c *runtimeContainer) ValidateInput(input *Input) error {
 	}
 
 	// early peak for an exec flag.
-	if c.exec {
+	exec := input.GetFlagInGroup(c.flags.GetName(), containerFlagExec)
+	if exec != nil && exec.(bool) {
 		// Mark input as validated because arguments are passed directly to exec.
 		input.SetValidated(true)
 	}
@@ -188,7 +190,7 @@ func (c *runtimeContainer) SetFlags(input *Input) error {
 		c.noCache = nc.(bool)
 	}
 
-	if e, ok := flags[containerFlagEntrypoint]; ok {
+	if e, ok := flags[containerFlagEntrypoint]; ok && e != "" {
 		c.entrypointSet = true
 		c.entrypoint = e.(string)
 	}
