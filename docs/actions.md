@@ -148,6 +148,7 @@ Action runtime options:
       --entrypoint string   Image Entrypoint: Overwrite the default ENTRYPOINT of the image. Example: --entrypoint "/bin/sh"
       --exec                Exec command: Overwrite the command of the action. Argument and options are not validated, sets container CMD directly. Example usage: --exec -- ls -lah
       --no-cache            No cache: Send command to build container without cache
+      --rebuild-image       Rebuild image: Rebuild image if the action directory or the Dockerfile has changed
       --remote-copy-back    Remote copy back: Copies the working directory back from the container. Works only if the runtime is remote.
       --remote-runtime      Remote runtime: Forces the container runtime to be used as remote. Copies the working directory to a container volume. Local binds are not used.
       --remove-image        Remove Image: Remove an image after execution of action
