@@ -12,7 +12,7 @@ import (
 	"github.com/launchrctl/launchr/internal/launchr"
 )
 
-const tokenRmLine = "<TOKEN_REMOVE_THIS_LINE>"
+const tokenRmLine = "<TOKEN_REMOVE_THIS_LINE>" //nolint:gosec // G101: Not a credential.
 
 var rgxTokenRmLine = regexp.MustCompile(`.*` + tokenRmLine + `.*\n?`)
 
@@ -95,11 +95,24 @@ func (err errMissingVar) Error() string {
 }
 
 // actionTplFuncs defined template functions available during parsing of an action yaml.
-func actionTplFuncs() template.FuncMap {
+func actionTplFuncs(input *Input) template.FuncMap {
 	return template.FuncMap{
 		// Checks if a value is nil. Used in conditions.
 		"isNil": func(v any) bool {
 			return v == nil
+		},
+		// Checks if a value is not nil. Used in conditions.
+		"isSet": func(v any) bool {
+			return v != nil
+		},
+		// Checks if a value is changed. Used in conditions.
+		"isChanged": func(v any) bool {
+			name, ok := v.(string)
+			if !ok {
+				return false
+			}
+
+			return input.IsOptChanged(name) || input.IsArgChanged(name)
 		},
 		// Removes a line if a given value is nil or pass through.
 		"removeLineIfNil": func(v any) any {
@@ -107,6 +120,54 @@ func actionTplFuncs() template.FuncMap {
 				return tokenRmLine
 			}
 			return v
+		},
+		// Removes a line if a given value is not nil or pass through.
+		"removeLineIfSet": func(v any) any {
+			if v != nil {
+				return tokenRmLine
+			}
+
+			return v
+		},
+		// Removes a line if a given value is changed or pass through.
+		"removeLineIfChanged": func(name string) any {
+			if input.IsOptChanged(name) || input.IsArgChanged(name) {
+				return tokenRmLine
+			}
+
+			args := input.Args()
+			arg, ok := args[name]
+			if ok {
+				return arg
+			}
+
+			opts := input.Opts()
+			opt, ok := opts[name]
+			if ok {
+				return opt
+			}
+
+			return nil
+		},
+		// Removes a line if a given value is not changed or pass through.
+		"removeLineIfNotChanged": func(name string) any {
+			if !input.IsOptChanged(name) && !input.IsArgChanged(name) {
+				return tokenRmLine
+			}
+
+			args := input.Args()
+			arg, ok := args[name]
+			if ok {
+				return arg
+			}
+
+			opts := input.Opts()
+			opt, ok := opts[name]
+			if ok {
+				return opt
+			}
+
+			return nil
 		},
 		// Removes current line.
 		"removeLine": func() string {
@@ -126,7 +187,7 @@ func (p inputProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
 	addPredefinedVariables(data, a)
 
 	// Parse action without variables to validate
-	tpl := template.New(a.ID).Funcs(actionTplFuncs())
+	tpl := template.New(a.ID).Funcs(actionTplFuncs(a.Input()))
 
 	_, err := tpl.Parse(string(b))
 	if err != nil {

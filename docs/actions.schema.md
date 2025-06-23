@@ -274,3 +274,82 @@ plasma
 + id
 uid=1000(plasma) gid=1000(plasma) groups=1000(plasma)
 ```
+
+
+## Available Command Template Functions
+
+### `removeLine`
+**Description:** A special template directive that removes the entire line from the final output.
+
+**Usage:**
+
+``` yaml
+- "{{ if condition }}value{{ else }}{{ removeLine }}{{ end }}"
+```
+
+### `isNil`
+
+**Description:** Checks if a value is nil.
+
+**Usage:**
+
+```yaml
+- "{{ if not (isNil .param_name) }}--param={{ .param_name }}{{ else }}{{ removeLine }}{{ end }}"
+```
+
+### `isSet`
+
+**Description:** Checks if a value has been set (opposite of `isNil`).
+
+```yaml
+- "{{ if isSet .param_name }}--param={{ .param_name }}{{else}}{{ removeLine }}{{ end }}"
+```
+
+### `isChanged`
+
+**Description:** Checks if an option or argument value has been changed (dirty).
+
+**Usage:**
+
+```yaml
+- '{{ if isChanged "param_name"}}--param={{.param_name}}{{else}}{{ removeLine }}{{ end }}'
+```
+
+### `removeLineIfNil`
+**Description:** Removes the entire command line if the value is nil.
+
+**Usage:**
+
+```yaml
+- "{{ removeLineIfNil .param_name }}"
+```
+
+### `removeLineIfSet`
+**Description:** Removes the entire command line if the value is set (has no nil value).
+
+**Usage:**
+
+```yaml
+- "{{ removeLineIfSet .param_name }}"
+```
+
+### `removeLineIfChanged`
+
+**Description:** Removes the command line entry if the option/argument value has changed.
+
+**Usage:**
+
+``` yaml
+- '{{ removeLineIfChanged "param_name" }}'
+```
+
+### `removeLineIfNotChanged`
+
+**Description:** Removes the command line entry if the option/argument value has not changed by the user.
+Opposite of `removeLineIfChanged`
+
+**Usage:**
+
+``` yaml
+- '{{ removeLineIfNotChanged "param_name" }}'
+```
