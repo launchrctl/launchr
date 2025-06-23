@@ -86,8 +86,17 @@ func Test_InputProcessor(t *testing.T) {
 - "{{ .arg2 }}"
 - "{{ if not (isNil .arg1) }}arg1 is not nil{{end}}"
 - "{{ if (isNil .optUnd) }}{{ removeLine }}{{ end }}" # Function call without new line`
-	res, err = proc.Process(ctx, []byte(s))
+	_, err = proc.Process(ctx, []byte(s))
 	assert.Equal(t, errMissVars, err)
+
+	s = `- "{{ if isSet .arg1 }}arg1 is set"{{end}}
+- "{{ removeLineIfSet .arg1 }}" # Function call without new line
+- "{{ if isChanged .arg1 }}arg1 is changed{{end}}"
+- '{{ removeLineIfNotChanged "arg1" }}'
+- '{{ removeLineIfChanged "arg1" }}' # Function call without new line`
+	res, err = proc.Process(ctx, []byte(s))
+	assert.NoError(t, err)
+	assert.Equal(t, "- \"arg1 is set\"\n- \"arg1 is changed\"\n- 'arg1'\n", string(res))
 }
 
 func Test_YamlTplCommentsProcessor(t *testing.T) {

@@ -18,6 +18,9 @@ action:
       description: Option to do something
       type: boolean
       default: false
+    - name: thirdoption
+      title: Third option
+      type: string
 
 runtime:
   type: container
@@ -31,3 +34,9 @@ runtime:
     - "{{ .arg2 }}"
     - "{{ .firstoption|removeLineIfNil }}"
     - "{{ if not (isNil .secondoption) }}--secondoption={{ .secondoption }}{{ else }}{{ removeLine }}{{ end }}"
+    - "{{ if isSet .thirdoption }}--thirdoption={{ .thirdoption }}{{else}}Third option is not set{{ end }}"
+    - "{{ removeLineIfSet .thirdoption }}"
+    - '{{ if not (isChanged "thirdoption")}}Third Option is not Changed{{else}}{{ removeLine }}{{ end }}'
+    - '{{ removeLineIfChanged "thirdoption" }}'
+    - '{{ if isChanged "thirdoption"}}Third Option is Changed{{else}}{{ removeLine }}{{ end }}'
+    - '{{ removeLineIfNotChanged "thirdoption" }}'
