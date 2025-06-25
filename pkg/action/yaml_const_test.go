@@ -54,6 +54,12 @@ action:
       title: Option 5 Array
       description: Option 5 description
       type: array
+    - name: optobj
+      title: Option 6 Object
+      description: Option 6 description
+      type: object
+      default:
+        opt61: opt61_default
 runtime:
   type: container
   image: my/image:v1
@@ -77,7 +83,7 @@ runtime:
     - -c
     - ls -lah
     - "{{ .arg2 }} {{ .arg1 }} {{ .arg_1 }} {{ .arg_12 }}"
-    - "{{ .opt3 }} {{ .opt2 }} {{ .opt1 }} {{ .opt_1 }} {{ .opt4 }} {{ .optarr }}"
+    - "{{ .opt3 }} {{ .opt2 }} {{ .opt1 }} {{ .opt_1 }} {{ .opt4 }} {{ .optarr }} {{ .optobj }} {{ .optobj.opt61 }}"
     - ${TEST_ENV_1} ${TEST_ENV_UND}
     - "${TEST_ENV_1} ${TEST_ENV_UND}"
 `
@@ -539,6 +545,31 @@ action:
       items:
         type: integer
       default: [1, 2, 3]
+`
+
+const validOptObjectImplicit = `
+runtime: plugin
+action:
+  title: Title
+  options:
+    - name: opt_object
+      type: object
+      required: true
+`
+
+const validOptObjectWithDefault = `
+runtime: plugin
+action:
+  title: Title
+  options:
+    - name: opt_object
+      type: object
+      required: true
+      properties:
+        key1:
+         type: string
+      default:
+        key1: value1
 `
 
 const validMultipleArgsAndOpts = `

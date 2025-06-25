@@ -132,7 +132,12 @@ Action definition is correct, but dashes are not allowed in templates, replace "
 		matches := rgxTplVar.FindAllSubmatch(b, -1)
 		for _, m := range matches {
 			k := string(m[1])
-			if _, ok := data[k]; !ok {
+
+			// Check if the key exists in the data.
+			// Note: Keys containing dots are currently treated as nested key paths, not literal keys.
+			// To support literal dot-containing keys (e.g., "test.key"), additional logic would be needed.
+			keyParts := strings.Split(k, ".")
+			if !hasNestedKey(data, keyParts) {
 				miss[k] = struct{}{}
 			}
 		}
@@ -144,6 +149,27 @@ Action definition is correct, but dashes are not allowed in templates, replace "
 	}
 
 	return res, nil
+}
+
+func hasNestedKey(data map[string]any, keyPath []string) bool {
+	if len(keyPath) == 0 {
+		// nothing to check if path is empty
+		return true
+	}
+
+	if len(keyPath) == 1 {
+		_, exists := data[keyPath[0]]
+		return exists
+	}
+
+	// Check if the current key exists and is a map
+	if val, ok := data[keyPath[0]]; ok {
+		if nestedMap, isMap := val.(map[string]any); isMap {
+			return hasNestedKey(nestedMap, keyPath[1:])
+		}
+	}
+
+	return false
 }
 
 // ConvertInputToTplVars creates a map with input variables suitable for template engine.

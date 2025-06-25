@@ -60,6 +60,7 @@ See [examples](#examples) of how required and default are used and more complex 
 3. `integer`
 4. `number` - float64 values
 5. `array` (currently array of 1 supported type)
+6. `object` - parses string as JSON string into map[string]any
 
 See [JSON Schema Reference](https://json-schema.org/understanding-json-schema/reference) for better understanding of
 how to use types, format, enums and other useful features.
@@ -161,6 +162,19 @@ action:
       description: |
         This is an optional option of type array<string>.
         It may be omitted, default value is used.
+         
+    - name: optObj
+      title: Option object
+      type: object
+      properties: # Optional object properties. Adding them forces strict property validation for jsonSchema.
+         key:
+            type: string
+            description: key property of object
+      default:
+         key: value
+      description: |
+         This is an optional option of type object.
+         It may be omitted, default value is used.
 
     - name: optenum
       title: Option enum
