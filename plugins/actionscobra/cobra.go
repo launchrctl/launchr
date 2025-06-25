@@ -1,6 +1,7 @@
 package actionscobra
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -163,6 +164,16 @@ func setFlag(flags *pflag.FlagSet, param *action.DefParameter) (any, error) {
 			// @todo use flags.Var() and define a custom value, jsonschema accepts "any".
 			return nil, fmt.Errorf("json schema array type %q is not implemented", param.Items.Type)
 		}
+	case jsonschema.Object:
+		// Handle object as a JSON string
+		defaultJSON := "{}"
+		if dval != nil {
+			if jsonBytes, err := json.Marshal(dval); err == nil {
+				defaultJSON = string(jsonBytes)
+			}
+		}
+		val = flags.StringP(param.Name, param.Shorthand, defaultJSON, desc+" (JSON format)")
+
 	default:
 		return nil, fmt.Errorf("json schema type %q is not implemented", param.Type)
 	}
@@ -183,7 +194,21 @@ func derefOpts(opts action.InputParams) action.InputParams {
 func derefOpt(v any) any {
 	switch v := v.(type) {
 	case *string:
-		return *v
+		str := *v
+		// Check for raw JSON prefix
+		if strings.HasPrefix(str, "raw:") {
+			launchr.Log().Debug("raw JSON prefix detected", "str", str)
+			// Return the JSON string without the prefix, don't parse
+			return strings.TrimPrefix(str, "raw:")
+		}
+
+		if strings.HasPrefix(str, "{") && strings.HasSuffix(str, "}") {
+			var obj map[string]interface{}
+			if err := json.Unmarshal([]byte(str), &obj); err == nil {
+				return obj
+			}
+		}
+		return str
 	case *bool:
 		return *v
 	case *int:
