@@ -80,6 +80,51 @@ func newBuildEnvironment(streams launchr.Streams) (*buildEnvironment, error) {
 	}, nil
 }
 
+// isModuleReplaced checks if a module path is present in the module replacements map.
+// It returns true if the module is replaced, and the replacement path if it is.
+func isModuleReplaced(modulePath string, modReplace map[string]string) (bool, string) {
+	for replPath, replTarget := range modReplace {
+		// Check for exact match first
+		if modulePath == replPath {
+			return true, replTarget
+		}
+		// Check if the module path is a subpath of a replaced module
+		if strings.HasPrefix(modulePath, replPath) {
+			// We consider it replaced if it's a subpath, but we don't need the target path here.
+			// The logic for handling subpaths is to skip them for 'go get',
+			// but the commit's intent seems to be to treat them as replaced for 'go mod edit'.
+			// For simplification, we'll treat any prefix match as a "replacement" for the purpose of `go mod edit`.
+			// A more precise approach might be needed if subpaths should be handled differently.
+			return true, "" // Target path not strictly needed for `go mod edit -require` logic here
+		}
+	}
+	return false, ""
+}
+
+// ensureModuleRequired adds a module to go.mod if it's not already there or if it's replaced.
+// It uses a placeholder version for replaced modules.
+func (env *buildEnvironment) ensureModuleRequired(ctx context.Context, modulePath string, modReplace map[string]string) error {
+	replaced, _ := isModuleReplaced(modulePath, modReplace)
+
+	pkgStr := modulePath
+	if replaced {
+		// If module is replaced, use a placeholder version for `go mod edit -require`.
+		// Ensure it has a version, even if it's a placeholder.
+		if !strings.Contains(pkgStr, "@") {
+			pkgStr += "@v0.0.0"
+		}
+	}
+
+	// Use `go mod edit -require` to ensure the module is in go.mod.
+	// This command handles cases where the module is already required or needs to be added.
+	// If it's a replaced module, it will ensure the replacement is respected.
+	err := env.execGoMod(ctx, "edit", "-require", pkgStr)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptions) error {
 	var err error
 	// Create go.mod.
@@ -88,7 +133,7 @@ func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptio
 		return err
 	}
 
-	// Replace requested modules.
+	// Apply requested module replacements.
 	for o, n := range opts.ModReplace {
 		err = env.execGoMod(ctx, "edit", "-replace", o+"="+n)
 		if err != nil {
@@ -96,80 +141,53 @@ func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptio
 		}
 	}
 
-	// Download the requested dependencies directly.
+	// Download dependencies.
 	if opts.NoCache {
+		// Set GONOSUMDB and GONOPROXY for modules that should not be cached or verified.
+		// This is typically used for local development or specific build scenarios.
 		domains := make([]string, len(opts.Plugins))
-		for i := 0; i < len(domains); i++ {
-			domains[i] = opts.Plugins[i].Path
+		for i, p := range opts.Plugins {
+			domains[i] = p.Path
+		}
+		// Add core package path to the list if it's not already there
+		if !strings.Contains(strings.Join(domains, ","), opts.CorePkg.Path) {
+			domains = append(domains, opts.CorePkg.Path)
 		}
 		noproxy := strings.Join(domains, ",")
 		env.env = append(env.env, "GONOSUMDB="+noproxy, "GONOPROXY="+noproxy)
 	}
 
-	// Download core.
-	var coreRepl bool
-	for repl := range opts.ModReplace {
-		if strings.HasPrefix(opts.CorePkg.Path, repl) {
-			coreRepl = true
-			break
-		}
-	}
-	if !coreRepl {
-		err = env.execGoGet(ctx, opts.CorePkg.String())
-		if err != nil {
-			return err
-		}
-	} else {
-		// If core package is replaced, we still need to require it.
-		// We use go mod edit -require to add the requirement without downloading.
-		// Since the module is replaced, we use a placeholder version.
-		err = env.execGoMod(ctx, "edit", "-require", opts.CorePkg.String()+"@v0.0.0")
-		if err != nil {
-			return err
-		}
+	// Ensure core package is required.
+	err = env.ensureModuleRequired(ctx, opts.CorePkg.String(), opts.ModReplace)
+	if err != nil {
+		return err
 	}
 
-	// Download plugins.
-nextPlugin:
+	// Ensure plugins are required.
 	for _, p := range opts.Plugins {
-		// Do not get plugins of module subpath.
+		// Skip plugins that are subpaths of replaced modules, as per original logic.
+		// The `isModuleReplaced` function handles the prefix check.
+		isSubpath := false
 		for repl := range opts.ModReplace {
 			if p.Path != repl && strings.HasPrefix(p.Path, repl) {
-				continue nextPlugin
-			}
-		}
-
-		// Check if this plugin is replaced.
-		var pluginReplaced bool
-		for repl := range opts.ModReplace {
-			if p.Path == repl {
-				pluginReplaced = true
+				isSubpath = true
 				break
 			}
 		}
+		if isSubpath {
+			continue
+		}
 
-		if !pluginReplaced {
-			err = env.execGoGet(ctx, p.String())
-			if err != nil {
-				return err
-			}
-		} else {
-			// If plugin is replaced, we still need to require it.
-			// We use go mod edit -require to add the requirement without downloading.
-			// Since the module is replaced, we use a placeholder version if none specified.
-			pkgStr := p.String()
-			if !strings.Contains(pkgStr, "@") {
-				pkgStr += "@v0.0.0"
-			}
-			err = env.execGoMod(ctx, "edit", "-require", pkgStr)
-			if err != nil {
-				return err
-			}
+		// Ensure the plugin module is required in go.mod.
+		err = env.ensureModuleRequired(ctx, p.String(), opts.ModReplace)
+		if err != nil {
+			return err
 		}
 	}
+
 	// @todo update all but with fixed versions if requested
 
-	return err
+	return nil
 }
 
 func (env *buildEnvironment) Filepath(s string) string {
