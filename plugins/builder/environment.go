@@ -119,6 +119,14 @@ func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptio
 		if err != nil {
 			return err
 		}
+	} else {
+		// If core package is replaced, we still need to require it.
+		// We use go mod edit -require to add the requirement without downloading.
+		// Since the module is replaced, we use a placeholder version.
+		err = env.execGoMod(ctx, "edit", "-require", opts.CorePkg.String()+"@v0.0.0")
+		if err != nil {
+			return err
+		}
 	}
 
 	// Download plugins.
@@ -126,13 +134,37 @@ nextPlugin:
 	for _, p := range opts.Plugins {
 		// Do not get plugins of module subpath.
 		for repl := range opts.ModReplace {
-			if strings.HasPrefix(p.Path, repl) {
+			if p.Path != repl && strings.HasPrefix(p.Path, repl) {
 				continue nextPlugin
 			}
 		}
-		err = env.execGoGet(ctx, p.String())
-		if err != nil {
-			return err
+
+		// Check if this plugin is replaced.
+		var pluginReplaced bool
+		for repl := range opts.ModReplace {
+			if p.Path == repl {
+				pluginReplaced = true
+				break
+			}
+		}
+
+		if !pluginReplaced {
+			err = env.execGoGet(ctx, p.String())
+			if err != nil {
+				return err
+			}
+		} else {
+			// If plugin is replaced, we still need to require it.
+			// We use go mod edit -require to add the requirement without downloading.
+			// Since the module is replaced, we use a placeholder version if none specified.
+			pkgStr := p.String()
+			if !strings.Contains(pkgStr, "@") {
+				pkgStr += "@v0.0.0"
+			}
+			err = env.execGoMod(ctx, "edit", "-require", pkgStr)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	// @todo update all but with fixed versions if requested
