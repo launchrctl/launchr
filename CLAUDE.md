@@ -76,11 +76,11 @@ Launchr is a CLI action runner that executes tasks defined in YAML files across 
 - Mutex-protected operations for concurrency safety
 - `fs.FS` interface for filesystem abstraction
 - JSON Schema validation for inputs and configuration
-- **Plugin Replacement Logic**: In `plugins/builder/environment.go:133-149`, when downloading plugins during build, the system uses a two-phase approach:
-  1. **Subpath Detection**: Skip plugins that are subpaths of replaced modules (`p.Path != repl && strings.HasPrefix(p.Path, repl)`) using labeled loop control
-  2. **Exact Match Handling**: Process plugins that exactly match replaced modules (`p.Path == repl`) as replaced plugins requiring special handling
-  
-  This prevents downloading dependencies for sub-plugins when their parent module is replaced while ensuring exact matches are handled correctly.
+- **Plugin Replacement Logic**: In `plugins/builder/environment.go`, the system handles Go module replacements:
+  - When ensuring modules are required, the system checks if a module is explicitly replaced (exact match) or if a plugin is a subpath of any replaced module (`p.Path != repl && strings.HasPrefix(p.Path, repl)`) to skip downloading its dependencies. This logic is inlined for direct use.
+  - `ensureModuleRequired(ctx, modulePath, modReplace)`: This method ensures that a module is correctly added to `go.mod`, using a placeholder version if the module is replaced.
+
+  This approach ensures that exact module replacements are handled correctly, while sub-plugins of replaced modules are properly skipped during dependency resolution, preventing unnecessary downloads and maintaining module integrity.
 
 ### Execution Flow
 

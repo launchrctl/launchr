@@ -80,31 +80,17 @@ func newBuildEnvironment(streams launchr.Streams) (*buildEnvironment, error) {
 	}, nil
 }
 
-// isModuleReplaced checks if a module path is present in the module replacements map.
-// It returns true if the module is replaced, and the replacement path if it is.
-func isModuleReplaced(modulePath string, modReplace map[string]string) (bool, string) {
-	for replPath, replTarget := range modReplace {
-		// Check for exact match first
-		if modulePath == replPath {
-			return true, replTarget
-		}
-		// Check if the module path is a subpath of a replaced module
-		if strings.HasPrefix(modulePath, replPath) {
-			// We consider it replaced if it's a subpath, but we don't need the target path here.
-			// The logic for handling subpaths is to skip them for 'go get',
-			// but the commit's intent seems to be to treat them as replaced for 'go mod edit'.
-			// For simplification, we'll treat any prefix match as a "replacement" for the purpose of `go mod edit`.
-			// A more precise approach might be needed if subpaths should be handled differently.
-			return true, "" // Target path not strictly needed for `go mod edit -require` logic here
-		}
-	}
-	return false, ""
-}
-
 // ensureModuleRequired adds a module to go.mod if it's not already there or if it's replaced.
 // It uses a placeholder version for replaced modules.
 func (env *buildEnvironment) ensureModuleRequired(ctx context.Context, modulePath string, modReplace map[string]string) error {
-	replaced, _ := isModuleReplaced(modulePath, modReplace)
+	// Check if the module is replaced (exact match).
+	replaced := false
+	for replPath := range modReplace {
+		if modulePath == replPath {
+			replaced = true
+			break
+		}
+	}
 
 	pkgStr := modulePath
 	if replaced {
@@ -165,8 +151,7 @@ func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptio
 
 	// Ensure plugins are required.
 	for _, p := range opts.Plugins {
-		// Skip plugins that are subpaths of replaced modules, as per original logic.
-		// The `isModuleReplaced` function handles the prefix check.
+		// Skip plugins that are subpaths of replaced modules.
 		isSubpath := false
 		for repl := range opts.ModReplace {
 			if p.Path != repl && strings.HasPrefix(p.Path, repl) {
