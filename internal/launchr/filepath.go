@@ -134,7 +134,7 @@ func MkdirTemp(pattern string) (string, error) {
 			basePath = cand
 			if name != "" {
 				newBase := filepath.Join(basePath, name)
-				err = os.Mkdir(newBase, 0700)
+				err = os.MkdirAll(newBase, 0700)
 				if err != nil && !os.IsExist(err) {
 					// Try next candidate.
 					continue
