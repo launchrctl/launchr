@@ -22,12 +22,13 @@ const (
 	containerActionMount = "/action"
 
 	// Environment specific flags.
-	containerFlagRemote      = "remote-runtime"
-	containerFlagCopyBack    = "remote-copy-back"
-	containerFlagRemoveImage = "remove-image"
-	containerFlagNoCache     = "no-cache"
-	containerFlagEntrypoint  = "entrypoint"
-	containerFlagExec        = "exec"
+	containerFlagRemote       = "remote-runtime"
+	containerFlagCopyBack     = "remote-copy-back"
+	containerFlagRemoveImage  = "remove-image"
+	containerFlagNoCache      = "no-cache"
+	containerFlagRebuildImage = "rebuild-image"
+	containerFlagEntrypoint   = "entrypoint"
+	containerFlagExec         = "exec"
 )
 
 type runtimeContainer struct {
@@ -53,6 +54,7 @@ type runtimeContainer struct {
 	copyBack      bool
 	removeImg     bool
 	noCache       bool
+	rebuildImage  bool
 	entrypoint    string
 	entrypointSet bool
 	exec          bool
@@ -134,6 +136,13 @@ func (c *runtimeContainer) GetFlags() *FlagsGroup {
 				Default:     false,
 			},
 			&DefParameter{
+				Name:        containerFlagRebuildImage,
+				Title:       "Auto-rebuild image",
+				Description: "Rebuild image if the action directory or the Dockerfile has changed",
+				Type:        jsonschema.Boolean,
+				Default:     true,
+			},
+			&DefParameter{
 				Name:        containerFlagEntrypoint,
 				Title:       "Image Entrypoint",
 				Description: `Overwrite the default ENTRYPOINT of the image. Example: --entrypoint "/bin/sh"`,
@@ -188,6 +197,10 @@ func (c *runtimeContainer) SetFlags(input *Input) error {
 
 	if nc, ok := flags[containerFlagNoCache]; ok {
 		c.noCache = nc.(bool)
+	}
+
+	if rb, ok := flags[containerFlagRebuildImage]; ok {
+		c.rebuildImage = rb.(bool)
 	}
 
 	if e, ok := flags[containerFlagEntrypoint]; ok && e != "" {
@@ -392,7 +405,7 @@ func (c *runtimeContainer) imageRemove(ctx context.Context, a *Action) error {
 
 func (c *runtimeContainer) isRebuildRequired(bi *driver.BuildDefinition) (bool, error) {
 	// @todo test image cache resolution somehow.
-	if c.imgccres == nil || bi == nil {
+	if c.imgccres == nil || bi == nil || !c.rebuildImage {
 		return false, nil
 	}
 
