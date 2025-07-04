@@ -49,6 +49,16 @@ action:
       items:
         type: boolean
       description: This is an optional enum<boolean> option with a default value
+    - name: optObj
+      title: Option Object
+      description: Option to do something
+      type: object
+      properties:
+        key:
+          type: string
+          description: Property of object
+      default:
+        key: value
     - name: optIP
       title: Option String IP
       type: string

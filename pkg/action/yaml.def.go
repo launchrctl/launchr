@@ -363,12 +363,13 @@ func (l *ParametersList) UnmarshalYAML(nodeList *yaml.Node) (err error) {
 
 // DefParameter stores command argument or option declaration.
 type DefParameter struct {
-	Title       string          `yaml:"title"`
-	Description string          `yaml:"description"`
-	Type        jsonschema.Type `yaml:"type"`
-	Default     any             `yaml:"default"`
-	Enum        []any           `yaml:"enum"`
-	Items       *DefArrayItems  `yaml:"items"`
+	Title       string                    `yaml:"title"`
+	Description string                    `yaml:"description"`
+	Type        jsonschema.Type           `yaml:"type"`
+	Default     any                       `yaml:"default"`
+	Enum        []any                     `yaml:"enum"`
+	Items       *DefArrayItems            `yaml:"items"`
+	Properties  map[string]*DefObjectItem `yaml:"properties"`
 
 	// Action specific behavior for parameters.
 	// Name is an action unique parameter name used.
@@ -443,13 +444,24 @@ func (p *DefParameter) UnmarshalYAML(n *yaml.Node) (err error) {
 	_, okDef := p.raw["default"]
 	if okDef {
 		// Ensure default value respects the type.
-		dval, errDef := jsonschema.EnsureType(p.Type, p.Default)
-		if errDef != nil {
-			l, c := yamlNodeLineCol(n, "default")
-			return yamlTypeErrorLine(errDef.Error(), l, c)
+		if err = ensureDefaultValue(p, n); err != nil {
+			return err
 		}
-		p.Default = dval
-		p.raw["default"] = p.Default
+	} else {
+		// Ensure object default value is a map always
+		if p.Type == jsonschema.Object {
+			if err = ensureDefaultValue(p, n); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Set additional properties to false for objects.
+	if p.Type == jsonschema.Object {
+		if len(p.Properties) > 0 {
+			p.raw["additionalProperties"] = false
+			setAdditionalPropertiesRecursive(p.raw)
+		}
 	}
 
 	// Not JSONSchema properties.
@@ -458,6 +470,62 @@ func (p *DefParameter) UnmarshalYAML(n *yaml.Node) (err error) {
 	delete(p.raw, "required")
 	delete(p.raw, "process")
 
+	return nil
+}
+
+// setAdditionalPropertiesRecursive recursively sets additionalProperties to false
+// for all nested object properties that have their own properties defined
+func setAdditionalPropertiesRecursive(rawData map[string]any) {
+	properties, ok := rawData["properties"].(map[string]any)
+	if !ok {
+		return
+	}
+
+	for _, prop := range properties {
+		propMap, ok := prop.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		if !isObjectWithProperties(propMap) {
+			continue
+		}
+
+		propMap["additionalProperties"] = false
+		setAdditionalPropertiesRecursive(propMap)
+	}
+}
+
+// isObjectWithProperties checks if a property is an object type with properties
+func isObjectWithProperties(propMap map[string]any) bool {
+	propType, hasType := propMap["type"]
+	if !hasType {
+		return false
+	}
+
+	if jsonschema.TypeFromString(propType.(string)) != jsonschema.Object {
+		return false
+	}
+
+	nestedProps, hasProps := propMap["properties"].(map[string]any)
+	return hasProps && len(nestedProps) > 0
+}
+
+// ensureDefaultValue ensures that a parameter has a proper default value using jsonschema.EnsureType
+func ensureDefaultValue(p *DefParameter, n *yaml.Node) error {
+	dval, err := jsonschema.EnsureType(p.Type, p.Default)
+	if err != nil {
+		// For when default is explicitly set but invalid
+		if p.Default != nil {
+			l, c := yamlNodeLineCol(n, "default")
+			return yamlTypeErrorLine(err.Error(), l, c)
+		}
+		// For when default needs to be generated (like for objects without an explicit default)
+		l, c := yamlNodeLineCol(n, "type")
+		return yamlTypeErrorLine(err.Error(), l, c)
+	}
+	p.Default = dval
+	p.raw["default"] = p.Default
 	return nil
 }
 
@@ -492,6 +560,13 @@ func unmarshalParamListYaml(nl *yaml.Node) ([]*DefParameter, error) {
 // DefArrayItems stores array type related information.
 type DefArrayItems struct {
 	Type jsonschema.Type `yaml:"type"`
+}
+
+// DefObjectItem stores object type related information.
+type DefObjectItem struct {
+	Type        jsonschema.Type           `yaml:"type"`
+	Description string                    `yaml:"description"`
+	Properties  map[string]*DefObjectItem `yaml:"properties"`
 }
 
 // DefValueProcessor stores information about processor and options that should be applied to processor.

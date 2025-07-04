@@ -46,7 +46,8 @@ func Test_Action(t *testing.T) {
 		"opt3":   1,
 		"opt4":   1.45,
 		"optarr": []any{"opt5.1val", "opt5.2val"},
-		"opt6":   "unexpectedOpt",
+		"optobj": map[string]any{"opt61": "opt6.1val", "opt62": "opt6.2val"},
+		"opt7":   "unexpectedOpt",
 	}
 	input := NewInput(act, inputArgs, inputOpts, nil)
 	require.NotNil(input)
@@ -55,9 +56,15 @@ func Test_Action(t *testing.T) {
 	require.NoError(err)
 	require.NotNil(act.input)
 
+	// Retrieve the object value to match later with command output.
+	opt6MapValue := inputOpts["optobj"]
+	assert.NotNil(opt6MapValue)
+	opt6Value := opt6MapValue.(map[string]any)["opt61"]
+	assert.NotNil(opt6Value)
+
 	// Option is not defined, but should be there
 	// because [manager.ValidateInput] decides if the input correct or not.
-	_, okOpt := act.input.Opts()["opt6"]
+	_, okOpt := act.input.Opts()["opt7"]
 	assert.True(okOpt)
 	assert.Equal(inputArgs, act.input.Args())
 	assert.Equal(inputOpts, act.input.Opts())
@@ -70,7 +77,7 @@ func Test_Action(t *testing.T) {
 		"-c",
 		"ls -lah",
 		fmt.Sprintf("%v %v %v %v", inputArgs["arg2"], inputArgs["arg1"], inputArgs["arg-1"], inputArgs["arg_12"]),
-		fmt.Sprintf("%v %v %v %v %v %v", inputOpts["opt3"], inputOpts["opt2"], inputOpts["opt1"], inputOpts["opt-1"], inputOpts["opt4"], inputOpts["optarr"]),
+		fmt.Sprintf("%v %v %v %v %v %v %v %v", inputOpts["opt3"], inputOpts["opt2"], inputOpts["opt1"], inputOpts["opt-1"], inputOpts["opt4"], inputOpts["optarr"], inputOpts["optobj"], opt6Value),
 		fmt.Sprintf("%v", envVar1),
 		fmt.Sprintf("%v ", envVar1),
 	}
@@ -348,6 +355,14 @@ func Test_ActionInputValidate(t *testing.T) {
 		)},
 		{"valid array type integer", validOptArrayInt, nil, InputParams{"opt_array_int": []int{1, 2, 3}}, nil, nil},
 		{"valid array type integer - default used", validOptArrayIntDefault, nil, nil, nil, nil},
+		{"valid object type", validOptObjectImplicit, nil, InputParams{"opt_object": make(map[string]any)}, nil, nil},
+		{"valid object type with default", validOptObjectWithDefault, nil, nil, nil, nil},
+		{"valid object type, invalid property passed", validOptObjectWithDefault, nil, InputParams{"opt_object": map[string]any{"key1": "value2", "key2": "value1"}}, nil, schemaErr(
+			newErrAddProps(opt("opt_object"), "key2"),
+		)},
+		{"invalid object type - string given", validOptObjectImplicit, nil, InputParams{"opt_object": "test_string"}, nil, schemaErr(
+			newErrExpType(opt("opt_object"), "object", "string"),
+		)},
 		{"valid multiple args and opts", validMultipleArgsAndOpts, InputParams{"arg_int": 1, "arg_str": "mystr", "arg_str2": "mystr", "arg_bool": true}, InputParams{"opt_str_required": "mystr"}, nil, nil},
 		{"invalid multiple args and opts - multiple causes", validMultipleArgsAndOpts, InputParams{"arg_int": "str", "arg_str": 1}, InputParams{"opt_str": 1}, nil, schemaErr(
 			newErrMissProp(arg(), "arg_str2", "arg_bool"),
