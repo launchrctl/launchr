@@ -62,6 +62,11 @@ func k8sCreateContainerID(namespace, podName, containerName string) string {
 	return namespace + "/" + podName + "/" + containerName
 }
 
+func k8sPodBuildContainerID(cid string) string {
+	namespace, podName, _ := k8sParseContainerID(cid)
+	return k8sCreateContainerID(namespace, podName, k8sBuildPodContainer)
+}
+
 func k8sPodMainContainerID(cid string) string {
 	namespace, podName, _ := k8sParseContainerID(cid)
 	return k8sCreateContainerID(namespace, podName, k8sMainPodContainer)
@@ -256,4 +261,12 @@ func fillFileStatFromSys(modeHex uint32) os.FileMode {
 		mode |= os.ModeSticky
 	}
 	return mode
+}
+
+func ensureBuildFile(file string) string {
+	if file != "" {
+		return file
+	}
+
+	return "Dockerfile"
 }

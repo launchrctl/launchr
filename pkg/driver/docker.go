@@ -43,6 +43,10 @@ func NewDockerRuntime() (ContainerRunner, error) {
 	return &dockerRuntime{cli: c}, nil
 }
 
+func (d *dockerRuntime) SetRuntimeFlags(_ RuntimeFlags) {
+
+}
+
 func (d *dockerRuntime) Info(ctx context.Context) (SystemInfo, error) {
 	if d.info.ID != "" {
 		return d.info, nil

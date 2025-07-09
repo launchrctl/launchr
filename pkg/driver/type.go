@@ -26,6 +26,7 @@ type ContainerRunner interface {
 	ContainerKill(ctx context.Context, cid, signal string) error
 	ContainerRemove(ctx context.Context, cid string) error
 	Close() error
+	SetRuntimeFlags(flags RuntimeFlags)
 }
 
 // ContainerImageBuilder is an interface for container runtime to build images.
@@ -105,6 +106,7 @@ const (
 	ImagePull                               // ImagePull - image is being pulled from the registry.
 	ImageBuild                              // ImageBuild - image is being built.
 	ImageRemoved                            // ImageRemoved - image was removed
+	ImagePostpone                           // ImagePostpone - image was removed
 )
 
 // SystemInfo holds information about the container runner environment.
@@ -164,6 +166,21 @@ func (p *ImageProgressStream) Close() error {
 // ImageRemoveResponse stores response when removing the image.
 type ImageRemoveResponse struct {
 	Status ImageStatus
+}
+
+// RuntimeFlags stores container runtime opts.
+type RuntimeFlags struct {
+	IsSetRemote   bool
+	CopyBack      bool
+	RemoveImg     bool
+	NoCache       bool
+	RebuildImage  bool
+	Entrypoint    string
+	EntrypointSet bool
+	Exec          bool
+	VolumeFlags   string
+	RegistryURL   string
+	RegistryType  string
 }
 
 // ContainerPathStat is a type alias for container path stat result.
