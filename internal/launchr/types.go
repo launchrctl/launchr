@@ -29,6 +29,7 @@ const (
 
 // PkgPath is a main module path.
 const PkgPath = "github.com/launchrctl/launchr"
+const ConfigKey = "launchrctl"
 
 func init() {
 	// Set parent pid for subprocesses.
