@@ -82,6 +82,12 @@ Launchr is a CLI action runner that executes tasks defined in YAML files across 
 
   This approach ensures that exact module replacements are handled correctly, while sub-plugins of replaced modules are properly skipped during dependency resolution, preventing unnecessary downloads and maintaining module integrity.
 
+- **Environment Variable Handling**: Different runtimes handle environment variables differently:
+  - **Shell Runtime** (`pkg/action/runtime.shell.go:47`): Automatically inherits all host environment variables using `append(os.Environ(), rt.Shell.Env...)`, making all host variables available to the script.
+  - **Container Runtime** (`pkg/action/runtime.container.go:527`): Only passes explicitly defined environment variables from `runtime.env` in action YAML. Host environment variables must be explicitly referenced using `${VAR}` expansion syntax during action loading (`pkg/action/loader.go:59`).
+  - **Environment Variable Expansion**: Uses `os.Expand()` to replace `${VAR}` patterns with host environment values during action loading, before container creation.
+  - **EnvSlice Type** (`pkg/action/yaml.def.go:323`): Supports both YAML map (`KEY: value`) and array (`- KEY=value`) syntax for environment variable definitions.
+
 ### Execution Flow
 
 1. Plugin registration and service initialization
