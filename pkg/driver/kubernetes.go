@@ -12,6 +12,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
@@ -25,7 +26,19 @@ import (
 	"github.com/launchrctl/launchr/internal/launchr"
 )
 
+// RegistryLocal defines a local registry type
+const RegistryLocal = "local"
+
+// RegistryRemote defines a remote registry type
+const RegistryRemote = "remote"
+
+// RegistryNone defines no registry type
+const RegistryNone = "none"
+
+var errActionWithoutImage = errors.New("action does not contain an image file")
+
 const k8sMainPodContainer = "supervisor"
+const k8sBuildPodContainer = "image-builder"
 const k8sUseWebsocket = true
 const k8sStatPathScript = `
 FILE="%s"
@@ -82,6 +95,9 @@ func k8sLogError(_ context.Context, err error, msg string, keysAndValues ...inte
 type k8sRuntime struct {
 	config    *restclient.Config
 	clientset *kubernetes.Clientset
+
+	imageOptions ImageOptions
+	crtflags     RuntimeFlags
 }
 
 // NewKubernetesRuntime creates a kubernetes container runtime.
@@ -101,6 +117,10 @@ func NewKubernetesRuntime() (ContainerRunner, error) {
 		config:    config,
 		clientset: clientset,
 	}, nil
+}
+
+func (k *k8sRuntime) SetRuntimeFlags(f RuntimeFlags) {
+	k.crtflags = f
 }
 
 func (k *k8sRuntime) Info(_ context.Context) (SystemInfo, error) {
@@ -207,6 +227,16 @@ func (k *k8sRuntime) ContainerCreate(ctx context.Context, opts ContainerDefiniti
 	hostAliases := k8sHostAliases(opts)
 	volumes, mounts := k8sVolumesAndMounts(opts)
 
+	sidecars, volumes, mounts, err := k.prepareSidecarContainers(volumes, mounts)
+	if err != nil {
+		return "", err
+	}
+
+	useHostNetwork := false
+	if k.crtflags.RegistryType == RegistryLocal {
+		useHostNetwork = true
+	}
+
 	// Create the pod definition.
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -214,10 +244,12 @@ func (k *k8sRuntime) ContainerCreate(ctx context.Context, opts ContainerDefiniti
 			Namespace: namespace,
 		},
 		Spec: corev1.PodSpec{
-			HostAliases:   hostAliases,
-			Hostname:      opts.Hostname,
-			RestartPolicy: corev1.RestartPolicyNever,
-			Volumes:       volumes,
+			HostAliases:    hostAliases,
+			Hostname:       opts.Hostname,
+			HostNetwork:    useHostNetwork,
+			RestartPolicy:  corev1.RestartPolicyNever,
+			Volumes:        volumes,
+			InitContainers: sidecars,
 			Containers: []corev1.Container{
 				{
 					Name:         k8sMainPodContainer,
@@ -232,7 +264,7 @@ func (k *k8sRuntime) ContainerCreate(ctx context.Context, opts ContainerDefiniti
 
 	// Create the pod
 	launchr.Log().Debug("creating pod", "namespace", namespace, "pod", podName)
-	_, err := k.clientset.CoreV1().
+	_, err = k.clientset.CoreV1().
 		Pods(namespace).
 		Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
@@ -256,9 +288,35 @@ func (k *k8sRuntime) ContainerCreate(ctx context.Context, opts ContainerDefiniti
 	return cid, err
 }
 
+func (k *k8sRuntime) ImageEnsure(_ context.Context, imgOpts ImageOptions) (*ImageStatusResponse, error) {
+	// @todo it doesn't really work well with current implementation.
+
+	// Store image options inside runtime.
+	k.imageOptions = imgOpts
+
+	// Return nothing to silence ImageEnsure(), as real work will be done inside k.ContainerStart().
+	return &ImageStatusResponse{Status: ImagePostpone}, nil
+}
+
+func (k *k8sRuntime) ImageRemove(_ context.Context, _ string, _ ImageRemoveOptions) (*ImageRemoveResponse, error) {
+	// @todo it doesn't really work well with current implementation.
+	//    additional issue here is kubernetes internal cache, additionally to registry storage.
+	//    should we clean both of them in case of image remove? How 'no-cache' flag should behave?
+	return &ImageRemoveResponse{Status: ImageRemoved}, nil
+}
+
 func (k *k8sRuntime) ContainerStart(ctx context.Context, cid string, opts ContainerDefinition) (<-chan int, *ContainerInOut, error) {
-	// Create an ephemeral container to run.
-	err := k.addEphemeralContainer(ctx, cid, opts)
+	var err error
+
+	// if any registry specified, build and pull an image from that registry
+	if k.crtflags.RegistryType != RegistryNone {
+		err = k.buildImage(ctx, cid, opts)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	err = k.addEphemeralContainer(ctx, cid, opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -457,10 +515,15 @@ func (k *k8sRuntime) addEphemeralContainer(ctx context.Context, cid string, opts
 
 	cmd := slices.Concat(opts.Entrypoint, opts.Command)
 
+	imageName := opts.Image
+	if k.crtflags.RegistryType != RegistryNone {
+		imageName = fmt.Sprintf("%s/%s", k.crtflags.RegistryURL, opts.Image)
+	}
+
 	ephemeralContainer := corev1.EphemeralContainer{
 		EphemeralContainerCommon: corev1.EphemeralContainerCommon{
 			Name:  containerName,
-			Image: opts.Image,
+			Image: imageName,
 			// Wrap the command into a script that will wait until a special signal USR1.
 			// We do that to not miss any output before the attach. See ContainerStart.
 			Command:      []string{"/bin/sh", "-c", k8sWaitAttachScript, "--"},
@@ -524,4 +587,157 @@ func (k *k8sRuntime) addEphemeralContainer(ctx context.Context, cid string, opts
 		}
 		return false, nil
 	})
+}
+
+func (k *k8sRuntime) prepareSidecarContainers(volumes []corev1.Volume, mounts []corev1.VolumeMount) ([]corev1.Container, []corev1.Volume, []corev1.VolumeMount, error) {
+	if k.crtflags.RegistryType != RegistryNone && k.crtflags.RegistryURL == "" {
+		return nil, nil, nil, fmt.Errorf("registry URL cannot be empty")
+	}
+
+	var containers []corev1.Container
+
+	if k.crtflags.RegistryType != RegistryNone {
+		sidecarPolicy := corev1.ContainerRestartPolicyAlways
+
+		buildahInitScript, err := k.prepareBuildahInitScript()
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		buildahVolumes := []corev1.Volume{
+			{
+				Name: "buildah-storage",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{
+						SizeLimit: &[]resource.Quantity{resource.MustParse("2Gi")}[0],
+					},
+				},
+			},
+		}
+		buildahMounts := []corev1.VolumeMount{
+			{
+				Name:      "buildah-storage",
+				MountPath: "/var/lib/containers",
+			},
+		}
+
+		volumes = append(volumes, buildahVolumes...)
+		mounts = append(mounts, buildahMounts...)
+
+		buildahContainer := corev1.Container{
+			Name:  k8sBuildPodContainer,
+			Image: "quay.io/buildah/stable:latest",
+			SecurityContext: &corev1.SecurityContext{
+				Privileged:               &[]bool{true}[0],
+				RunAsUser:                &[]int64{0}[0],
+				AllowPrivilegeEscalation: &[]bool{true}[0],
+				ReadOnlyRootFilesystem:   &[]bool{false}[0],
+				Capabilities: &corev1.Capabilities{
+					Add: []corev1.Capability{
+						"SYS_ADMIN", "MKNOD", "SETFCAP", "SYS_CHROOT",
+						"SETUID", "SETGID",
+					},
+				},
+			},
+			RestartPolicy: &sidecarPolicy,
+			Command:       []string{"/bin/bash"},
+			Args: []string{
+				"-c",
+				buildahInitScript,
+			},
+			VolumeMounts: mounts,
+			Env: []corev1.EnvVar{
+				{
+					Name:  "STORAGE_DRIVER",
+					Value: "vfs",
+				},
+				{
+					Name:  "BUILDAH_ISOLATION",
+					Value: "chroot",
+				},
+			},
+		}
+		containers = append(containers, buildahContainer)
+	}
+
+	// @todo should we add internal type which includes registry as sidecar and builds everything inside pod?
+
+	return containers, volumes, mounts, nil
+}
+
+func (k *k8sRuntime) buildImage(ctx context.Context, cid string, opts ContainerDefinition) error {
+	notBuildable := false
+	bid := k8sPodBuildContainerID(cid)
+	exists, err := k.ensureImage(ctx, bid, opts.Image)
+	if err != nil {
+		if errors.Is(err, errActionWithoutImage) {
+			notBuildable = true
+		} else {
+			return err
+		}
+	}
+
+	if !notBuildable && (!exists || k.imageOptions.ForceRebuild || k.imageOptions.NoCache) {
+		script, err := k.prepareBuildahWorkScript(opts.Image)
+		if err != nil {
+			return err
+		}
+
+		cmdArr := []string{
+			"/bin/bash", "-c",
+			script,
+		}
+
+		var stdout bytes.Buffer
+		err = k.containerExec(ctx, bid, cmdArr, k8sStreams{
+			out: &stdout,
+			opts: ContainerStreamsOptions{
+				Stdout: true,
+			},
+		})
+
+		launchr.Log().Debug("build output: ", "output", stdout.String())
+
+		if err != nil {
+			return fmt.Errorf("error container exec: %w, message: %s", err, stdout.String())
+		}
+	}
+
+	return nil
+}
+
+func (k *k8sRuntime) ensureImage(ctx context.Context, bid, image string) (bool, error) {
+	nameParts := strings.Split(image, ":")
+	repoName := nameParts[0]
+	tag := "latest"
+	if len(nameParts) > 1 {
+		tag = nameParts[1]
+	}
+
+	buildFile := ensureBuildFile(k.imageOptions.Build.Buildfile)
+	imageURL := fmt.Sprintf("%s/v2/%s/manifests/%s", k.crtflags.RegistryURL, repoName, tag)
+	imageCheckScript := fmt.Sprintf(buildahImageEnsureTemplate, buildFile, buildFile, imageURL)
+	cmdArr := []string{
+		"/bin/bash", "-c",
+		imageCheckScript,
+	}
+
+	var stdout bytes.Buffer
+	err := k.containerExec(ctx, bid, cmdArr, k8sStreams{
+		out: &stdout,
+		opts: ContainerStreamsOptions{
+			Stdout: true,
+		},
+	})
+	if err != nil {
+		return false, fmt.Errorf("error container exec: %w, message: %s", err, stdout.String())
+	}
+
+	buildFileCheck := fmt.Sprintf("%s does not exist", buildFile)
+	if strings.Contains(stdout.String(), buildFileCheck) {
+		return false, errActionWithoutImage
+	}
+
+	imageExistsCheck := "image exists"
+	return strings.Contains(stdout.String(), imageExistsCheck), nil
 }

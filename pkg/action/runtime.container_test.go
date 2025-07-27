@@ -342,9 +342,11 @@ func Test_ContainerExec_createContainerDef(t *testing.T) {
 				input.SetValidated(true)
 				_ = a.SetInput(input)
 				r.isRemoteRuntime = true
-				r.entrypointSet = true
-				r.entrypoint = "/my/entrypoint"
-				r.exec = true
+				r.runtimeFlags = driver.RuntimeFlags{
+					EntrypointSet: true,
+					Entrypoint:    "/my/entrypoint",
+					Exec:          true,
+				}
 				return a
 			},
 			driver.ContainerDefinition{

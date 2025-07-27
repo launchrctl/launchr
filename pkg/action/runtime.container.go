@@ -29,6 +29,8 @@ const (
 	containerFlagRebuildImage = "rebuild-image"
 	containerFlagEntrypoint   = "entrypoint"
 	containerFlagExec         = "exec"
+	containerRegistryURL      = "registry-url"
+	containerRegistryType     = "registry-type"
 )
 
 type runtimeContainer struct {
@@ -50,15 +52,20 @@ type runtimeContainer struct {
 	nameprv  ContainerNameProvider
 
 	// Runtime flags
-	isSetRemote   bool
-	copyBack      bool
-	removeImg     bool
-	noCache       bool
-	rebuildImage  bool
-	entrypoint    string
-	entrypointSet bool
-	exec          bool
-	volumeFlags   string
+	// @todo need to think about a better way to handle this.
+	runtimeFlags driver.RuntimeFlags
+
+	//isSetRemote   bool
+	//copyBack      bool
+	//removeImg     bool
+	//noCache       bool
+	//rebuildImage  bool
+	//entrypoint    string
+	//entrypointSet bool
+	//exec          bool
+	//volumeFlags   string
+	//registryURL   string
+	//registryType  string
 }
 
 // ContainerNameProvider provides an ability to generate a random container name
@@ -156,6 +163,19 @@ func (c *runtimeContainer) GetFlags() *FlagsGroup {
 				Type:        jsonschema.Boolean,
 				Default:     false,
 			},
+			&DefParameter{
+				Name:    containerRegistryURL,
+				Title:   "k8s Images registry URL",
+				Type:    jsonschema.String,
+				Default: "localhost:5000",
+			},
+			&DefParameter{
+				Name:    containerRegistryType,
+				Title:   "k8s Images registry type",
+				Type:    jsonschema.String,
+				Enum:    []any{driver.RegistryNone, driver.RegistryLocal, driver.RegistryRemote},
+				Default: driver.RegistryLocal,
+			},
 		}
 
 		flags.AddDefinitions(definitions)
@@ -184,32 +204,40 @@ func (c *runtimeContainer) SetFlags(input *Input) error {
 	flags := input.GroupFlags(c.flags.GetName())
 
 	if v, ok := flags[containerFlagRemote]; ok {
-		c.isSetRemote = v.(bool)
+		c.runtimeFlags.IsSetRemote = v.(bool)
 	}
 
 	if v, ok := flags[containerFlagCopyBack]; ok {
-		c.copyBack = v.(bool)
+		c.runtimeFlags.CopyBack = v.(bool)
 	}
 
 	if r, ok := flags[containerFlagRemoveImage]; ok {
-		c.removeImg = r.(bool)
+		c.runtimeFlags.RemoveImg = r.(bool)
 	}
 
 	if nc, ok := flags[containerFlagNoCache]; ok {
-		c.noCache = nc.(bool)
+		c.runtimeFlags.NoCache = nc.(bool)
 	}
 
 	if rb, ok := flags[containerFlagRebuildImage]; ok {
-		c.rebuildImage = rb.(bool)
+		c.runtimeFlags.RebuildImage = rb.(bool)
 	}
 
 	if e, ok := flags[containerFlagEntrypoint]; ok && e != "" {
-		c.entrypointSet = true
-		c.entrypoint = e.(string)
+		c.runtimeFlags.EntrypointSet = true
+		c.runtimeFlags.Entrypoint = e.(string)
 	}
 
 	if ex, ok := flags[containerFlagExec]; ok {
-		c.exec = ex.(bool)
+		c.runtimeFlags.Exec = ex.(bool)
+	}
+
+	if rt, ok := flags[containerRegistryType]; ok {
+		c.runtimeFlags.RegistryType = rt.(string)
+	}
+
+	if rurl, ok := flags[containerRegistryURL]; ok {
+		c.runtimeFlags.RegistryURL = rurl.(string)
 	}
 
 	return nil
@@ -241,14 +269,16 @@ func (c *runtimeContainer) Init(ctx context.Context, _ *Action) (err error) {
 	if !c.isRemote() && c.isSELinuxEnabled(ctx) {
 		// Check SELinux settings to allow reading the FS inside a container.
 		// Use the lowercase z flag to allow concurrent actions access to the FS.
-		c.volumeFlags += ":z"
+		c.runtimeFlags.VolumeFlags += ":z"
 		launchr.Term().Warning().Printfln(
 			"SELinux is detected. The volumes will be mounted with the %q flags, which will relabel your files.\n"+
 				"This process may take time or potentially break existing permissions.",
-			c.volumeFlags,
+			c.runtimeFlags.VolumeFlags,
 		)
-		c.Log().Warn("using selinux flags", "flags", c.volumeFlags)
+		c.Log().Warn("using selinux flags", "flags", c.runtimeFlags.VolumeFlags)
 	}
+
+	c.crt.SetRuntimeFlags(c.runtimeFlags)
 
 	return nil
 }
@@ -298,7 +328,7 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 
 	// Remove the used image if it was specified.
 	defer func() {
-		if !c.removeImg {
+		if !c.runtimeFlags.RemoveImg {
 			return
 		}
 		log.Debug("removing container image after run")
@@ -405,7 +435,7 @@ func (c *runtimeContainer) imageRemove(ctx context.Context, a *Action) error {
 
 func (c *runtimeContainer) isRebuildRequired(bi *driver.BuildDefinition) (bool, error) {
 	// @todo test image cache resolution somehow.
-	if c.imgccres == nil || bi == nil || !c.rebuildImage {
+	if c.imgccres == nil || bi == nil || !c.runtimeFlags.RebuildImage {
 		return false, nil
 	}
 
@@ -454,7 +484,7 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 	status, err := crt.ImageEnsure(ctx, driver.ImageOptions{
 		Name:         image,
 		Build:        buildInfo,
-		NoCache:      c.noCache,
+		NoCache:      c.runtimeFlags.NoCache,
 		ForceRebuild: forceRebuild,
 	})
 	if err != nil {
@@ -521,13 +551,13 @@ func (c *runtimeContainer) createContainerDef(a *Action, cname string) driver.Co
 
 	// Override an entrypoint if it was set in flags.
 	var entrypoint []string
-	if c.entrypointSet {
-		entrypoint = []string{c.entrypoint}
+	if c.runtimeFlags.EntrypointSet {
+		entrypoint = []string{c.runtimeFlags.Entrypoint}
 	}
 
 	// Override Command with exec command.
 	cmd := runDef.Container.Command
-	if c.exec {
+	if c.runtimeFlags.Exec {
 		cmd = a.Input().ArgsPositional()
 	}
 
@@ -556,8 +586,8 @@ func (c *runtimeContainer) createContainerDef(a *Action, cname string) driver.Co
 		)
 	} else {
 		createOpts.Binds = []string{
-			launchr.MustAbs(a.WorkDir()) + ":" + containerHostMount + c.volumeFlags,
-			launchr.MustAbs(a.Dir()) + ":" + containerActionMount + c.volumeFlags,
+			launchr.MustAbs(a.WorkDir()) + ":" + containerHostMount + c.runtimeFlags.VolumeFlags,
+			launchr.MustAbs(a.Dir()) + ":" + containerActionMount + c.runtimeFlags.VolumeFlags,
 		}
 	}
 	return createOpts
@@ -591,7 +621,7 @@ func (c *runtimeContainer) copyAllToContainer(ctx context.Context, cid string, a
 }
 
 func (c *runtimeContainer) copyAllFromContainer(ctx context.Context, cid string, a *Action) (err error) {
-	if !c.isRemote() || !c.copyBack {
+	if !c.isRemote() || !c.runtimeFlags.CopyBack {
 		return nil
 	}
 	// @todo it's a bad implementation considering consequential runs, need to find a better way to sync with remote.
@@ -670,5 +700,5 @@ func (c *runtimeContainer) isSELinuxEnabled(ctx context.Context) bool {
 }
 
 func (c *runtimeContainer) isRemote() bool {
-	return c.isRemoteRuntime || c.isSetRemote
+	return c.isRemoteRuntime || c.runtimeFlags.IsSetRemote
 }
