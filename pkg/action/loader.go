@@ -12,6 +12,10 @@ import (
 	"github.com/launchrctl/launchr/internal/launchr"
 )
 
+const tokenRmLine = "<TOKEN_REMOVE_THIS_LINE>" //nolint:gosec // G101: Not a credential.
+
+var rgxTokenRmLine = regexp.MustCompile(`.*` + tokenRmLine + `.*\n?`)
+
 // Loader is an interface for loading an action file.
 type Loader interface {
 	// Content returns the raw file content.
@@ -75,7 +79,7 @@ func getenv(key string) string {
 
 type inputProcessor struct{}
 
-var rgxTplVar = regexp.MustCompile(`{{.*?\.(\S+).*?}}`)
+var rgxTplVar = regexp.MustCompile(`{{.*?\.([a-zA-Z][a-zA-Z0-9_]*).*?}}`)
 
 type errMissingVar struct {
 	vars map[string]struct{}
@@ -90,6 +94,84 @@ func (err errMissingVar) Error() string {
 	return fmt.Sprintf("the following variables were used but never defined: %v", f)
 }
 
+// actionTplFuncs defined template functions available during parsing of an action yaml.
+func actionTplFuncs(input *Input) template.FuncMap {
+	// Helper function to get value by name from args or opts
+	getValue := func(name string) any {
+		args := input.Args()
+		if arg, ok := args[name]; ok {
+			return arg
+		}
+
+		opts := input.Opts()
+		if opt, ok := opts[name]; ok {
+			return opt
+		}
+
+		return nil
+	}
+
+	// Helper function to check if a parameter is changed
+	isParamChanged := func(name string) bool {
+		return input.IsOptChanged(name) || input.IsArgChanged(name)
+	}
+
+	return template.FuncMap{
+		// Checks if a value is nil. Used in conditions.
+		"isNil": func(v any) bool {
+			return v == nil
+		},
+		// Checks if a value is not nil. Used in conditions.
+		"isSet": func(v any) bool {
+			return v != nil
+		},
+		// Checks if a value is changed. Used in conditions.
+		"isChanged": func(v any) bool {
+			name, ok := v.(string)
+			if !ok {
+				return false
+			}
+
+			return isParamChanged(name)
+		},
+		// Removes a line if a given value is nil or pass through.
+		"removeLineIfNil": func(v any) any {
+			if v == nil {
+				return tokenRmLine
+			}
+			return v
+		},
+		// Removes a line if a given value is not nil or pass through.
+		"removeLineIfSet": func(v any) any {
+			if v != nil {
+				return tokenRmLine
+			}
+
+			return v
+		},
+		// Removes a line if a given value is changed or pass through.
+		"removeLineIfChanged": func(name string) any {
+			if isParamChanged(name) {
+				return tokenRmLine
+			}
+
+			return getValue(name)
+		},
+		// Removes a line if a given value is not changed or pass through.
+		"removeLineIfNotChanged": func(name string) any {
+			if !isParamChanged(name) {
+				return tokenRmLine
+			}
+
+			return getValue(name)
+		},
+		// Removes current line.
+		"removeLine": func() string {
+			return tokenRmLine
+		},
+	}
+}
+
 func (p inputProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
 	if ctx.Action == nil {
 		return b, nil
@@ -101,7 +183,8 @@ func (p inputProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
 	addPredefinedVariables(data, a)
 
 	// Parse action without variables to validate
-	tpl := template.New(a.ID)
+	tpl := template.New(a.ID).Funcs(actionTplFuncs(a.Input()))
+
 	_, err := tpl.Parse(string(b))
 	if err != nil {
 		// Check if variables have dashes to show the error properly.
@@ -125,7 +208,7 @@ Action definition is correct, but dashes are not allowed in templates, replace "
 		return nil, err
 	}
 
-	// Find if some vars were used but not defined.
+	// Find if some vars were used but not defined in arguments or options.
 	miss := make(map[string]struct{})
 	res := buf.Bytes()
 	if bytes.Contains(res, []byte("<no value>")) {
@@ -136,12 +219,15 @@ Action definition is correct, but dashes are not allowed in templates, replace "
 				miss[k] = struct{}{}
 			}
 		}
-		// If we don't have parameter names, the values probably were nil.
+		// If we don't have parameter names here, it means that all parameters are defined but the values were nil.
 		// It's ok, users will be able to identify missing parameters.
 		if len(miss) != 0 {
 			return nil, errMissingVar{miss}
 		}
 	}
+
+	// Remove all lines containing [tokenRmLine].
+	res = rgxTokenRmLine.ReplaceAll(res, []byte(""))
 
 	return res, nil
 }
