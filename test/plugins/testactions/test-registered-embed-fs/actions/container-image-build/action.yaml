@@ -1,16 +1,16 @@
 action:
-  title: buildargs
+  title: embed action
   description: Test passing args to Dockerfile
 
 runtime:
   type: container
-  image: buildargs:latest
+  image: ${IMAGE_REGISTRY}/testimage-embed:latest
   build:
     context: ./
     args:
       USER_ID: $UID
       GROUP_ID: $GID
-      USER_NAME: username
+      USER_NAME: foobar
   command:
     - sh
     - /action/main.sh

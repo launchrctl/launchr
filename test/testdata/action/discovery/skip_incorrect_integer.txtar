@@ -1,0 +1,86 @@
+# =============================================================================
+# Launchr Action Option Type Validation Test Suite - Integer Default Mismatch
+# =============================================================================
+#
+# This test file validates the Launchr tool's ability to:
+# 1. Detect type mismatches between integer option declarations and default values
+# 2. Provide clear error messages for integer option configuration errors
+# 3. Skip actions with invalid option configurations
+# 4. Report specific line and column information for validation errors
+#
+# Test Focus:
+# - Integer option type validation
+# - Default value type checking for numeric types
+# - Error message formatting and content
+# - Action skipping behavior for invalid configurations
+# =============================================================================
+
+# Test 1: Integer Option Default Value Type Validation
+# -----------------------------------------------------------------------------
+# Execute action with incorrectly typed default value for integer option
+# This should trigger validation error and skip the action
+exec launchr opt-integer-incorrect-default
+
+# Validate action skip notification:
+# Action should be skipped due to type validation failure
+stdout 'Action "opt-integer-incorrect-default" was skipped'
+
+# Validate specific type mismatch error details:
+# Should identify the type conflict between string and integer
+stdout 'given value type \(string\) and expected type \(int\) mismatch, line 13, col 16'
+
+# Validate clean execution (no error output to stderr)
+! stderr .
+
+# =============================================================================
+# Test Data Files - Action Configuration with Type Mismatch
+# =============================================================================
+
+# Integer Option with Invalid String Default
+-- actions/opt-integer-incorrect-default/action.yaml --
+# Plugin action demonstrating integer option type validation failure
+# This configuration intentionally contains a type mismatch error
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option Integer    # Human-readable action name
+
+  options:
+    - name: optInt                         # Option identifier
+      title: Option Integer                # Human-readable option name
+      description: This is an optional integer option    # Help text
+      type: integer                        # Expected type: integer
+      default: foo                         # ERROR: String value for integer type
+      # Valid integer defaults would be: 42, -10, 0
+      # Invalid: "foo", "123", true, false, or any non-numeric values
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Type Validation Rules:
+# 1. Option default values must match declared option types
+# 2. Integer options accept only numeric values (42, -10, 0)
+# 3. String representations of numbers are invalid for integer types
+# 4. Type mismatches should be reported with specific location information
+# 5. Actions with invalid option configurations should be skipped
+#
+# Error Message Format:
+# - Action name and skip notification
+# - Specific type mismatch description (string vs int)
+# - Line and column number for precise error location
+# - Clear indication of expected vs. actual types
+#
+# Validation Behavior:
+# - Actions are validated before execution
+# - Invalid actions are skipped rather than causing runtime errors
+# - Error messages provide enough detail for debugging
+# - Process continues normally after skipping invalid actions
+#
+# Numeric Type Handling:
+# - Integer options require actual numeric values in YAML
+# - String values like "123" are not automatically converted
+# - Type checking is strict and explicit
+# - Non-numeric strings like "foo" are clearly invalid
+#
+# =============================================================================

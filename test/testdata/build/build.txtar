@@ -1,0 +1,128 @@
+# =============================================================================
+# Launchr Binary Building and Version Verification Test Suite
+# =============================================================================
+#
+# This comprehensive test file validates the Launchr tool's ability to:
+# 1. Build binaries with proper version ldflags injection
+# 2. Perform recursive binary building (building new binaries with existing ones)
+# 3. Validate application names according to naming conventions
+# 4. Handle plugin integration and version reporting
+# 5. Apply core package replacement during build process
+#
+# Test Structure:
+# - Tests basic binary building with version information
+# - Tests recursive building with core replacement tracking
+# - Tests input validation for application naming rules
+# - Validates version output formatting and content matching
+# =============================================================================
+
+# Setup Phase: Environment Configuration
+# -----------------------------------------------------------------------------
+# Configure application metadata for testing
+# These variables define the test application identity and version information
+env APP_NAME=testapp
+env APP_VERSION='v0.0.0-testscript'
+env APP_BUILT_WITH='testscript v0.0.0'
+
+# Define validation patterns for architecture strings
+# This regex validates the expected architecture format in version output
+env ARCH_RGX=[a-z0-9]+/[a-z0-9]+
+
+# Compute expected version strings for validation
+# This creates the expected short version format for comparison
+env APP_VERSION_SHORT=$APP_NAME' version '${APP_VERSION@R}' '$ARCH_RGX
+
+# Configure build environment with real home for caching
+# Reuse actual home directory to enable build caching optimization
+env HOME=$REAL_HOME
+
+# Test 1: Basic Binary Build and Version Verification
+# -----------------------------------------------------------------------------
+# Execute version command to verify basic build functionality
+exec testapp --version
+
+# Validate version output format:
+# Expected format: "testapp version X.Y.Z arch\nBuilt with ..."
+stdout ^$APP_VERSION_SHORT'\nBuilt with '${APP_BUILT_WITH@R}\z$
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 2: Recursive Binary Building with Core Replacement
+# -----------------------------------------------------------------------------
+# Configure second binary parameters for recursive build testing
+# These variables define the new binary that will be built using the first one
+env APP_NAME_2=${APP_NAME}new
+env APP_VERSION_2='v1.2.0-testscript'
+
+# Define expected version strings for core replacement validation
+# These patterns validate that core replacement information is properly tracked
+env APP_VERSION_CORE='Core version: v.*\nCore replace: '${CORE_PKG@R}' v.* => '${REPO_PATH@R}' \(devel\)'
+env APP_VERSION_FULL=$APP_NAME_2' version '$APP_VERSION_2' '$ARCH_RGX'\nBuilt with '${APP_VERSION_SHORT}'\n'$APP_VERSION_CORE
+
+# Verify target binary does not exist before build
+! exists $APP_NAME_2
+
+# Execute recursive build with core replacement
+# This command builds a new binary using the previously built binary
+exec testapp build -n $APP_NAME_2 -o $APP_NAME_2 -r $CORE_PKG=$REPO_PATH --build-version $APP_VERSION_2
+
+# Validate clean build execution (no error output)
+! stderr .
+
+# Verify target binary was successfully created
+exists $APP_NAME_2
+
+# Execute version command on newly built binary
+exec ./$APP_NAME_2 --version
+
+# Validate full version output includes core replacement information
+# This ensures the recursive build properly tracked version lineage
+stdout ^$APP_VERSION_FULL'\z$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 3: Input Validation - Invalid Application Name
+# -----------------------------------------------------------------------------
+# Verify target binary does not exist before invalid build attempt
+! exists under_score
+
+# Attempt to build with invalid name containing underscore
+# This should fail due to naming convention violations
+! exec testapp build --name under_score --output under_score --build-version invalid
+
+# Validate appropriate error message for invalid name
+# The system should clearly indicate why the name is invalid
+stdout 'invalid application name "under_score"'
+
+# Validate clean error handling (no stderr output)
+! stderr .
+
+# Verify no binary was created due to validation failure
+! exists under_score
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Binary Building Rules:
+# 1. Accept valid application names (letters, numbers, hyphens)
+# 2. Reject invalid names (underscores, special characters)
+# 3. Inject version information via ldflags during build
+# 4. Track build lineage in recursive building scenarios
+# 5. Properly handle core package replacement
+#
+# Version Output Format:
+# - Basic: "app version X.Y.Z arch"
+# - Extended: Includes "Built with" information
+# - Recursive: Includes core replacement details
+# - Clean error handling with descriptive messages
+#
+# Naming Conventions:
+# - Valid characters: letters, numbers, hyphens
+# - Invalid characters: underscores, special symbols
+# - Case sensitivity applies
+# - Length restrictions may apply
+#
+# =============================================================================

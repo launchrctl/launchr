@@ -1,0 +1,202 @@
+# =============================================================================
+# Launchr Action Discovery and Validation Test Suite
+# =============================================================================
+#
+# This comprehensive test file validates the Launchr tool's ability to:
+# 1. Discover actions from multiple directory structures and namespaces
+# 2. Apply proper naming conventions and character validation rules
+# 3. Filter out invalid actions (hidden, malformed, incorrectly placed)
+# 4. Handle custom action paths via environment variables
+# 5. Sort and group actions appropriately in help output
+#
+# Test Structure:
+# - Tests standard action discovery with various naming patterns
+# - Tests exclusion of invalid actions and hidden directories
+# - Tests custom action path functionality
+# - Validates output formatting and content matching
+# =============================================================================
+
+# Setup Phase: Directory Structure Creation
+# -----------------------------------------------------------------------------
+# Create test directories with special characters to validate name handling
+# These commands test the system's ability to handle various path scenarios
+[unix] mkdir foo-bar_baz/actions/waldo*fred
+[unix] mkdir actions/waldo*fred
+
+# Copy action files to test space handling in paths
+# These operations test file system path resolution with problematic characters
+[unix] cp 'foo-bar_baz/actions/waldo fred/action.yaml' foo-bar_baz/actions/waldo*fred/action.yaml
+[unix] cp 'actions/waldo fred/action.yaml' actions/waldo*fred/action.yaml
+
+# Test 1: Standard Action Discovery and Validation
+# -----------------------------------------------------------------------------
+# Execute launchr help to trigger action discovery and display
+exec launchr --help
+
+# Validate that actions section appears with proper formatting
+stdout '^\s+Actions:\n\s+bar\s+'
+
+# Test valid action discovery and naming:
+# These actions should appear in the output with correct names and titles
+stdout '^\s+bar\s+bar$'                                      # Simple root-level action
+stdout '^\s+foo\s+foo$'                                      # Simple root-level action
+stdout '^\s+foo\.bar\.baz:fred\s+fred$'                      # Properly namespaced action
+stdout '^\s+foo-bar_baz:waldo-fred.1\s+valid special chars'  # Valid special characters
+stdout '^\s+foo\.bar\.baz:waldo\s+waldo$'                    # Namespaced action
+
+# Test invalid action exclusion:
+# These patterns should NOT appear in the output due to naming violations
+! stdout '^\s+foo-bar_baz:waldo.fred\s+invalid special chars$'   # Space in name
+! stdout '^\s+foo-bar_baz:waldo\s+invalid special chars$'        # Space in path
+! stdout '^\s+waldo.fred\s+invalid special chars$'               # Space violation
+
+# Test hidden directory exclusion:
+# Actions in hidden directories (starting with .) should not be discovered
+! stdout '^\s+(.)hidden:foo\s+foo hidden skipped$'
+! stdout '^\s+(.)hidden:bar\s+bar hidden skipped$'
+
+# Test incorrect path exclusion:
+# Actions not in proper 'actions' directories should not be discovered
+! stdout '^\s+foo\.bar\.baz:incorrect\s+incorrect actions path$'
+! stdout '^\s+foo\.bar\.baz:subdir.*$'                           # Subdirectory actions
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 2: Custom Action Path Discovery
+# -----------------------------------------------------------------------------
+# Test LAUNCHR_ACTIONS_PATH environment variable functionality
+env LAUNCHR_ACTIONS_PATH=./foo
+exec launchr --help
+
+# With custom path, default actions should not appear
+! stdout '^\s+foo\s+foo$'
+
+# Custom path actions should be discovered with proper namespacing
+stdout '^\s+bar\.baz:fred\s+fred$'        # Namespaced from custom path
+stdout '^\s+bar\.baz:waldo\s+waldo$'      # Namespaced from custom path
+
+# Validate clean execution with custom path
+! stderr .
+
+# =============================================================================
+# Test Data Files - Action Configurations
+# =============================================================================
+
+# Standard Container Action
+-- actions/foo/action.yaml --
+# Container-based action using Alpine Linux
+action:
+  title: foo                              # Human-readable action name
+runtime:
+  type: container                         # Container execution type
+  image: alpine                           # Base container image
+  command: [/bin/sh, ls]                  # Command to execute
+
+# Standard Shell Action
+-- actions/bar/action.yaml --
+# Shell script action for file listing
+action:
+  title: bar                              # Human-readable action name
+runtime:
+  type: shell                             # Shell execution type
+  script: ls -al                          # Script content to execute
+
+# Valid Special Characters Action
+-- foo-bar_baz/actions/waldo-fred.1/action.yaml --
+# Action demonstrating valid special character usage in names
+# Valid characters: hyphens, underscores, dots, numbers
+action: { title: valid special chars }    # Compact YAML syntax
+runtime: plugin                           # Plugin-based execution
+
+# Invalid Special Characters Action (Spaces)
+-- foo-bar_baz/actions/waldo fred/action.yaml --
+# Action with invalid spaces in path - should be filtered out
+action: { title: invalid special chars }
+runtime: plugin
+
+# Invalid Special Characters Action (Root Level)
+-- actions/waldo fred/action.yaml --
+# Another action with spaces in path - should be filtered out
+action: { title: invalid special chars }
+runtime: plugin
+
+# Namespaced Plugin Action - Waldo
+-- foo/bar/baz/actions/waldo/action.yaml --
+# Plugin action in nested namespace structure
+action:
+  title: waldo                            # Action title
+runtime: plugin                           # Plugin execution type
+
+# Namespaced Plugin Action - Fred
+-- foo/bar/baz/actions/fred/action.yaml --
+# Plugin action in nested namespace structure
+action:
+  title: fred                             # Action title
+runtime: plugin                           # Plugin execution type
+
+# Broken Action Configuration
+-- foo/bar/baz/actions/broken/action.yaml --
+# Intentionally broken action to test error handling
+# Missing required container properties
+action:
+  title: broken                           # Action title
+runtime:
+  type: container                         # Container type specified
+  # ERROR: Missing required image and command properties
+
+# Hidden Action - Foo (Should be ignored)
+-- .hidden/actions/foo/action.yaml --
+# Action in hidden directory - should not be discovered
+action:
+  title: foo hidden skipped              # Title indicating it should be skipped
+runtime: plugin
+
+# Hidden Action - Bar (Should be ignored)
+-- .hidden/actions/bar/action.yaml --
+# Another hidden action - should not be discovered
+action:
+  title: bar hidden skipped              # Title indicating it should be skipped
+runtime: plugin
+
+# Incorrectly Placed Action
+-- foo/bar/baz/myactions/incorrect/action.yaml --
+# Action in non-standard directory name - should not be discovered
+# Actions must be in directories named 'actions', not 'myactions'
+action:
+  title: incorrect actions path          # Describes the path issue
+runtime: plugin
+
+# Subdirectory Action (Invalid Structure)
+-- foo/bar/baz/actions/subdir/foo/action.yaml --
+# Action in subdirectory of actions directory - should not be discovered
+# Actions should be directly in actions/ directory, not nested further
+action:
+  title: foo incorrect pos of yaml in subdir    # Describes structure issue
+runtime: plugin
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Action Discovery Rules:
+# 1. Scan directories named 'actions' for action.yaml files
+# 2. Build action names from directory path hierarchy
+# 3. Apply namespace prefixes based on directory structure
+# 4. Filter out actions with invalid characters (spaces)
+# 5. Ignore hidden directories (starting with .)
+# 6. Ignore actions not directly in 'actions' directories
+#
+# Naming Conventions:
+# - Valid characters: letters, numbers, hyphens, underscores, dots
+# - Invalid characters: spaces, special symbols
+# - Namespace separator: colon (:)
+# - Path separator in namespace: dot (.)
+#
+# Output Format:
+# - Actions listed under "Actions:" header
+# - Format: "action_name    action_title"
+# - Sorted and grouped appropriately
+# - No error output for successful operations
+#
+# =============================================================================

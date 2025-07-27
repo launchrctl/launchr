@@ -1,0 +1,266 @@
+# =============================================================================
+# Launchr Shell Runtime Environment and Action Execution Test
+# =============================================================================
+#
+# This test validates the Launchr tool's core shell runtime functionality:
+# 1. Environment variable handling and propagation
+# 2. Cross-platform compatibility (Windows/Unix)
+# 3. Action execution with custom environments
+# 4. Binary path resolution and template variables
+# 5. Self-calling action capabilities
+# 6. Standard output and error stream handling
+#
+# Test Focus:
+# - Shell runtime environment configuration
+# - Environment variable inheritance and overrides
+# - Cross-platform path handling
+# - Action directory and binary path resolution
+# - Nested action execution
+# - Stream output validation
+# =============================================================================
+
+# Windows WSL Environment Configuration
+# -----------------------------------------------------------------------------
+# Configure WSL environment variables for Windows compatibility
+# WSLENV allows environment variables to be passed between Windows and WSL
+[windows] env WSLENV="HOST_ENV_1:HOST_ENV_2:$WSLENV"
+
+# Host Environment Setup
+# -----------------------------------------------------------------------------
+# Set up host-level environment variables that will be inherited by actions
+env HOST_ENV_1=foo
+env HOST_ENV_2=bar
+
+# Primary Action Execution Test
+# -----------------------------------------------------------------------------
+# Execute the environment test action with verbose logging
+# Tests environment variable handling and path resolution
+exec launchr test-shell:env -vvvv
+
+# Environment Variable Validation
+# -----------------------------------------------------------------------------
+# Verify that action-level environment variables are properly set
+# ACTION_ENV_1 should inherit from HOST_ENV_1, ACTION_ENV_2 should be overridden
+stdout '^ACTION_ENV_1=foo ACTION_ENV_2=buz$'
+
+# Verify that host environment variables are accessible and can be overridden
+# HOST_ENV_1 should remain unchanged, HOST_ENV_2 should be overridden to "fred"
+stdout '^HOST_ENV_1=foo HOST_ENV_2=fred$'
+
+# Verify template variable resolution in shell context
+# Shows how environment variables are expanded in shell scripts
+stdout '^host: foo bar$'
+
+# Cross-Platform Path Resolution Tests
+# -----------------------------------------------------------------------------
+# Unix-specific path validation - template and shell variable expansion
+[unix] stdout '^action dir tpl: '$WORK'/test-shell/actions/env$'
+[unix] stdout '^action dir sh: '$WORK'/test-shell/actions/env$'
+
+# Windows-specific path validation - handles backslash separators and drive letters
+[windows] stdout '^action dir tpl: '${WORK@R}'\\test-shell\\actions\\env$'
+[windows] stdout '^action dir sh: '$WORK_UNIX'/test-shell/actions/env$'
+
+# Binary Path Resolution Tests
+# -----------------------------------------------------------------------------
+# Unix binary path validation - template and shell contexts
+[unix] stdout '^current bin tpl: /.*/launchr$'
+[unix] stdout '^current bin sh: /.*/launchr$'
+
+# Windows binary path validation - .exe extension and path formats
+[windows] stdout '^current bin tpl: C:\\.*\\launchr\.exe$'
+[windows] stdout '^current bin sh: /.*/launchr\.exe$'
+
+# Error Stream Validation
+# -----------------------------------------------------------------------------
+# Ensure no unexpected errors are written to stderr during normal execution
+! stderr .
+
+# Standard Error Output Test
+# -----------------------------------------------------------------------------
+# Execute action that specifically tests stderr output handling
+exec launchr test-shell:stderr
+
+# Verify proper stream separation - stdout and stderr should be distinct
+stdout '^output to stdout$'
+stderr '^output to stderr$'
+
+# Self-Calling Action Test
+# -----------------------------------------------------------------------------
+# Execute action that calls the launchr binary recursively
+# Tests nested execution and environment inheritance
+exec launchr test-shell:call-self
+
+# Version Information Validation
+# -----------------------------------------------------------------------------
+# Verify that self-called binary reports correct version
+stdout '^launchr version v0\.0\.0-testscript'
+
+# Nested Environment Variable Tests
+# -----------------------------------------------------------------------------
+# Verify environment handling in nested action calls
+# HOST_ENV_1 should be overridden to "buz" in nested context
+stdout '^ACTION_ENV_1=buz ACTION_ENV_2=buz$'
+stdout '^HOST_ENV_1=buz HOST_ENV_2=fred$'
+
+# Verify template expansion in nested calls
+stdout '^host: buz waldo$'
+
+# Nested Path Resolution Tests
+# -----------------------------------------------------------------------------
+# Unix nested path validation
+[unix] stdout '^action dir tpl: '$WORK'/test-shell/actions/env$'
+[unix] stdout '^action dir sh: '$WORK'/test-shell/actions/env$'
+
+# Windows nested path validation
+[windows] stdout '^action dir tpl: '${WORK@R}'\\test-shell\\actions\\env$'
+[windows] stdout '^action dir sh: '$WORK_UNIX'/test-shell/actions/env$'
+
+# Nested binary path validation
+[unix] stdout '^current bin tpl: /.*/launchr$'
+[unix] stdout '^current bin sh: /.*/launchr$'
+[windows] stdout '^current bin tpl: C:\\.*\\launchr\.exe$'
+[windows] stdout '^current bin sh: /.*/launchr\.exe$'
+
+# Parent Action Context Tests
+# -----------------------------------------------------------------------------
+# Verify that parent action directory is properly tracked in nested calls
+[unix] stdout '^parent action dir tpl: '$WORK'/test-shell/actions/call-self$'
+[unix] stdout '^parent action dir sh: '$WORK'/test-shell/actions/call-self$'
+[windows] stdout '^parent action dir tpl: '${WORK@R}'\\test-shell\\actions\\call-self$'
+[windows] stdout '^parent action dir sh: '$WORK_UNIX'/test-shell/actions/call-self$'
+
+# Nested Error Stream Validation
+# -----------------------------------------------------------------------------
+# Verify stderr handling in nested action calls
+stderr '^output to stderr$'
+
+# =============================================================================
+# Test Data Files - Shell Action Configurations
+# =============================================================================
+
+# Environment Variable Test Action
+-- test-shell/actions/env/action.yaml --
+# Action demonstrating environment variable handling and path resolution
+# Tests variable inheritance, overrides, and template expansion
+action:
+  title: shell action - environment variables    # Human-readable action name
+
+# Shell Runtime Configuration:
+# Demonstrates environment variable configuration and script execution
+runtime:
+  type: shell                                     # Shell execution type
+  env:                                            # Environment variable configuration
+    ACTION_ENV_1: ${HOST_ENV_1}                  # Inherit from host environment
+    ACTION_ENV_2: "buz"                          # Override with literal value
+    HOST_ENV_2: "fred"                           # Override host variable
+  script: |                                      # Inline shell script
+    # Environment Variable Output:
+    # Display action-level environment variables
+    echo "ACTION_ENV_1=$$ACTION_ENV_1 ACTION_ENV_2=$$ACTION_ENV_2"
+
+    # Host Variable Output:
+    # Display host-level environment variables (potentially overridden)
+    echo "HOST_ENV_1=$$HOST_ENV_1 HOST_ENV_2=$$HOST_ENV_2"
+
+    # Template Variable Output:
+    # Show template expansion in shell context
+    echo "host: $HOST_ENV_1 $HOST_ENV_2"
+
+    # Path Resolution Output:
+    # Display action directory paths in template and shell contexts
+    echo "action dir tpl: $ACTION_DIR"
+    echo "action dir sh: $$ACTION_DIR"
+
+    # Binary Path Output:
+    # Display current binary paths in template and shell contexts
+    echo "current bin tpl: $CBIN"
+    echo "current bin sh: $$CBIN"
+
+# Self-Calling Test Action
+-- test-shell/actions/call-self/action.yaml --
+# Action demonstrating recursive binary execution and environment inheritance
+# Tests nested action calls and parent context tracking
+action:
+  title: shell action - call current binary      # Human-readable action name
+
+# Shell Runtime Configuration:
+# Executes nested launchr calls with modified environment
+runtime:
+  type: shell                                     # Shell execution type
+  script: |                                      # Inline shell script
+    # Version Information:
+    # Display version of current binary
+    $$CBIN --version
+    echo ""
+
+    # Environment Modification:
+    # Set new environment variables for nested call
+    export HOST_ENV_1=buz HOST_ENV_2=waldo
+
+    # Nested Action Execution:
+    # Call the environment test action with modified environment
+    $$CBIN test-shell:env
+
+    # Parent Context Output:
+    # Display parent action directory information
+    echo "parent action dir tpl: $ACTION_DIR"
+    echo "parent action dir sh: $$ACTION_DIR"
+
+    # Nested Error Stream Test:
+    # Execute stderr test action to verify stream handling
+    $$CBIN test-shell:stderr
+
+# Error Stream Test Action
+-- test-shell/actions/stderr/action.yaml --
+# Action demonstrating standard output and error stream separation
+# Tests proper handling of stdout and stderr in shell actions
+action:
+  title: shell action - stderr                   # Human-readable action name
+
+# Shell Runtime Configuration:
+# Executes script that writes to both stdout and stderr
+runtime:
+  type: shell                                     # Shell execution type
+  script: |                                      # Inline shell script
+    # Standard Output:
+    # Write message to standard output stream
+    echo "output to stdout"             # Write to standard output
+
+    # Standard Error:
+    # Write message to standard error stream
+    echo "output to stderr" >&2         # Write to standard error
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Environment Variable Rules:
+# 1. Host environment variables are inherited by actions
+# 2. Action-level env configuration can override host variables
+# 3. Template variables (${VAR}) are expanded before script execution
+# 4. Shell variables ($$VAR) are expanded during script execution
+# 5. Environment modifications in scripts affect nested calls
+#
+# Path Resolution Rules:
+# 1. ACTION_DIR provides the current action's directory path
+# 2. CBIN provides the path to the current launchr binary
+# 3. Paths are formatted appropriately for the target platform
+# 4. Template context uses platform-native separators
+# 5. Shell context may use Unix-style paths even on Windows
+#
+# Cross-Platform Compatibility:
+# 1. Windows tests include WSL environment configuration
+# 2. Path separators are handled correctly (/ vs \)
+# 3. Binary extensions are platform-appropriate (.exe on Windows)
+# 4. Drive letters and UNC paths are supported on Windows
+# 5. Unix and Windows paths coexist in mixed environments
+#
+# Stream Handling:
+# 1. Standard output and error streams are properly separated
+# 2. Actions can write to both stdout and stderr independently
+# 3. Stream redirection works correctly in shell scripts
+# 4. Error output from nested calls is properly propagated
+# 5. No unexpected errors should appear during normal execution
+#
+# =============================================================================

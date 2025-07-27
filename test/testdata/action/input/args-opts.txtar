@@ -1,0 +1,224 @@
+# =============================================================================
+# Launchr Action Arguments and Options Integration Test Suite
+# =============================================================================
+#
+# This test file validates the Launchr tool's ability to:
+# 1. Handle both positional arguments and named options in a single action
+# 2. Parse mixed argument/option syntax correctly
+# 3. Validate required arguments alongside optional options
+# 4. Handle default values for arguments when options are present
+# 5. Support flexible ordering of arguments and options
+# 6. Validate option types and enum constraints
+# 7. Provide clear error messages for validation failures
+#
+# Test Focus:
+# - Mixed argument/option command-line parsing
+# - Flexible parameter ordering
+# - Type validation for both arguments and options
+# - Default value handling in mixed scenarios
+# - Error aggregation for multiple validation failures
+# =============================================================================
+
+# Test 1: Arguments Only (Minimal Valid Command)
+# -----------------------------------------------------------------------------
+# Execute with only required argument, using default for optional argument
+exec launchr test-print-input:args-opts 42
+
+# Validate required argument processing:
+# Should process the provided integer argument
+stdout '^argInteger: 42 int true$'
+
+# Validate default value usage:
+# Should use default value for optional argument with default
+stdout '^argString: foo string false$'
+
+# Validate unspecified options:
+# Should show nil for unspecified optional options
+stdout '^optInteger: <nil> <nil> false$'
+stdout '^optEnum: <nil> <nil> false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 2: Arguments with Single Option
+# -----------------------------------------------------------------------------
+# Execute with required argument and one named option
+exec launchr test-print-input:args-opts 42 --optInteger 73
+
+# Validate required argument processing:
+# Should process the provided integer argument
+stdout '^argInteger: 42 int true$'
+
+# Validate default value usage:
+# Should still use default value for argument with default
+stdout '^argString: foo string false$'
+
+# Validate option processing:
+# Should process the provided integer option
+stdout '^optInteger: 73 int true$'
+
+# Validate unspecified options:
+# Should show nil for unspecified optional options
+stdout '^optEnum: <nil> <nil> false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 3: Arguments with Option and Explicit Argument Value
+# -----------------------------------------------------------------------------
+# Execute with both arguments provided and one named option
+exec launchr test-print-input:args-opts 42 --optInteger 73 bar
+
+# Validate required argument processing:
+# Should process the provided integer argument
+stdout '^argInteger: 42 int true$'
+
+# Validate explicit argument value:
+# Should use provided value instead of default
+stdout '^argString: bar string true$'
+
+# Validate option processing:
+# Should process the provided integer option
+stdout '^optInteger: 73 int true$'
+
+# Validate unspecified options:
+# Should show nil for unspecified optional options
+stdout '^optEnum: <nil> <nil> false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 4: Mixed Ordering (Options Before Arguments)
+# -----------------------------------------------------------------------------
+# Execute with flexible ordering: options mixed with arguments
+exec launchr test-print-input:args-opts --optEnum enum1 42 bar --optInteger 73
+
+# Validate argument parsing despite mixed ordering:
+# Should correctly identify and process positional arguments
+stdout '^argInteger: 42 int true$'
+stdout '^argString: bar string true$'
+
+# Validate option processing despite mixed ordering:
+# Should correctly process all named options regardless of position
+stdout '^optInteger: 73 int true$'
+stdout '^optEnum: enum1 string true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 5: Multiple Validation Errors
+# -----------------------------------------------------------------------------
+# Execute with multiple validation failures: missing argument and invalid enum
+! exec launchr test-print-input:args-opts --optEnum enum3
+
+# Validate missing argument error:
+# Should report missing required argument
+stdout '- \[arguments\]: missing property ''argInteger'''
+
+# Validate invalid enum option error:
+# Should report invalid enum value with allowed options
+stdout '- \[options optEnum\]: value must be one of ''enum1'', ''enum2'''
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Test Data Files - Action Configuration with Arguments and Options
+# =============================================================================
+
+# Mixed Arguments and Options Action
+-- test-print-input/actions/args-opts/action.yaml --
+# Plugin action demonstrating mixed arguments and options handling
+# Shows how positional arguments and named options can coexist
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Arguments + options    # Human-readable action name
+
+  # Positional Arguments Section:
+  # Arguments are provided in order without flag names
+  arguments:
+    # Required integer argument (first positional parameter)
+    - name: argInteger                     # Argument identifier
+      title: Argument Integer              # Human-readable argument name
+      description: This is a required integer argument    # Help text
+      type: integer                        # Explicit integer type
+      required: true                       # Must be provided by user
+
+    # Required string argument with default (second positional parameter)
+    - name: argString                      # Argument identifier
+      description: This is a required string argument with a default value    # Help text
+      type: string                         # Explicit string type
+      required: true                       # Must be provided by user
+      default: "foo"                       # Default value when not provided
+
+  # Named Options Section:
+  # Options are provided using --name syntax and can appear anywhere
+  options:
+    # Optional integer option
+    - name: optInteger                     # Option identifier
+      title: Option Integer                # Human-readable option name
+      description: This is an optional integer option    # Help text
+      type: integer                        # Explicit integer type
+      # Note: options are optional by default (no required: true)
+
+    # Optional enum option
+    - name: optEnum                        # Option identifier
+      title: Option Enum                   # Human-readable option name
+      description: This is an optional string enum option    # Help text
+      type: string                         # Base type: string
+      enum: [enum1, enum2]                 # Allowed values enumeration
+      # Note: options are optional by default (no required: true)
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Command-Line Parsing Rules:
+# 1. Arguments are positional and parsed in declaration order
+# 2. Options are named and can appear anywhere in the command line
+# 3. Mixed ordering of arguments and options is supported
+# 4. Arguments without values use their default values if available
+# 5. Unspecified options show as nil in output
+#
+# Argument vs Option Distinctions:
+# - Arguments: Positional, order-dependent, can have defaults
+# - Options: Named with --, position-independent, always optional
+# - Both support the same type system (integer, string, enum, etc.)
+# - Both undergo the same validation processes
+#
+# Parsing Order Independence:
+# - Options can appear before, after, or mixed with arguments
+# - Parser correctly separates named options from positional arguments
+# - Final values are determined by logical position, not command-line position
+#
+# Default Value Behavior:
+# - Arguments with defaults use them when not explicitly provided
+# - Options without values remain nil (no default mechanism)
+# - Default usage is indicated in output (false for provided flag)
+#
+# Validation Integration:
+# - Arguments and options are validated together
+# - Multiple validation errors are collected and reported
+# - JSON Schema validation applies to both arguments and options
+# - Error messages clearly distinguish between argument and option errors
+#
+# Type System Consistency:
+# - Same type validation rules apply to arguments and options
+# - Integer, string, enum, and other types work identically
+# - Format validation and constraints work the same way
+# - Error messages maintain consistent formatting
+#
+# Error Message Format:
+# - Arguments: [arguments] or [arguments argName]
+# - Options: [options optName]
+# - Clear separation between different validation failures
+# - Specific error details for each validation type
+#
+# Usage Patterns:
+# - Minimum: required arguments only
+# - Common: required arguments + selected options
+# - Maximum: all arguments + all options
+# - Flexible: any combination with mixed ordering
+#
+# =============================================================================

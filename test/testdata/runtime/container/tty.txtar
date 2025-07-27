@@ -1,0 +1,133 @@
+# =============================================================================
+# Launchr TTY (Terminal) Integration Test Suite
+# =============================================================================
+#
+# This comprehensive test file validates the Launchr tool's ability to:
+# 1. Handle TTY (terminal) input/output operations
+# 2. Process interactive terminal sessions with container runtimes
+# 3. Manage environment variables within containerized actions
+# 4. Handle both successful and failing terminal sessions
+# 5. Properly capture and display terminal output and error codes
+#
+# Test Structure:
+# - Tests successful TTY interaction with environment variables
+# - Tests TTY session with non-zero exit codes and stderr output
+# - Validates proper output formatting and error handling
+# - Ensures cross-platform compatibility (except Windows)
+# =============================================================================
+
+# Platform Compatibility Check
+# -----------------------------------------------------------------------------
+# Testing of TTY functionality is not supported on Windows platforms
+# Skip this entire test suite when running on Windows systems
+[windows] skip 'Testing TTY is not supported on Windows'
+
+# Test 1: Successful TTY Session with Environment Variables
+# -----------------------------------------------------------------------------
+# Configure TTY input stream for successful interaction test
+# This test validates environment variable handling and command execution
+ttyin -stdin tty.echo
+
+# Execute TTY test action with echo input stream
+# This command runs the test-tty action with the prepared input
+exec launchr test-tty
+
+# Validate command prompt output format
+# Expected format: "/host $ " followed by environment variable assignment
+stdout '^\/host \$.*TEST_VAR=bar\s*$'
+
+# Validate echo command display with variable substitution
+# Expected format: "/host $ echo "foo ${TEST_VAR}""
+stdout '^\/host \$ echo "foo \$\{TEST_VAR\}"\s*$'
+
+# Validate command execution result with variable expansion
+# Expected output: "foo bar" (TEST_VAR expanded to "bar")
+stdout '^foo bar\s*$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 2: TTY Session with Error Handling and Exit Codes
+# -----------------------------------------------------------------------------
+# Configure TTY input stream for error condition test
+# This test validates error output handling and non-zero exit codes
+ttyin -stdin tty.exit
+
+# Execute TTY test action expecting failure (non-zero exit code)
+# This command should fail due to exit code 42 in the input stream
+! exec launchr test-tty
+
+# Validate stderr output is captured and displayed
+# Expected output: "output to stderr" from the container command
+stdout '^output to stderr\s*$'
+
+# Validate exit code reporting in action completion message
+# Expected format: action "test-tty" finished with exit code 42
+stdout 'action "test-tty" finished with exit code 42'
+
+# Validate clean error handling (no stderr output from launchr itself)
+! stderr .
+
+# Test Configuration Files
+# =============================================================================
+
+# Action Definition: TTY Test Action Configuration
+# -----------------------------------------------------------------------------
+# This file defines the containerized action for TTY testing
+# Uses Alpine Linux container with shell command execution
+-- actions/test-tty/action.yaml --
+action:
+  title: remote
+  description: Test tty
+
+runtime:
+  type: container
+  image: alpine:latest
+  command:
+    - /bin/sh
+
+# TTY Input Stream: Successful Echo Test
+# -----------------------------------------------------------------------------
+# Input sequence for successful TTY interaction test
+# Sets environment variable, executes echo command, and exits cleanly
+-- ./tty.echo --
+TEST_VAR=bar
+echo "foo ${TEST_VAR}"
+exit
+
+# TTY Input Stream: Error Condition Test
+# -----------------------------------------------------------------------------
+# Input sequence for error handling test
+# Outputs to stderr and exits with non-zero code (42)
+-- ./tty.exit --
+echo "output to stderr" >&2
+exit 42
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# TTY Integration Rules:
+# 1. Process interactive terminal input streams correctly
+# 2. Handle environment variable assignment and expansion
+# 3. Capture and display both stdout and stderr output
+# 4. Report exit codes accurately in completion messages
+# 5. Maintain clean error handling without launchr stderr output
+#
+# Terminal Output Format:
+# - Command prompts: "/host $ " prefix format
+# - Environment variables: Proper expansion and display
+# - Error output: Captured from container stderr
+# - Exit codes: Reported in completion messages
+#
+# Platform Support:
+# - Full support on Unix-like systems (Linux, macOS)
+# - Not supported on Windows platforms
+# - Graceful skip behavior for unsupported platforms
+#
+# Container Runtime:
+# - Uses Alpine Linux base image for consistency
+# - Executes commands via /bin/sh shell
+# - Proper isolation and resource management
+#
+# =============================================================================

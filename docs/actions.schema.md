@@ -193,13 +193,14 @@ Arguments and Options are available by their machine names - `{{ .myArg1 }}`, `{
 
 ### Predefined variables:
 
-1. `current_uid` - current user ID. In Windows environment set to 0.
-2. `current_gid` - current group ID. In Windows environment set to 0.
-3. `current_working_dir` - current app working directory.
-4. `actions_base_dir` - actions base directory where the action was found. By default, current working directory,
+1. `current_uid` or `$UID` - current user ID. In Windows environment set to 1000.
+2. `current_gid` or `$GID` - current group ID. In Windows environment set to 0.
+3. `current_working_dir` or `$ACTION_WD` - current app working directory.
+4. `actions_base_dir` or `$DISCOVERY_DIR` - actions base directory where the action was found. By default, current working directory,
     but other paths may be provided by plugins.
-5. `action_dir` - directory of the action file.
-6. `current_bin` - path to the currently executed command, like $0 in bash.
+5. `action_dir` or `$ACTION_DIR` - directory of the action file.
+6. `current_bin` or `$CBIN` - path to the Currently executed Binary. Works only in "shell" runtime.
+    On Windows, the path is converted to unix style.
 
 ### Environment variables
 
@@ -490,8 +491,8 @@ runtime:
   build:
     context: ./
     args:
-      USER_ID: {{ .current_uid }}
-      GROUP_ID: {{ .current_gid }}
+      USER_ID: $UID
+      GROUP_ID: $GID
       USER_NAME: plasma
 ```
 

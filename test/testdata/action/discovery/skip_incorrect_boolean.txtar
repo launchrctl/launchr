@@ -1,0 +1,79 @@
+# =============================================================================
+# Launchr Action Option Type Validation Test Suite - Boolean Default Mismatch
+# =============================================================================
+#
+# This test file validates the Launchr tool's ability to:
+# 1. Detect type mismatches between option declarations and default values
+# 2. Provide clear error messages for boolean option configuration errors
+# 3. Skip actions with invalid option configurations
+# 4. Report specific line and column information for validation errors
+#
+# Test Focus:
+# - Boolean option type validation
+# - Default value type checking
+# - Error message formatting and content
+# - Action skipping behavior for invalid configurations
+# =============================================================================
+
+# Test 1: Boolean Option Default Value Type Validation
+# -----------------------------------------------------------------------------
+# Execute action with incorrectly typed default value for boolean option
+# This should trigger validation error and skip the action
+exec launchr opt-boolean-incorrect-default
+
+# Validate error message content and format:
+# Error should reference the correct action name (note: output shows different name)
+stdout 'Action "opt-number-incorrect-default" was skipped:'
+
+# Validate specific type mismatch error details:
+# Should identify the type conflict between string and boolean
+stdout 'given value type \(string\) and expected type \(bool\) mismatch, line 13, col 16'
+
+# Validate clean execution (no error output to stderr)
+! stderr .
+
+# =============================================================================
+# Test Data Files - Action Configuration with Type Mismatch
+# =============================================================================
+
+# Boolean Option with Invalid String Default
+-- actions/opt-number-incorrect-default/action.yaml --
+# Plugin action demonstrating boolean option type validation failure
+# This configuration intentionally contains a type mismatch error
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option Boolean    # Human-readable action name
+
+  options:
+    - name: optBoolean                     # Option identifier
+      title: Option Boolean                # Human-readable option name
+      type: boolean                        # Expected type: boolean
+      description: This is an optional boolean option    # Help text
+      default: no                          # ERROR: String value for boolean type
+      # Valid boolean defaults would be: true, false
+      # Invalid: "no", "yes", "1", "0", or any string values
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Type Validation Rules:
+# 1. Option default values must match declared option types
+# 2. Boolean options accept only: true, false (not strings like "yes"/"no")
+# 3. Type mismatches should be reported with specific location information
+# 4. Actions with invalid option configurations should be skipped
+#
+# Error Message Format:
+# - Action name and skip notification
+# - Specific type mismatch description
+# - Line and column number for precise error location
+# - Clear indication of expected vs. actual types
+#
+# Validation Behavior:
+# - Actions are validated before execution
+# - Invalid actions are skipped rather than causing runtime errors
+# - Error messages provide enough detail for debugging
+# - Process continues normally after skipping invalid actions
+#
+# =============================================================================
