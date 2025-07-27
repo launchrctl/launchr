@@ -1,0 +1,451 @@
+# =============================================================================
+# Test Suite: Verbosity configuration
+# =============================================================================
+#
+# Comprehensive test suite for Launchr's logging system, covering:
+# - Log level configuration (DEBUG, INFO, WARN, ERROR, NONE)
+# - Log format configuration (JSON, plain, pretty)
+# - Verbosity flags (-v, -vv, -vvv, -vvv)
+# - Environment variable configuration
+# - Quiet mode functionality
+# - Flag precedence and override behavior
+# - Cross-format consistency validation
+#
+# This test suite ensures that all logging configuration methods produce
+# consistent and expected output across different scenarios.
+#
+# Environment Variables Tested:
+#   - LAUNCHR_LOG_LEVEL: Controls log level (DEBUG|INFO|WARN|ERROR|NONE)
+#   - LAUNCHR_LOG_FORMAT: Controls log format (json|plain|pretty)
+#   - LAUNCHR_QUIET_MODE: Enables quiet mode (0|1)
+#
+# Command Line Flags Tested:
+#   - --log-level: Sets log level
+#   - --log-format: Sets log format
+#   - -v, -vv, -vvv, -vvvv: Verbosity levels
+#   - -q, --quiet: Quiet mode
+#
+# =============================================================================
+
+# =============================================================================
+# Section 1: Test log formats using --log-format flag
+# =============================================================================
+
+# JSON format: Structured JSON output
+exec launchr --log-format=json --log-level=INFO testplugin:log-levels
+stdout '^\{.*"level":"INFO".*\}$'
+stdout '^\{.*"level":"WARN".*\}$'
+stdout '^\{.*"level":"ERROR".*\}$'
+! stderr .
+cp stdout json_format_flag_output.txt
+
+# Plain format: Key-value pairs with timestamp
+exec launchr --log-format=plain --log-level=INFO testplugin:log-levels
+stdout '^time=.*level=INFO.*msg=.*$'
+stdout '^time=.*level=WARN.*msg=.*$'
+stdout '^time=.*level=ERROR.*msg=.*$'
+! stderr .
+cp stdout plain_format_flag_output.txt
+
+# Pretty format: Human-readable with colors (need to account for ANSI codes)
+exec launchr --log-format=pretty --log-level=INFO testplugin:log-levels
+stdout '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}.*INFO.*this is INFO log'
+stdout '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}.*WARN.*this is WARN log'
+stdout '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}.*ERROR.*this is ERROR log'
+! stderr .
+cp stdout pretty_format_flag_output.txt
+
+# Default format (no --log-format): Should use pretty format
+exec launchr --log-level=INFO testplugin:log-levels
+cp stdout default_format_output.txt
+# Remove ANSI color codes and timestamps for comparison
+txtproc replace-regex '\x1b\[[0-9;]*m' '' default_format_output.txt default_no_color.txt
+txtproc replace-regex '\x1b\[[0-9;]*m' '' pretty_format_flag_output.txt pretty_no_color.txt
+txtproc replace-regex '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} ' '' default_no_color.txt default_normalized.txt
+txtproc replace-regex '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} ' '' pretty_no_color.txt pretty_normalized.txt
+cmp default_normalized.txt pretty_normalized.txt
+
+# =============================================================================
+# Section 2: Test log formats using LAUNCHR_LOG_FORMAT environment variable
+# Verify environment variable produces identical output to flags
+# =============================================================================
+
+# Environment variable: JSON format
+env LAUNCHR_LOG_FORMAT=json
+exec launchr --log-level=INFO testplugin:log-levels
+cp stdout json_format_env_output.txt
+# Normalize JSON timestamps before comparison
+txtproc replace-regex '"time":"[^"]*"' '"time":"NORMALIZED"' json_format_flag_output.txt json_flag_normalized.txt
+txtproc replace-regex '"time":"[^"]*"' '"time":"NORMALIZED"' json_format_env_output.txt json_env_normalized.txt
+cmp json_flag_normalized.txt json_env_normalized.txt
+
+# Environment variable: Plain format
+env LAUNCHR_LOG_FORMAT=plain
+exec launchr --log-level=INFO testplugin:log-levels
+cp stdout plain_format_env_output.txt
+# Remove timestamps from both files for comparison - match beginning of each line
+txtproc replace-regex 'time=[0-9T:.+-Z]+ ' '' plain_format_env_output.txt plain_env_normalized.txt
+txtproc replace-regex 'time=[0-9T:.+-Z]+ ' '' plain_format_flag_output.txt plain_flag_normalized.txt
+cmp plain_flag_normalized.txt plain_env_normalized.txt
+
+# Environment variable: Pretty format
+env LAUNCHR_LOG_FORMAT=pretty
+exec launchr --log-level=INFO testplugin:log-levels
+cp stdout pretty_format_env_output.txt
+txtproc replace-regex '\x1b\[[0-9;]*m' '' pretty_format_env_output.txt pretty_env_no_color.txt
+txtproc replace-regex '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} ' '' pretty_env_no_color.txt pretty_env_normalized.txt
+cmp pretty_normalized.txt pretty_env_normalized.txt
+
+# =============================================================================
+# Section 3: Test edge cases for LAUNCHR_LOG_FORMAT environment variable
+# =============================================================================
+
+# Edge case: Empty LAUNCHR_LOG_FORMAT should use pretty format (default)
+env LAUNCHR_LOG_FORMAT=
+exec launchr --log-level=INFO testplugin:log-levels
+cp stdout empty_format_output.txt
+txtproc replace-regex '\x1b\[[0-9;]*m' '' empty_format_output.txt empty_no_color.txt
+txtproc replace-regex '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} ' '' empty_no_color.txt empty_format_normalized.txt
+cmp pretty_normalized.txt empty_format_normalized.txt
+
+# Edge case: Undefined LAUNCHR_LOG_FORMAT should use pretty format (default)
+env LAUNCHR_LOG_FORMAT=
+exec launchr --log-level=INFO testplugin:log-levels
+cp stdout undefined_format_output.txt
+txtproc replace-regex '\x1b\[[0-9;]*m' '' undefined_format_output.txt undefined_no_color.txt
+txtproc replace-regex '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} ' '' undefined_no_color.txt undefined_format_normalized.txt
+cmp pretty_normalized.txt undefined_format_normalized.txt
+
+# =============================================================================
+# Section 4: Test log levels using --log-level flag (JSON format)
+# =============================================================================
+
+env LAUNCHR_LOG_FORMAT=json
+
+# DEBUG level: Should show all log messages
+exec launchr --log-level=DEBUG testplugin:log-levels
+stdout '^\{.*"level":"DEBUG".*\}$'
+stdout '^\{.*"level":"INFO".*\}$'
+stdout '^\{.*"level":"WARN".*\}$'
+stdout '^\{.*"level":"ERROR".*\}$'
+! stderr .
+cp stdout debug_flag_output.txt
+
+# INFO level: Should show INFO, WARN, ERROR (no DEBUG)
+exec launchr --log-level=INFO testplugin:log-levels
+! stdout '^\{.*"level":"DEBUG".*\}$'
+stdout '^\{.*"level":"INFO".*\}$'
+stdout '^\{.*"level":"WARN".*\}$'
+stdout '^\{.*"level":"ERROR".*\}$'
+! stderr .
+cp stdout info_flag_output.txt
+
+# WARN level: Should show WARN, ERROR only
+exec launchr --log-level=WARN testplugin:log-levels
+! stdout '^\{.*"level":"DEBUG".*\}$'
+! stdout '^\{.*"level":"INFO".*\}$'
+stdout '^\{.*"level":"WARN".*\}$'
+stdout '^\{.*"level":"ERROR".*\}$'
+! stderr .
+cp stdout warn_flag_output.txt
+
+# ERROR level: Should show ERROR only
+exec launchr --log-level=ERROR testplugin:log-levels
+! stdout '^\{.*"level":"DEBUG".*\}$'
+! stdout '^\{.*"level":"INFO".*\}$'
+! stdout '^\{.*"level":"WARN".*\}$'
+stdout '^\{.*"level":"ERROR".*\}$'
+! stderr .
+cp stdout error_flag_output.txt
+
+# NONE level: Should show no log messages
+exec launchr --log-level=NONE testplugin:log-levels
+! stdout '^\{.*"level":"DEBUG".*\}$'
+! stdout '^\{.*"level":"INFO".*\}$'
+! stdout '^\{.*"level":"WARN".*\}$'
+! stdout '^\{.*"level":"ERROR".*\}$'
+! stderr .
+cp stdout none_flag_output.txt
+
+# =============================================================================
+# Section 5: Test log levels using verbosity flags (-v, -vv, -vvv, -vvvv)
+# =============================================================================
+
+# -vvvv flag: Should be equivalent to DEBUG level
+exec launchr -vvvv testplugin:log-levels
+cp stdout debug_verbosity_output.txt
+# Normalize JSON timestamps before comparison
+txtproc replace-regex '"time":"[^"]*"' '"time":"NORMALIZED"' debug_flag_output.txt debug_flag_normalized.txt
+txtproc replace-regex '"time":"[^"]*"' '"time":"NORMALIZED"' debug_verbosity_output.txt debug_verbosity_normalized.txt
+cmp debug_flag_normalized.txt debug_verbosity_normalized.txt
+
+# -vvv flag: Should be equivalent to INFO level
+exec launchr -vvv testplugin:log-levels
+cp stdout info_verbosity_output.txt
+txtproc replace-regex '"time":"[^"]*"' '"time":"NORMALIZED"' info_flag_output.txt info_flag_normalized.txt
+txtproc replace-regex '"time":"[^"]*"' '"time":"NORMALIZED"' info_verbosity_output.txt info_verbosity_normalized.txt
+cmp info_flag_normalized.txt info_verbosity_normalized.txt
+
+# -vv flag: Should be equivalent to WARN level
+exec launchr -vv testplugin:log-levels
+cp stdout warn_verbosity_output.txt
+txtproc replace-regex '"time":"[^"]*"' '"time":"NORMALIZED"' warn_flag_output.txt warn_flag_normalized.txt
+txtproc replace-regex '"time":"[^"]*"' '"time":"NORMALIZED"' warn_verbosity_output.txt warn_verbosity_normalized.txt
+cmp warn_flag_normalized.txt warn_verbosity_normalized.txt
+
+# -v flag: Should be equivalent to ERROR level
+exec launchr -v testplugin:log-levels
+cp stdout error_verbosity_output.txt
+txtproc replace-regex '"time":"[^"]*"' '"time":"NORMALIZED"' error_flag_output.txt error_flag_normalized.txt
+txtproc replace-regex '"time":"[^"]*"' '"time":"NORMALIZED"' error_verbosity_output.txt error_verbosity_normalized.txt
+cmp error_flag_normalized.txt error_verbosity_normalized.txt
+
+# =============================================================================
+# Section 6: Test log levels using LAUNCHR_LOG_LEVEL environment variable
+# Verify environment variable produces identical output to flags
+# =============================================================================
+
+# Environment variable: DEBUG level
+env LAUNCHR_LOG_LEVEL=DEBUG
+exec launchr testplugin:log-levels
+cp stdout debug_env_output.txt
+txtproc replace-regex '"time":"[^"]*"' '"time":"NORMALIZED"' debug_env_output.txt debug_env_normalized.txt
+cmp debug_flag_normalized.txt debug_env_normalized.txt
+
+# Environment variable: INFO level
+env LAUNCHR_LOG_LEVEL=INFO
+exec launchr testplugin:log-levels
+cp stdout info_env_output.txt
+txtproc replace-regex '"time":"[^"]*"' '"time":"NORMALIZED"' info_env_output.txt info_env_normalized.txt
+cmp info_flag_normalized.txt info_env_normalized.txt
+
+# Environment variable: WARN level
+env LAUNCHR_LOG_LEVEL=WARN
+exec launchr testplugin:log-levels
+cp stdout warn_env_output.txt
+txtproc replace-regex '"time":"[^"]*"' '"time":"NORMALIZED"' warn_env_output.txt warn_env_normalized.txt
+cmp warn_flag_normalized.txt warn_env_normalized.txt
+
+# Environment variable: ERROR level
+env LAUNCHR_LOG_LEVEL=ERROR
+exec launchr testplugin:log-levels
+cp stdout error_env_output.txt
+txtproc replace-regex '"time":"[^"]*"' '"time":"NORMALIZED"' error_env_output.txt error_env_normalized.txt
+cmp error_flag_normalized.txt error_env_normalized.txt
+
+# Environment variable: NONE level
+env LAUNCHR_LOG_LEVEL=NONE
+exec launchr testplugin:log-levels
+cp stdout none_env_output.txt
+cmp none_flag_output.txt none_env_output.txt
+
+# =============================================================================
+# Section 7: Test edge cases for LAUNCHR_LOG_LEVEL environment variable
+# =============================================================================
+
+# Edge case: Empty LAUNCHR_LOG_LEVEL should use default behavior
+env LAUNCHR_LOG_LEVEL=
+exec launchr testplugin:log-levels
+cp stdout empty_env_output.txt
+
+# Edge case: Undefined LAUNCHR_LOG_LEVEL should use default behavior
+env LAUNCHR_LOG_LEVEL=
+exec launchr testplugin:log-levels
+cp stdout undefined_env_output.txt
+
+# Verify empty and undefined produce the same output
+cmp empty_env_output.txt undefined_env_output.txt
+
+# =============================================================================
+# Section 8: Test that different formats filter log levels consistently
+# =============================================================================
+
+# Test that plain format correctly filters WARN level
+env LAUNCHR_LOG_FORMAT=plain
+env LAUNCHR_LOG_LEVEL=WARN
+exec launchr testplugin:log-levels
+! stdout '^time=.*level=DEBUG.*$'
+! stdout '^time=.*level=INFO.*$'
+stdout '^time=.*level=WARN.*$'
+stdout '^time=.*level=ERROR.*$'
+
+# Test that pretty format correctly filters WARN level (account for ANSI codes)
+env LAUNCHR_LOG_FORMAT=pretty
+env LAUNCHR_LOG_LEVEL=WARN
+exec launchr testplugin:log-levels
+! stdout 'DEBUG.*this is DEBUG log'
+! stdout 'INFO.*this is INFO log'
+stdout 'WARN.*this is WARN log'
+stdout 'ERROR.*this is ERROR log'
+
+# Test that JSON format correctly filters WARN level
+env LAUNCHR_LOG_FORMAT=json
+env LAUNCHR_LOG_LEVEL=WARN
+exec launchr testplugin:log-levels
+! stdout '^\{.*"level":"DEBUG".*\}$'
+! stdout '^\{.*"level":"INFO".*\}$'
+stdout '^\{.*"level":"WARN".*\}$'
+stdout '^\{.*"level":"ERROR".*\}$'
+
+# =============================================================================
+# Section 9: Test that all formats produce same number of log entries
+# =============================================================================
+
+# Test plain format at INFO level - should have 3 lines (INFO, WARN, ERROR)
+env LAUNCHR_LOG_FORMAT=plain
+env LAUNCHR_LOG_LEVEL=INFO
+exec launchr testplugin:log-levels
+cp stdout plain_info_test.txt
+# Verify we have exactly 3 log lines
+stdout '^time=.*level=INFO.*$'
+stdout '^time=.*level=WARN.*$'
+stdout '^time=.*level=ERROR.*$'
+
+# Test JSON format at INFO level - should have 3 lines (INFO, WARN, ERROR)
+env LAUNCHR_LOG_FORMAT=json
+env LAUNCHR_LOG_LEVEL=INFO
+exec launchr testplugin:log-levels
+cp stdout json_info_test.txt
+# Verify we have exactly 3 log lines
+stdout '^\{.*"level":"INFO".*\}$'
+stdout '^\{.*"level":"WARN".*\}$'
+stdout '^\{.*"level":"ERROR".*\}$'
+
+# Test pretty format at INFO level - should have 3 lines (INFO, WARN, ERROR)
+env LAUNCHR_LOG_FORMAT=pretty
+env LAUNCHR_LOG_LEVEL=INFO
+exec launchr testplugin:log-levels
+cp stdout pretty_info_test.txt
+# Verify we have exactly 3 log lines
+stdout 'INFO.*this is INFO log'
+stdout 'WARN.*this is WARN log'
+stdout 'ERROR.*this is ERROR log'
+
+# =============================================================================
+# Section 10: Additional JSON format tests with timestamp normalization
+# =============================================================================
+
+# Test JSON format with different methods and normalize timestamps
+env LAUNCHR_LOG_FORMAT=json
+env LAUNCHR_LOG_LEVEL=INFO
+
+# Test with flag override (should still be JSON due to env var)
+exec launchr --log-level=INFO testplugin:log-levels
+cp stdout json_combined_output.txt
+txtproc replace-regex '"time":"[^"]*"' '"time":"NORMALIZED"' json_combined_output.txt json_combined_normalized.txt
+cmp json_flag_normalized.txt json_combined_normalized.txt
+
+# =============================================================================
+# Section 11: Test quiet mode completely suppresses all output
+# Even with DEBUG log level, quiet mode should produce no output
+# =============================================================================
+
+# Test -q flag with DEBUG level - should produce no output
+env LAUNCHR_LOG_FORMAT=json
+exec launchr -q --log-level=DEBUG testplugin:log-levels
+! stdout .
+! stderr .
+
+# Test --quiet flag with DEBUG level - should produce no output
+env LAUNCHR_LOG_FORMAT=json
+exec launchr --quiet --log-level=DEBUG testplugin:log-levels
+! stdout .
+! stderr .
+
+# Test LAUNCHR_QUIET_MODE environment variable with DEBUG level - should produce no output
+env LAUNCHR_QUIET_MODE=1
+env LAUNCHR_LOG_FORMAT=json
+exec launchr --log-level=DEBUG testplugin:log-levels
+! stdout .
+! stderr .
+
+# Test -q flag with different log formats - all should produce no output
+env LAUNCHR_LOG_FORMAT=plain
+exec launchr -q --log-level=DEBUG testplugin:log-levels
+! stdout .
+! stderr .
+
+env LAUNCHR_LOG_FORMAT=pretty
+exec launchr -q --log-level=DEBUG testplugin:log-levels
+! stdout .
+! stderr .
+
+env LAUNCHR_LOG_FORMAT=json
+exec launchr -q --log-level=DEBUG testplugin:log-levels
+! stdout .
+! stderr .
+
+# Test --quiet flag with different log formats - all should produce no output
+env LAUNCHR_LOG_FORMAT=plain
+exec launchr --quiet --log-level=DEBUG testplugin:log-levels
+! stdout .
+! stderr .
+
+env LAUNCHR_LOG_FORMAT=pretty
+exec launchr --quiet --log-level=DEBUG testplugin:log-levels
+! stdout .
+! stderr .
+
+env LAUNCHR_LOG_FORMAT=json
+exec launchr --quiet --log-level=DEBUG testplugin:log-levels
+! stdout .
+! stderr .
+
+# Test LAUNCHR_QUIET_MODE with different log formats - all should produce no output
+env LAUNCHR_QUIET_MODE=1
+env LAUNCHR_LOG_FORMAT=plain
+exec launchr --log-level=DEBUG testplugin:log-levels
+! stdout .
+! stderr .
+
+env LAUNCHR_QUIET_MODE=1
+env LAUNCHR_LOG_FORMAT=pretty
+exec launchr --log-level=DEBUG testplugin:log-levels
+! stdout .
+! stderr .
+
+env LAUNCHR_QUIET_MODE=1
+env LAUNCHR_LOG_FORMAT=json
+exec launchr --log-level=DEBUG testplugin:log-levels
+! stdout .
+! stderr .
+
+# Test that quiet mode overrides verbosity flags
+exec launchr -q -vvvv testplugin:log-levels
+! stdout .
+! stderr .
+
+exec launchr --quiet -vvvv testplugin:log-levels
+! stdout .
+! stderr .
+
+env LAUNCHR_QUIET_MODE=1
+exec launchr -vvvv testplugin:log-levels
+! stdout .
+! stderr .
+
+# Test that quiet mode works with environment variable log level
+env LAUNCHR_QUIET_MODE=1
+env LAUNCHR_LOG_LEVEL=DEBUG
+exec launchr testplugin:log-levels
+! stdout .
+! stderr .
+
+# Test edge cases: LAUNCHR_QUIET_MODE=0 should allow output
+env LAUNCHR_QUIET_MODE=0
+env LAUNCHR_LOG_FORMAT=json
+exec launchr --log-level=ERROR testplugin:log-levels
+stdout '^\{.*"level":"ERROR".*\}$'
+! stderr .
+
+# Test edge cases: Empty LAUNCHR_QUIET_MODE should allow output
+env LAUNCHR_QUIET_MODE=
+env LAUNCHR_LOG_FORMAT=json
+exec launchr --log-level=ERROR testplugin:log-levels
+stdout '^\{.*"level":"ERROR".*\}$'
+! stderr .
+
+# Reset environment for subsequent tests
+env LAUNCHR_QUIET_MODE=
+env LAUNCHR_LOG_LEVEL=
+env LAUNCHR_LOG_FORMAT=

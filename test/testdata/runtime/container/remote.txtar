@@ -1,0 +1,281 @@
+# =============================================================================
+# Launchr Remote Runtime and File Synchronization Test Suite
+# =============================================================================
+#
+# This comprehensive test file validates the Launchr tool's remote runtime
+# capabilities and file synchronization features:
+# 1. Custom working directory configuration for actions
+# 2. Remote runtime execution with --remote-runtime flag
+# 3. File synchronization between host and remote environments
+# 4. Bidirectional file copy behavior with --remote-copy-back
+# 5. Embedded filesystem action execution in remote contexts
+# 6. Working directory isolation and file management
+# 7. Concurrent execution and file system state handling
+#
+# Test Structure:
+# - Tests local execution with custom working directory
+# - Tests remote execution with file synchronization
+# - Tests remote copy-back functionality
+# - Tests embedded filesystem actions in remote contexts
+# - Tests file system state management during concurrent operations
+# - Validates proper cleanup and isolation between execution modes
+# =============================================================================
+
+# Setup test environment with custom working directory
+mkdir remote-wd-1 remote-wd-2 remote-wd-3
+cp dummydata/host.txt remote-wd-1/host.txt
+cp dummydata/host.txt remote-wd-2/host.txt
+cp dummydata/host.txt remote-wd-3/host.txt
+
+# Ensure docker can modify files in the TMP directory on Windows.
+[windows] exec icacls $WORK /grant Everyone:M /T
+
+# Test 1: Local Execution with Custom Working Directory
+# -----------------------------------------------------------------------------
+# Execute action in background for concurrent file operations testing
+env CUSTOM_WD=remote-wd-1
+exec launchr test-remote &
+
+# Allow container to start and read initial file
+sleep 2s
+
+# Add second file while container is running (tests file system sync)
+cp dummydata/host2.txt $CUSTOM_WD/host2.txt
+
+# Wait for background execution to complete
+wait
+
+# Validate container read initial host file
+stdout '^hello from host$'
+
+# Validate container read second host file (added during execution)
+stdout '^hello from 2nd host$'
+
+# Validate container wrote output file to host working directory
+exists $CUSTOM_WD/container.txt
+
+# Validate container removed the second host file during execution
+! exists $CUSTOM_WD/host2.txt
+
+# Validate container output file contents
+grep '^hello from container$' $CUSTOM_WD/container.txt
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 2: Remote Runtime Execution with File Synchronization
+# -----------------------------------------------------------------------------
+# Execute action in remote runtime mode (files synchronized to remote)
+env CUSTOM_WD=remote-wd-2
+exec launchr test-remote --remote-runtime &
+
+# Allow remote container to start and synchronize files
+sleep 2s
+
+# Add second file to host working directory during remote execution
+cp dummydata/host2.txt $CUSTOM_WD/host2.txt
+
+# Wait for remote execution to complete
+wait
+
+# Validate remote runtime execution indicator
+stdout 'Running in the remote environment'
+
+# Validate remote container read initial synchronized file
+stdout '^hello from host$'
+
+# Validate remote container did NOT see file added during execution
+# (Remote environment doesn't sync files added after initial sync)
+stdout 'no file host2.txt'
+
+# Validate host file added during execution still exists
+# (Remote execution doesn't affect host file system)
+exists $CUSTOM_WD/host2.txt
+
+# Validate container output file was NOT copied back to host
+# (Default remote behavior doesn't copy back unless specified)
+! exists $CUSTOM_WD/container.txt
+
+# Validate clean execution
+! stderr .
+
+# Test 3: Remote Runtime with Copy-Back Functionality
+# -----------------------------------------------------------------------------
+# Execute action in remote runtime mode with copy-back enabled
+env CUSTOM_WD=remote-wd-3
+exec launchr test-remote --remote-runtime --remote-copy-back &
+
+# Allow remote container to start and synchronize files
+sleep 2s
+
+# Add second file to host working directory during remote execution
+cp dummydata/host2.txt $CUSTOM_WD/host2.txt
+
+# Wait for remote execution to complete
+wait
+
+# Validate remote runtime execution indicator
+stdout 'Running in the remote environment'
+
+# Validate copy-back flag was recognized and processed
+stdout '"--remote-copy-back" is set'
+
+# Validate remote container read initial synchronized file
+stdout '^hello from host$'
+
+# Validate remote container did NOT see file added during execution
+stdout 'no file host2.txt'
+
+# TODO: Fix this case - copy back should delete the file inside the container
+#   and synchronize back to host, removing files that were deleted remotely
+#   Currently this test is commented out due to known limitation.
+#! exists $CUSTOM_WD/host2.txt
+
+# Validate container output file was copied back to host
+exists $CUSTOM_WD/container.txt
+
+# Validate copied-back file contents
+grep '^hello from container$' $CUSTOM_WD/container.txt
+
+# Validate clean execution
+! stderr .
+
+# Test 4: Embedded Filesystem Action in Local Mode
+# -----------------------------------------------------------------------------
+# Execute embedded filesystem action in local mode
+exec launchr test-embed-fs:container
+
+# Validate embedded action can list its own files
+stdout '^action ls: action\.yaml container\.txt main\.sh$'
+
+# Validate embedded action can see host file system
+stdout '^host ls: actions container\.txt dummydata remote-wd-1 remote-wd-2 remote-wd-3$'
+
+# Validate embedded action can write to host file system
+grep '^hello host from container$' ./container.txt
+
+# Validate clean execution
+! stderr .
+
+# Cleanup generated file
+rm ./container.txt
+
+# Test 5: Embedded Filesystem Action in Remote Mode
+# -----------------------------------------------------------------------------
+# Execute embedded filesystem action in remote runtime mode
+exec launchr test-embed-fs:container --remote-runtime
+
+# Validate embedded action can list its own files in remote environment
+stdout '^action ls: action\.yaml container\.txt main\.sh$'
+
+# Validate embedded action can see host file system in remote environment
+stdout '^host ls: actions container\.txt dummydata remote-wd-1 remote-wd-2 remote-wd-3$'
+
+# Validate embedded action output file was NOT copied back to host
+# (Remote execution without copy-back doesn't affect host file system)
+! exists ./container.txt
+
+# Validate clean execution
+! stderr .
+
+# =============================================================================
+# Test Data Files - Action Configurations and Scripts
+# =============================================================================
+
+# Remote Runtime Test Action
+-- actions/test-remote/action.yaml --
+# Container action demonstrating remote runtime and custom working directory
+working_directory: ${CUSTOM_WD}          # Custom working directory for action
+action:
+  title: remote                          # Human-readable action name
+  description: Test --remote-runtime     # Action description
+
+runtime:
+  type: container                        # Container execution type
+  image: alpine:latest                   # Base container image
+  command:
+    - sh                                 # Shell interpreter
+    - /action/main.sh                    # Execute main script
+
+# Remote Runtime Test Script
+-- actions/test-remote/main.sh --
+#!/bin/sh
+# Script demonstrating file operations in remote runtime environment
+ls -al
+
+# Read and display initial host file
+cat ./host.txt
+
+# Wait briefly to allow concurrent file operations testing
+echo "wait host" && sleep 2s
+
+# Attempt to read second host file (may not exist in remote environment)
+cat ./host2.txt 2>/dev/null || echo "no file host2.txt"
+
+# Remove second host file if it exists (test file manipulation)
+rm -f ./host2.txt 2>/dev/null || echo "failed to delete host2.txt"
+
+# Create output file to test copy-back functionality
+echo "hello from container" > ./container.txt || echo "failed to write container.txt"
+
+# Test Data Files
+# -----------------------------------------------------------------------------
+
+# Initial Host File
+-- ./dummydata/host.txt --
+hello from host
+
+# Second Host File (Added During Execution)
+-- ./dummydata/host2.txt --
+hello from 2nd host
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Working Directory Configuration:
+# - Actions can specify custom working directories
+# - Working directory is created if it doesn't exist
+# - All file operations are relative to the working directory
+# - Working directory isolation prevents conflicts between actions
+#
+# Local Execution Mode (Default):
+# - Actions execute in local container runtime
+# - Working directory is mounted directly into container
+# - File changes are immediately visible to both host and container
+# - Files added/removed during execution are synchronized in real-time
+# - Container output files are written directly to host file system
+#
+# Remote Runtime Mode (--remote-runtime):
+# - Actions execute in remote container environment
+# - Working directory is synchronized to remote environment at start
+# - Files added to host during execution are NOT visible to remote container
+# - Remote file changes do NOT affect host file system by default
+# - Provides isolation between host and remote execution environments
+#
+# Remote Copy-Back Mode (--remote-copy-back):
+# - Enables copying files from remote environment back to host
+# - Files created/modified in remote environment are synchronized back
+# - Files deleted in remote environment should be removed from host (TODO)
+# - Bidirectional synchronization at action completion
+#
+# Embedded Filesystem Actions:
+# - Actions can be embedded in the launchr binary
+# - Work with both local and remote execution modes
+# - Can access and modify host file system when permitted
+# - Provide consistent behavior across execution environments
+#
+# File Synchronization Behavior:
+# - Initial synchronization occurs before action execution
+# - Real-time synchronization in local mode
+# - Batch synchronization in remote mode
+# - Copy-back synchronization after remote execution
+# - Proper handling of file creation, modification, and deletion
+#
+# Concurrent Execution Support:
+# - Actions can run concurrently with background execution
+# - File system operations are properly isolated
+# - No conflicts between concurrent action executions
+# - Proper cleanup and resource management
+#
+# =============================================================================

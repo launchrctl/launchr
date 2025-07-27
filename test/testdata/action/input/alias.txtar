@@ -1,0 +1,139 @@
+# =============================================================================
+# Launchr Action Alias Functionality Test Suite
+# =============================================================================
+#
+# This test file validates the Launchr tool's ability to:
+# 1. Execute actions using their full namespaced names
+# 2. Execute actions using defined aliases
+# 3. Handle multiple aliases for a single action
+# 4. Reject undefined aliases with appropriate error messages
+# 5. Pass arguments correctly through alias execution
+#
+# Test Focus:
+# - Action alias definition and resolution
+# - Argument passing through aliases
+# - Error handling for undefined aliases
+# - Full name vs. alias execution equivalence
+# =============================================================================
+
+# Test 1: Full Action Name Execution
+# -----------------------------------------------------------------------------
+# Execute action using its complete namespaced name
+# This serves as the baseline for alias functionality comparison
+exec launchr test-print-input:full-name 73
+
+# Validate successful execution with correct argument processing:
+# Should output the integer argument with type information
+stdout '^argInteger: 73 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 2: First Alias Execution
+# -----------------------------------------------------------------------------
+# Execute action using its first defined alias
+# Should produce identical output to full name execution
+exec launchr alias1 73
+
+# Validate alias execution produces same output as full name:
+# Confirms alias correctly resolves to the target action
+stdout '^argInteger: 73 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 3: Second Alias Execution
+# -----------------------------------------------------------------------------
+# Execute action using its second defined alias
+# Should produce identical output to full name execution
+exec launchr alias2 73
+
+# Validate second alias execution produces same output:
+# Confirms multiple aliases can be defined for one action
+stdout '^argInteger: 73 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 4: Undefined Alias Execution
+# -----------------------------------------------------------------------------
+# Attempt to execute using an undefined alias
+# Should fail with usage message rather than executing action
+exec launchr alias3 73
+
+# Validate undefined alias shows usage information:
+# Should display help/usage instead of executing action
+stdout 'Usage:'
+
+# Validate undefined alias does NOT execute the action:
+# Should not produce the normal action output
+! stdout '^argInteger: 73 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Test Data Files - Action Configuration with Aliases
+# =============================================================================
+
+# Action with Multiple Aliases
+-- test-print-input/actions/full-name/action.yaml --
+# Plugin action demonstrating alias functionality
+# This action can be executed using its full name or defined aliases
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Action alias       # Human-readable action name
+
+  # Alias Configuration:
+  # Defines alternative names for executing this action
+  alias:
+    - alias1                               # First alias: short name
+    - alias2                               # Second alias: alternative short name
+    # Note: alias3 is intentionally NOT defined to test error handling
+
+  # Action Arguments:
+  # Required integer argument for testing parameter passing
+  arguments:
+    - name: argInteger                     # Argument identifier
+      title: Argument Integer              # Human-readable argument name
+      description: This is a required integer argument    # Help text
+      type: integer                        # Expected type: integer
+      required: true                       # Must be provided by user
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Alias Resolution Rules:
+# 1. Actions can define multiple aliases for easier invocation
+# 2. Aliases provide shorthand alternatives to full namespaced names
+# 3. All defined aliases should execute the target action identically
+# 4. Undefined aliases should show usage information, not execute
+# 5. Arguments are passed through aliases without modification
+#
+# Execution Equivalence:
+# - Full name execution: "test-print-input:full-name 73"
+# - Alias execution: "alias1 73" or "alias2 73"
+# - Both should produce identical output and behavior
+# - All argument processing should work the same way
+#
+# Error Handling:
+# - Undefined aliases (alias3) should not execute the action
+# - Should display usage/help information instead
+# - Should not produce normal action output
+# - Should not generate error messages to stderr
+#
+# Alias Configuration:
+# - Aliases are defined as a YAML array under 'alias' key
+# - Each alias is a simple string identifier
+# - Aliases should be unique across the system
+# - Aliases provide convenient shortcuts for frequently used actions
+#
+# Argument Passing:
+# - All arguments work identically through aliases
+# - Required arguments must still be provided
+# - Type validation applies equally to alias and full name execution
+# - Argument processing is transparent to the execution method
+#
+# =============================================================================

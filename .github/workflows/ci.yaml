@@ -1,0 +1,24 @@
+name: 🧪 Code Coverage & Testing
+
+on:
+  push:
+    branches:
+      - '**'
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'example/**'
+      - 'docs/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: 🛡️ Multi-Platform Testing Suite
+    uses: ./.github/workflows/test-suite.yaml
+    with:
+      use-docker-sidecar: true        # 🐳 Enable full testing environment
+      use-sidecar-remote-share: true  # 📁 Enable remote file sharing for testing

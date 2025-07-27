@@ -8,8 +8,8 @@ runtime:
   build:
     context: ./
     args:
-      USER_ID: {{ .current_uid }}
-      GROUP_ID: {{ .current_gid }}
+      USER_ID: $UID
+      GROUP_ID: $GID
       USER_NAME: username
   command:
     - sh

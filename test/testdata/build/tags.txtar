@@ -1,0 +1,88 @@
+# =============================================================================
+# Launchr Build Tags and Plugin Compilation Test Suite
+# =============================================================================
+#
+# This comprehensive test file validates the Launchr tool's ability to:
+# 1. Apply custom build tags during binary compilation
+# 2. Generate plugin actions that respect build tag configurations
+# 3. Integrate local plugins with custom tag-aware builds
+#
+# Test Structure:
+# - Tests custom build tag application during compilation
+# - Tests plugin integration with tag-aware building
+# - Tests generate functionality with tag-specific behavior
+# - Validates tag propagation through the entire build pipeline
+# =============================================================================
+
+# Setup Phase: Environment Configuration
+# -----------------------------------------------------------------------------
+# Configure build environment with real home for caching optimization
+# Reuse actual home directory to enable build caching and dependency resolution
+env HOME=$REAL_HOME
+
+# Define application name for build target
+# This specifies the binary name that will be created during the build process
+env APP_NAME=launchr
+
+# Plugin Configuration
+# -----------------------------------------------------------------------------
+# Configure local plugin with version and replacement path
+# This tests local plugin integration with custom build tag functionality
+env APP_PLUGIN_LOCAL=example.com/genaction@v1.1.1
+env APP_PLUGIN_LOCAL_PATH=$REPO_PATH/test/plugins/genaction
+
+# Test 1: Custom Build Tag Application and Plugin Integration
+# -----------------------------------------------------------------------------
+# Execute build with custom tag and local plugin integration
+# The --tag flag should propagate to plugin compilation and affect behavior
+exec launchr build --tag customtag -r $CORE_PKG=$REPO_PATH -p $APP_PLUGIN_LOCAL -r $APP_PLUGIN_LOCAL=$APP_PLUGIN_LOCAL_PATH
+
+# Validate clean build execution (no error output)
+! stderr .
+
+# Verify target binary was successfully created
+exists ./launchr
+
+# Test 2: Tag-Aware Generated Action Functionality
+# -----------------------------------------------------------------------------
+# Execute the generated action from the tag-aware plugin
+# This tests that build tags properly influence plugin action behavior
+exec ./launchr genaction:example
+
+# Validate the action produces tag-specific output
+# The custom tag should modify the action's output to include tag information
+stdout '^hello world built with custom tag$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Build Tag Behavior:
+# 1. Custom tags are applied during binary compilation
+# 2. Build tags propagate to plugin compilation process
+# 3. Plugin code can conditionally respond to build tags
+# 4. Tag-specific behavior is preserved in generated actions
+# 5. Clean build process with tag integration
+#
+# Plugin Integration with Tags:
+# - Local plugins respect build tag configurations
+# - Plugin compilation includes tag-specific conditional code
+# - Generated actions reflect tag-aware behavior
+# - Tag information is properly passed through build pipeline
+#
+# Action Output Validation:
+# - Tag-specific output confirms proper tag propagation
+# - Expected format: base output + tag-specific modification
+# - Clean execution without errors or warnings
+# - Deterministic behavior based on tag configuration
+#
+# Build Process:
+# - Validates tag compatibility with plugin system
+# - Handles tag propagation to all compilation units
+# - Maintains proper dependency resolution with tags
+# - Creates fully functional binary with tag-aware actions
+#
+# =============================================================================

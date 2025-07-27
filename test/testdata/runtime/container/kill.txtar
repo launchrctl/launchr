@@ -1,0 +1,151 @@
+# =============================================================================
+# Launchr Signal Forwarding and Process Management Test Suite
+# =============================================================================
+#
+# This comprehensive test file validates the Launchr tool's ability to:
+# 1. Execute long-running containerized actions in background mode
+# 2. Forward system signals (SIGINT) to running container processes
+# 3. Handle graceful process termination and cleanup
+# 4. Capture and report custom exit codes from signal handlers
+# 5. Manage background process lifecycle and synchronization
+#
+# Test Structure:
+# - Tests background execution of long-running container actions
+# - Tests signal forwarding from host to container process
+# - Tests custom signal handling and exit code reporting
+# - Validates proper process cleanup and output handling
+# - Ensures cross-platform compatibility (Unix-like systems only)
+# =============================================================================
+
+# Platform Compatibility Check
+# -----------------------------------------------------------------------------
+# Signal forwarding and process management testing is not supported on Windows
+# Skip this entire test suite when running on Windows systems
+[windows] skip 'testing kill is not supported on windows'
+
+# Make sure alpine image is available during tests, it's crucial for timings.
+exec docker pull alpine:latest
+
+# Test: Signal Forwarding and Process Management
+# -----------------------------------------------------------------------------
+# This test validates the complete signal forwarding pipeline:
+# 1. Background execution of containerized action
+# 2. Signal transmission from host to container
+# 3. Custom signal handling within container
+# 4. Proper exit code propagation and reporting
+
+# Execute long-running action and test signal forwarding
+# Start the test-signal action in background mode (&appint& syntax)
+# This allows the test to continue while the action runs asynchronously
+! exec launchr test-signal &appint&
+
+# Allow container process to start and begin waiting
+# Give the container sufficient time to:
+# - Initialize the runtime environment
+# - Execute the signal handling script
+# - Set up signal traps and enter waiting state
+sleep 5s
+
+# Send interrupt signal to test signal forwarding
+# Transmit SIGINT (interrupt signal) to the background process
+# This tests the signal forwarding mechanism between host and container
+kill -INT appint
+
+# Wait for process to complete and validate exit behavior
+# Synchronize with the background process to ensure completion
+# This blocks until the signal handler finishes execution
+wait appint
+
+# Output Validation: Signal Reception and Handling
+# -----------------------------------------------------------------------------
+# Validate signal reception and handling within container
+# Expected output: "Received signal: SIGINT" from the signal trap
+stdout '^Waiting for signals...$'
+stdout '^Received signal: SIGINT$'
+
+# Validate proper exit code handling (custom exit code 42)
+# Expected output: completion message with exit code 42
+# This confirms that custom exit codes are properly propagated
+stdout 'action "test-signal" finished with exit code 42'
+
+# Validate clean execution (no stderr output)
+# Ensure no error output is generated during signal handling
+# This confirms proper error handling and clean process termination
+! stderr .
+
+# =============================================================================
+# Test Data Files - Action Configurations and Scripts
+# =============================================================================
+
+# Signal Forwarding Test Action Configuration
+# -----------------------------------------------------------------------------
+# This file defines the containerized action for signal forwarding testing
+# Uses Alpine Linux container with custom signal handling script
+-- actions/test-signal/action.yaml  --
+# Container action for testing signal forwarding and process management
+action:
+  title: test signal forwarding          # Human-readable action name
+  description: Test signal forwarding    # Action description
+
+runtime:
+  type: container                         # Container execution type
+  image: alpine:latest                    # Base container image (Alpine Linux)
+  command:
+    - sh                                  # Shell interpreter
+    - /action/main.sh                     # Execute signal handling script
+
+# Signal Handling Script Implementation
+# -----------------------------------------------------------------------------
+# This shell script demonstrates proper signal handling within containers
+# Implements custom signal traps and exit code management
+-- actions/test-signal/main.sh --
+#!/bin/sh
+
+trap 'echo "Received signal: SIGINT"; exit 42' INT
+echo "Waiting for signals..."
+
+sleep 10
+exit 45
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Signal Forwarding Rules:
+# 1. Background processes must be properly managed and trackable
+# 2. System signals must be forwarded from host to container
+# 3. Container signal handlers must execute correctly
+# 4. Custom exit codes must be preserved and reported
+# 5. Process cleanup must occur without resource leaks
+#
+# Background Process Management:
+# - Process identifier: &appint& syntax for background execution
+# - Signal targeting: kill -INT appint for signal delivery
+# - Process synchronization: wait appint for completion blocking
+# - Exit code propagation: Custom codes preserved through container boundary
+#
+# Signal Handling Workflow:
+# 1. Container starts and sets up signal traps
+# 2. Container enters waiting state (sleep 10)
+# 3. Host sends SIGINT to container process
+# 4. Container trap handler executes custom logic
+# 5. Container exits with custom code (42)
+# 6. Host reports completion with exit code
+#
+# Output Validation:
+# - Signal reception: "Received signal: SIGINT" message
+# - Exit code reporting: "action finished with exit code 42" message  
+# - Clean execution: No stderr output from launchr or container
+#
+# Platform Support:
+# - Full support on Unix-like systems (Linux, macOS)
+# - Not supported on Windows platforms (signal handling differences)
+# - Graceful skip behavior for unsupported platforms
+#
+# Container Runtime:
+# - Uses Alpine Linux base image for minimal overhead
+# - Executes custom shell scripts via /bin/sh
+# - Proper signal forwarding through container runtime
+# - Isolated execution environment with host signal integration
+#
+# =============================================================================

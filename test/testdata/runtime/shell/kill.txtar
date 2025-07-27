@@ -1,0 +1,125 @@
+# =============================================================================
+# Launchr Signal Handling and Process Kill Functionality Test
+# =============================================================================
+#
+# This test validates the Launchr tool's ability to:
+# 1. Execute long-running shell actions in the background
+# 2. Handle SIGTERM signal forwarding to child processes
+# 3. Properly terminate background processes with custom exit codes
+#
+# Test Focus:
+# - Signal handling in shell runtime actions
+# - Background process execution and termination
+# - Custom signal trap configuration
+# - Process lifecycle management
+# - Exit code validation after signal termination
+# =============================================================================
+
+# Platform Compatibility Check
+# -----------------------------------------------------------------------------
+# Skip this test on Windows as signal handling is not supported by testscript.
+[windows] skip 'testing kill is not supported on windows'
+
+# Execute signal-handling action in background with verbose logging
+# The action sets up signal traps and waits for termination signals
+! exec launchr test-signal &appint&
+
+# Allow time for process startup and signal trap configuration
+# Ensures the action is running and ready to receive signals
+sleep 1
+
+# Send SIGTERM signal to the background process
+# Note: testscript normally doesn't support TERM signal, but we override
+# this functionality in custom code (see [test.CmdKill])
+# We use TERM instead of INT because `go test` blocks SIGINT in subprocesses
+# TERM is not ignored so we can test signal handling properly
+kill -TERM appint
+
+# Wait for the background process to complete after signal
+# Should exit with custom code (42) rather than normal completion
+wait appint
+
+# Validate that signal trap was properly configured and executed
+# Should show startup message indicating the process began waiting
+stdout 'Waiting for signals...'
+
+# Validate that SIGTERM was received and handled by the trap
+# Should show signal reception message from the trap handler
+stdout 'Received signal: SIGTERM'
+
+# Validate that process exited with expected custom code
+# Should show exit code 42 from signal handler, not 45 from normal completion
+stdout 'finished with exit code 42'
+
+# =============================================================================
+# Test Data Files - Signal Handling Action Configuration
+# =============================================================================
+
+# Shell Action with Signal Handling
+-- actions/test-signal/action.yaml  --
+# Action demonstrating signal handling and trap configuration
+# Tests the ability to receive and respond to termination signals
+action:
+  title: test signal forwarding          # Human-readable action name
+  description: Test signal forwarding    # Action description
+
+# Shell Runtime Configuration:
+# Executes shell script with signal handling capabilities
+runtime:
+  type: shell                            # Shell execution type
+  script: |                              # Inline shell script
+    # Signal Handler Configuration:
+    # Define custom handler for SIGTERM signal
+    handle_interrupt() {
+        echo "Received signal: SIGTERM"   # Log signal reception
+        exit 42                           # Exit with custom code
+    }
+
+    # Trap Registration:
+    # Register signal handler for TERM signal
+    trap handle_interrupt TERM
+    echo "Trap set: $(trap -p TERM)"     # Confirm trap configuration
+
+    # Main Process Loop:
+    # Wait for signals while performing background work
+    echo "Waiting for signals..."
+    for i in {1..5}; do
+        sleep 1                           # Sleep allows signal interruption
+    done
+
+    # Normal Completion Path:
+    # This should NOT be reached in successful signal test
+    echo "No signal received, exiting normally"
+    exit 45                               # Different exit code for normal completion
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Signal Handling Rules:
+# 1. Shell actions can define custom signal handlers using trap
+# 2. SIGTERM signals should be properly forwarded to child processes
+# 3. Signal handlers should execute and override normal completion
+# 4. Custom exit codes should be preserved through signal handling
+# 5. Background processes should respond to kill commands appropriately
+#
+# Process Lifecycle:
+# - Action starts in background (&appint& syntax)
+# - Process sets up signal traps and begins waiting
+# - External kill command sends SIGTERM to process
+# - Signal handler executes and terminates with custom code
+# - Test validates proper signal reception and handling
+#
+# Exit Code Validation:
+# - Normal completion would exit with code 45
+# - Signal handler completion exits with code 42
+# - Test verifies signal handling by checking exit code 42
+# - This confirms signal was received and handled properly
+#
+# Output Verification:
+# - "Waiting for signals..." confirms process startup
+# - "Received signal: SIGTERM" confirms signal reception
+# - "finished with exit code 42" confirms proper termination
+# - Normal completion message should NOT appear
+#
+# =============================================================================

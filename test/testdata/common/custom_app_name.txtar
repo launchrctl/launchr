@@ -1,0 +1,111 @@
+# =============================================================================
+# Test Suite: Custom App Name Configuration (testapp)
+# =============================================================================
+#
+# This test validates that the custom app name 'testapp' correctly transforms
+# environment variable names from the default LAUNCHR_* prefix to TESTAPP_*
+# prefix while maintaining all functionality.
+#
+# Environment Variables Tested:
+#   - TESTAPP_LOG_LEVEL: Controls log level (should work like LAUNCHR_LOG_LEVEL)
+#   - TESTAPP_LOG_FORMAT: Controls log format (should work like LAUNCHR_LOG_FORMAT)
+#   - TESTAPP_QUIET_MODE: Enables quiet mode (should work like LAUNCHR_QUIET_MODE)
+#   - TESTAPP_ACTIONS_PATH: Custom action path (should work like LAUNCHR_ACTIONS_PATH)
+#
+# =============================================================================
+
+# =============================================================================
+# Section 1: Test custom log format environment variable (TESTAPP_LOG_FORMAT)
+# =============================================================================
+
+# Test JSON format with custom app name
+env TESTAPP_LOG_FORMAT=json
+exec testapp --log-level=INFO testplugin:log-levels
+stdout '^\{.*"level":"INFO".*\}$'
+stdout '^\{.*"level":"WARN".*\}$'
+stdout '^\{.*"level":"ERROR".*\}$'
+! stderr .
+
+# =============================================================================
+# Section 2: Test custom log level environment variable (TESTAPP_LOG_LEVEL)
+# =============================================================================
+
+env TESTAPP_LOG_FORMAT=json
+
+# Test DEBUG level with custom app name
+env TESTAPP_LOG_LEVEL=DEBUG
+exec testapp testplugin:log-levels
+stdout '^\{.*"level":"DEBUG".*\}$'
+stdout '^\{.*"level":"INFO".*\}$'
+stdout '^\{.*"level":"WARN".*\}$'
+stdout '^\{.*"level":"ERROR".*\}$'
+! stderr .
+
+# =============================================================================
+# Section 3: Test custom quiet mode environment variable (TESTAPP_QUIET_MODE)
+# =============================================================================
+
+# Test quiet mode with custom app name - should suppress all output
+env TESTAPP_QUIET_MODE=1
+env TESTAPP_LOG_LEVEL=DEBUG
+exec testapp testplugin:log-levels
+! stdout .
+! stderr .
+
+# Test that TESTAPP_QUIET_MODE=0 allows output
+env TESTAPP_QUIET_MODE=0
+env TESTAPP_LOG_LEVEL=ERROR
+exec testapp testplugin:log-levels
+stdout '^\{.*"level":"ERROR".*\}$'
+! stderr .
+
+# =============================================================================
+# Section 4: Test custom actions path environment variable (TESTAPP_ACTIONS_PATH)
+# =============================================================================
+
+# Test that TESTAPP_ACTIONS_PATH correctly overrides action discovery path
+env TESTAPP_ACTIONS_PATH=./foo
+exec testapp --help
+stdout '^\s+bar\.baz\.bar-bar:waldo-fred-thud\s+foo$'
+! stderr .
+
+# Reset environment
+env TESTAPP_ACTIONS_PATH=
+exec testapp --help
+stdout '^\s+foo\.baz\.bar-bar:waldo-fred-thud\s+foo$'
+! stderr .
+
+# =============================================================================
+# Section 5: Verify that default LAUNCHR_* variables don't affect testapp
+# =============================================================================
+
+# Set LAUNCHR_* variables and verify they don't affect testapp behavior
+env LAUNCHR_LOG_FORMAT=json
+env LAUNCHR_LOG_LEVEL=DEBUG
+env LAUNCHR_QUIET_MODE=1
+
+# testapp should use its own defaults and ignore LAUNCHR_* variables
+# Based on the output, testapp defaults to JSON format
+exec testapp --log-level=INFO testplugin:log-levels
+# Should produce JSON output (testapp's default) and not be quiet
+stdout '^\{.*"level":"INFO".*\}$'
+stdout '^\{.*"level":"WARN".*\}$'
+stdout '^\{.*"level":"ERROR".*\}$'
+! stderr .
+
+# =============================================================================
+# Test Data Files (reuse from existing tests)
+# =============================================================================
+
+-- foo/bar/baz/bar/bar_bar/actions/waldo-fred_thud/action.yaml --
+action:
+  title: foo
+runtime: plugin
+
+-- .testapp/config.yaml --
+launchrctl:
+  actions_naming:
+    - search: ".bar."
+      replace: "."
+    - search: "_"
+      replace: "-"

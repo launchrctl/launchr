@@ -1,0 +1,213 @@
+# =============================================================================
+# Launchr Container Runtime Features Test Suite
+# =============================================================================
+#
+# This comprehensive test file validates the Launchr tool's container runtime
+# features and execution capabilities:
+# 1. Environment variable handling (static and dynamic from host)
+# 2. Extra hosts configuration for container networking
+# 3. Output stream handling (stdout/stderr separation)
+# 4. Command execution override functionality
+# 5. Entrypoint override capabilities
+# 6. Container process lifecycle management
+#
+# Test Structure:
+# - Tests environment variable injection and templating
+# - Tests custom host entries in container /etc/hosts
+# - Tests proper output stream routing
+# - Tests command and entrypoint override mechanisms
+# - Validates container runtime integration features
+# =============================================================================
+
+# Setup Phase: Host Environment Variables
+# -----------------------------------------------------------------------------
+# Set host environment variables for dynamic injection testing
+env HOST_ENV_1=bar                       # Host variable for template substitution
+env HOST_ENV_2=buz                       # Host variable (not used in action)
+
+# Test 1: Environment Variable Injection and Templating
+# -----------------------------------------------------------------------------
+# Execute action that tests both static and dynamic environment variables
+exec launchr test-env-vars
+
+# Validate static environment variable injection
+# ACTION_ENV1 should be set to static value "foo"
+# ACTION_ENV2 should be dynamically set from HOST_ENV_1 value "bar"
+stdout '^ACTION_ENV1=foo ACTION_ENV2=bar$'
+
+# Validate host environment variable isolation
+# Host variables should NOT be available inside container by default
+stdout '^HOST_ENV_1= HOST_ENV_2=$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 2: Extra Hosts Configuration
+# -----------------------------------------------------------------------------
+# Execute action that tests custom /etc/hosts entries in container
+exec launchr test-extra-hosts
+
+# Validate host-gateway mapping (Docker internal host resolution)
+stdout '^[0-9.]+\s+host\.docker\.internal$'
+
+# Validate custom host mapping (static IP assignment)
+stdout '^127\.1\.2\.3\s+example\.com$'
+
+# Validate clean execution
+! stderr .
+
+# Test 3: Output Stream Handling
+# -----------------------------------------------------------------------------
+# Execute action that writes to both stdout and stderr streams
+exec launchr test-output
+
+# Validate stdout output routing
+stdout '^output to stdout$'
+
+# Validate stderr output routing
+stderr '^output to stderr$'
+
+# Test 4: Default Command Execution
+# -----------------------------------------------------------------------------
+# Execute action with default command configuration
+exec launchr test-exec
+
+# Validate default action command execution
+stdout '^action command$'
+
+# Validate clean execution
+! stderr .
+
+# Test 5: Command Override with --exec Flag
+# -----------------------------------------------------------------------------
+# Execute action with command override using --exec flag
+exec launchr test-exec --exec -- echo 'exec command'
+
+# Validate overridden command execution
+stdout '^exec command$'
+
+# Validate original command is NOT executed
+! stdout '^action command$'
+
+# Validate clean execution
+! stderr .
+
+# Test 6: Entrypoint Override with --exec and --entrypoint
+# -----------------------------------------------------------------------------
+# Execute action with both entrypoint and command override
+exec launchr test-exec --exec --entrypoint 'echo' -- 'entrypoint command'
+
+# Validate entrypoint override execution
+stdout '^entrypoint command$'
+
+# Validate original command is NOT executed
+! stdout '^action command$'
+
+# Validate clean execution
+! stderr .
+
+# =============================================================================
+# Test Data Files - Action Configurations and Scripts
+# =============================================================================
+
+# Environment Variables Test Action
+-- actions/test-env-vars/action.yaml  --
+# Container action demonstrating environment variable injection
+action:
+  title: envvars                          # Human-readable action name
+  description: Test passing static or dynamic environment variables to container
+
+runtime:
+  type: container                         # Container execution type
+  image: alpine:latest                    # Base container image
+  env:
+    ACTION_ENV1: foo                      # Static environment variable
+    ACTION_ENV2: ${HOST_ENV_1}            # Dynamic variable from host environment
+  command:
+    - sh                                  # Shell interpreter
+    - -c                                  # Execute command string
+    - |                                   # Multi-line command block
+      echo "ACTION_ENV1=$${ACTION_ENV1} ACTION_ENV2=$${ACTION_ENV2}"
+      echo "HOST_ENV_1=$${HOST_ENV_1} HOST_ENV_2=$${HOST_ENV_2}"
+
+# Extra Hosts Test Action
+-- actions/test-extra-hosts/action.yaml --
+# Container action demonstrating custom /etc/hosts entries
+action:
+  title: extrahosts                       # Human-readable action name
+  description: Test passing additional entries to container''s /etc/hosts
+
+runtime:
+  type: container                         # Container execution type
+  image: alpine:latest                    # Base container image
+  extra_hosts:
+    - "host.docker.internal:host-gateway" # Docker internal host resolution
+    - "example.com:127.1.2.3"            # Custom host to IP mapping
+  command:
+    - cat                                 # Display file contents
+    - /etc/hosts                          # Container hosts file
+
+# Command Execution Test Action
+-- actions/test-exec/action.yaml  --
+# Container action for testing command execution and override
+action:
+  title: test exec override               # Human-readable action name
+
+runtime:
+  type: container                         # Container execution type
+  image: alpine:latest                    # Base container image
+  command:
+    - echo                                # Echo command
+    - "action command"                    # Default command output
+
+# Output Stream Test Action
+-- actions/test-output/action.yaml  --
+# Container action for testing stdout/stderr output routing
+action:
+  title: test exec override               # Human-readable action name
+
+runtime:
+  type: container                         # Container execution type
+  image: alpine:latest                    # Base container image
+  command:
+    - sh                                  # Shell interpreter
+    - -c                                  # Execute command string
+    - |                                   # Multi-line command block
+      echo "output to stdout"             # Write to standard output
+      echo "output to stderr" >&2         # Write to standard error
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Environment Variable Handling:
+# - Static variables are injected directly into container environment
+# - Dynamic variables use ${VAR} syntax for host environment substitution
+# - Host environment variables are isolated from container by default
+# - Template substitution occurs before container execution
+#
+# Extra Hosts Configuration:
+# - Custom entries are added to container's /etc/hosts file
+# - host-gateway resolves to Docker host IP address
+# - Static IP mappings allow custom hostname resolution
+# - Multiple host entries can be configured per action
+#
+# Output Stream Management:
+# - Container stdout is routed to launchr stdout
+# - Container stderr is routed to launchr stderr
+# - Output streams are properly separated and preserved
+# - No output mixing or corruption occurs
+#
+# Command Override Features:
+# - --exec flag allows runtime command replacement
+# - --entrypoint flag allows entrypoint override
+# - Original action commands are bypassed when overridden
+# - Override commands receive proper argument passing
+#
+# Container Runtime Integration:
+# - All features work with standard container images
+# - No special container modifications required
+# - Proper resource cleanup after execution
+# - Error handling and reporting maintained
+#
+# =============================================================================

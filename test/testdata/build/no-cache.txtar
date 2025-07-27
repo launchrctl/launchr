@@ -1,0 +1,87 @@
+# =============================================================================
+# Launchr Cache Behavior and Go Module Resolution Test Suite
+# =============================================================================
+#
+# This comprehensive test file validates the Launchr tool's ability to:
+# 1. Utilize Go proxy caching for efficient module resolution
+# 2. Handle --no-cache flag for direct source downloading
+# 3. Resolve pseudo-versions with Go module version magic
+# 4. Manage plugin dependencies from submodules correctly
+# 5. Provide appropriate error handling for unsupported scenarios
+#
+# Test Structure:
+# - Tests standard caching behavior with Go proxy resolution
+# - Tests --no-cache flag with pseudo-version specification
+# - Tests --no-cache limitations with submodule dependencies
+# - Validates error messages and build output formatting
+# =============================================================================
+
+# Setup Phase: Environment Configuration
+# -----------------------------------------------------------------------------
+# Configure build environment with real home for caching optimization
+# Reuse actual home directory to enable Go module caching and proxy access
+env HOME=$REAL_HOME
+
+# Define plugin repository for testing module resolution
+# This repository contains submodules that test various resolution scenarios
+env PLUGIN_REPO=golang.org/x/example/hello
+
+# Test 1: Standard Build with Go Proxy Caching
+# -----------------------------------------------------------------------------
+# Execute build with verbose output and plugin dependency
+# This should succeed using Go proxy magic and module caching
+exec launchr build -v -r $CORE_PKG=$REPO_PATH -p ${PLUGIN_REPO}/reverse
+
+# Validate clean execution (no error output)
+# Go proxy should resolve dependencies without errors
+! stderr .
+
+# Test 2: No-Cache Build with Pseudo-Version Resolution
+# -----------------------------------------------------------------------------
+# Execute build with --no-cache flag and master branch pseudo-version
+# This tests direct source downloading with Go module version magic
+exec launchr build --no-cache -v -r $CORE_PKG=$REPO_PATH -p ${PLUGIN_REPO}/reverse@master
+
+# Validate Go module addition with pseudo-version format
+# Expected format: "go: added <repo> v0.0.0-<timestamp>-<commit>"
+stdout '^go: added '${PLUGIN_REPO@R}' v0\.0\.0-\d+-.+$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 3: No-Cache Build Limitation with Submodules
+# -----------------------------------------------------------------------------
+# Attempt build with --no-cache flag without version specification
+# This should fail because submodules cannot be resolved without Go proxy magic
+! exec launchr build -v --no-cache -r $CORE_PKG=$REPO_PATH -p ${PLUGIN_REPO}/reverse
+
+# Validate expected error message for submodule resolution failure
+# Go should report no matching versions for upgrade query on submodules
+stdout '^go: '${PLUGIN_REPO}'/reverse: no matching versions for query "upgrade"$'
+
+# Validate clean error handling (no stderr output)
+! stderr .
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# No-Cache Behavior:
+# 1. --no-cache forces direct source downloading
+# 2. Pseudo-versions (e.g., @master) enable direct resolution
+# 3. Submodules without versions cannot be resolved directly
+# 4. Error messages clearly indicate resolution failures
+#
+# Module Resolution Rules:
+# - With cache: Go proxy resolves all dependencies automatically
+# - Without cache + version: Direct source download succeeds
+# - Without cache + no version: Submodule resolution fails
+# - Pseudo-versions follow format: v0.0.0-<timestamp>-<commit>
+#
+# Error Handling:
+# - Clear error messages for unsupported scenarios
+# - No stderr output for expected failures
+# - Proper exit codes for different failure types
+# - Verbose output shows Go module operations
+#
+# =============================================================================

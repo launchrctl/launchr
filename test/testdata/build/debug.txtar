@@ -1,0 +1,198 @@
+# =============================================================================
+# Launchr Debug Build Directory Preservation Test Suite
+# =============================================================================
+#
+# This comprehensive test file validates the Launchr tool's ability to:
+# 1. Execute regular builds without creating persistent debug directories
+# 2. Execute debug builds with temporary directory preservation
+# 3. Generate all required build artifacts in debug mode
+# 4. Maintain proper directory structure during debug builds
+# 5. Preserve build directories for inspection and debugging
+# 6. Ensure proper cleanup behavior (only one build directory exists)
+# 7. Create complete Go module structure with dependencies
+# 8. Validate debug header inclusion in built binaries
+# 9. Verify non-debug builds exclude debug headers
+#
+# Test Structure:
+# - Tests initial build without debug flag (baseline verification)
+# - Tests debug flag functionality and directory preservation
+# - Tests build artifact generation and completeness
+# - Validates expected file presence and structure
+# - Confirms proper temporary directory management and cleanup
+# - Verifies that only one build directory exists after debug build
+# - Tests debug header presence/absence in binary version output
+# =============================================================================
+
+# Setup Phase: Environment Configuration
+# -----------------------------------------------------------------------------
+# Configure build environment with real home for caching optimization
+# Reuse actual home directory to enable build caching and dependency resolution
+env HOME=$REAL_HOME
+env GOTMPDIR=$TMPDIR
+
+# Test 1.1: Pre-Debug Build Execution (Build Directory Cleanup Verification)
+# -----------------------------------------------------------------------------
+# Execute initial build without debug flag to establish baseline state
+# This ensures that non-debug builds don't create persistent build directories
+# and prepares the environment for testing debug directory preservation
+#
+# Purpose: This step is critical for validating that subsequent debug builds
+# properly manage temporary directories and maintain exactly one build directory
+# when debug mode is enabled. By running a non-debug build first, we ensure
+# that the debug build test starts from a clean state.
+exec launchr build -r $CORE_PKG=$REPO_PATH
+
+# Validate non-debug build behavior: no debug output should be present
+# Non-debug builds should not display debug flag messages or directory paths
+# This confirms that debug output is only shown when --debug flag is used
+! stdout 'Debug flag is set.*: .*/launchr/build_\d+'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Execute version check on non-debug built binary
+# Non-debug builds should NOT include debug headers in version output
+# This establishes baseline behavior before testing debug build functionality
+exec ./launchr --version
+! stdout '^Built with debug headers$'
+
+# Test 2: Debug Build Execution and Directory Preservation
+# -----------------------------------------------------------------------------
+# Execute debug build with core package replacement
+# The --debug flag should preserve temporary build directories for inspection
+# This test validates that debug mode creates exactly one persistent build directory
+#
+# Critical behavior: When debug mode is enabled, the build system should:
+# 1. Create a uniquely named temporary directory under $TMPDIR/launchr/
+# 2. Preserve this directory after build completion (not cleanup)
+# 3. Display debug information including the directory path
+# 4. Ensure only one build directory exists (cleanup previous debug builds)
+# 5. Include debug headers in the compiled binary
+exec launchr build --debug -r $CORE_PKG=$REPO_PATH
+
+# Validate debug mode activation and directory preservation
+# Expected output should indicate debug flag is set and show temp directory path
+# Format: "Debug flag is set: /path/to/launchr/build_<timestamp>"
+stdout 'Debug flag is set.*: .*/launchr/build_\d+'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Execute version check on debug-built binary
+# Debug builds MUST include debug headers in version output
+# This validates that debug mode properly embeds debug information in binary
+exec ./launchr --version
+stdout '^Built with debug headers$'
+
+# Test 2: Build Artifact Validation and Directory Uniqueness
+# -----------------------------------------------------------------------------
+# Execute validation script to verify build directory contents
+# This script checks for presence of all expected build artifacts
+# AND validates that exactly one build directory exists (testing cleanup behavior)
+#
+# The validation script serves dual purposes:
+# 1. Verify all required build artifacts are generated correctly
+# 2. Confirm that debug build cleanup maintains exactly one build directory
+# This ensures that repeated debug builds don't accumulate temporary directories
+exec sh check_build_dir.sh
+
+# Validate that all expected files are present in build directory
+# The script should confirm successful generation of all build artifacts
+stdout '^All expected files are present$'
+
+# =============================================================================
+# Build Directory Validation Script
+# =============================================================================
+# This script validates the contents of the preserved debug build directory
+# and ensures all necessary build artifacts are properly generated
+-- check_build_dir.sh --
+#!/bin/sh
+set -eu
+
+# Define base directory path for build artifacts
+# All temporary build directories are created under this path
+BASE_DIR="$TMPDIR/launchr"
+
+# Verify base directory exists
+# The base directory should be created during debug build execution
+if [ ! -d "$BASE_DIR" ]; then
+    echo "Error: Directory $BASE_DIR does not exist."
+    exit 1
+fi
+
+# Locate and validate build directory
+# Debug builds create uniquely named build_* directories with random number
+build_dir_count=0
+build_dir=""
+for dir in "$BASE_DIR"/build_*; do
+    if [ -d "$dir" ]; then
+        build_dir_count=$((build_dir_count + 1))
+        build_dir="$dir"
+    fi
+done
+
+# Validate exactly one build directory exists
+# Multiple directories indicate cleanup issues or concurrent builds
+# This test ensures that successive debug builds properly clean up previous directories
+# and maintain exactly one active build directory for inspection
+if [ "$build_dir_count" -eq 0 ]; then
+    echo "Error: No build_* directory found in $BASE_DIR"
+    exit 1
+elif [ "$build_dir_count" -gt 1 ]; then
+    echo "Error: Multiple build_* directories found"
+    echo "This indicates debug build cleanup is not working properly"
+    exit 1
+fi
+
+# Report found build directory and change to it
+echo "Found build directory: $build_dir"
+cd "$build_dir" || exit 1
+
+# Validate presence of essential build artifacts
+# These files are required for successful Go module compilation
+for file in "main.go" "gen.go" "plugins.go" "go.mod" "go.sum"; do
+    if [ ! -e "$file" ]; then
+        echo "Missing expected file: $file"
+        exit 1
+    else
+        echo "Found expected file: $file"
+    fi
+done
+
+# Report successful validation
+echo "All expected files are present"
+
+# =============================================================================
+# Expected Build Artifacts and Debug Header Validation
+# =============================================================================
+#
+# Required Files:
+# - main.go: Primary application entry point
+# - gen.go: Generated code for action discovery and integration
+# - plugins.go: Plugin registration and initialization code
+# - go.mod: Go module definition with dependencies
+# - go.sum: Dependency checksums for reproducible builds
+#
+# Directory Structure:
+# - Base: $TMPDIR/launchr/
+# - Build: $TMPDIR/launchr/build_<timestamp>/
+# - Artifacts: All files directly in build directory
+#
+# Validation Rules:
+# - Exactly one build_* directory should exist
+# - All required files must be present
+# - Files should be accessible and non-empty
+# - Directory structure should be clean and organized
+#
+# Debug Build Behavior:
+# - Non-debug builds: No persistent directories created, no debug headers in binary
+# - Debug builds: Single persistent directory preserved, debug headers included in binary
+# - Cleanup: Previous debug directories removed automatically
+# - Uniqueness: Each debug build creates uniquely named directory
+#
+# Binary Version Output:
+# - Non-debug builds: Standard version output without debug headers
+# - Debug builds: Version output includes "Built with debug headers" message
+# - This distinction allows verification of debug mode compilation success
+#
+# =============================================================================

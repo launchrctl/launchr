@@ -1,0 +1,203 @@
+# =============================================================================
+# Launchr Action Alias Conflict Detection Test Suite
+# =============================================================================
+#
+# This test file validates the Launchr tool's ability to:
+# 1. Detect duplicate alias definitions across multiple actions
+# 2. Skip actions with conflicting alias definitions
+# 3. Maintain functionality of the first action that claims an alias
+# 4. Provide clear error messages about alias conflicts
+# 5. Handle alias resolution when conflicts exist
+#
+# Test Focus:
+# - Alias uniqueness validation across the action system
+# - Conflict resolution strategy (first-wins approach)
+# - Error messaging for duplicate alias definitions
+# - Action skipping behavior for conflicting actions
+# - Alias execution behavior during conflicts
+# =============================================================================
+
+# Test 1: First Action Execution (Full Name)
+# -----------------------------------------------------------------------------
+# Execute the first action using its full namespaced name
+# This action should work normally as it claimed the aliases first
+exec launchr test-print-input:full-1 73
+
+# Validate conflict detection and warning message:
+# Should warn about the second action being skipped due to alias conflict
+stdout 'Action "test-print-input:full-2" was skipped:'
+stdout 'alias "alias2" is already defined by "test-print-input:full-1"'
+
+# Validate successful execution of first action:
+# Should produce normal output since this action is not skipped
+stdout '^argInteger1: 73 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 2: First Action's First Alias Execution
+# -----------------------------------------------------------------------------
+# Execute the first action using its first alias
+# Should work identically to full name execution
+exec launchr alias1 73
+
+# Validate same conflict detection warning:
+# Warning should appear regardless of execution method
+stdout 'Action "test-print-input:full-2" was skipped:'
+stdout 'alias "alias2" is already defined by "test-print-input:full-1"'
+
+# Validate successful alias execution:
+# Should produce identical output to full name execution
+stdout '^argInteger1: 73 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 3: Conflicted Alias Execution
+# -----------------------------------------------------------------------------
+# Execute using the conflicted alias (alias2)
+# Should execute the first action since it claimed the alias first
+exec launchr alias2 73
+
+# Validate conflict detection warning:
+# Should still warn about the skipped action
+stdout 'Action "test-print-input:full-2" was skipped:'
+stdout 'alias "alias2" is already defined by "test-print-input:full-1"'
+
+# Validate first action execution via conflicted alias:
+# Should execute the first action, not the second
+stdout '^argInteger1: 73 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 4: Second Action Execution (Full Name)
+# -----------------------------------------------------------------------------
+# Attempt to execute the second action using its full namespaced name
+# This action should be skipped due to alias conflict
+exec launchr test-print-input:full-2 73
+
+# Validate conflict detection and skip message:
+# Should show the action was skipped due to alias conflict
+stdout 'Action "test-print-input:full-2" was skipped:'
+stdout 'alias "alias2" is already defined by "test-print-input:full-1"'
+
+# Validate second action is NOT executed:
+# Should not produce the second action's output
+! stdout '^argInteger2: 73 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 5: Second Action's Unique Alias Execution
+# -----------------------------------------------------------------------------
+# Attempt to execute using the second action's unique alias (alias3)
+# This should also be skipped since the entire action is invalid
+exec launchr alias3 73
+
+# Validate conflict detection and skip message:
+# Should show the action was skipped due to alias conflict
+stdout 'Action "test-print-input:full-2" was skipped:'
+stdout 'alias "alias2" is already defined by "test-print-input:full-1"'
+
+# Validate second action is NOT executed:
+# Should not produce the second action's output even via unique alias
+! stdout '^argInteger2: 73 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Test Data Files - Actions with Conflicting Aliases
+# =============================================================================
+
+# First Action with Conflicting Aliases
+-- test-print-input/actions/full-1/action.yaml --
+# Plugin action that claims aliases first (wins the conflict)
+# This action should remain functional despite alias conflicts
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Action alias       # Human-readable action name
+
+  # Alias Configuration (First to claim):
+  # This action claims both aliases and should retain them
+  alias:
+    - alias1                               # Unique alias (no conflict)
+    - alias2                               # Conflicted alias (claimed first)
+
+  # First Action Arguments:
+  # Uses argInteger1 to distinguish from second action
+  arguments:
+    - name: argInteger1                    # Unique argument name
+      title: Argument Integer              # Human-readable argument name
+      description: This is a required integer argument    # Help text
+      type: integer                        # Expected type: integer
+      required: true                       # Must be provided by user
+
+# Second Action with Conflicting Aliases
+-- test-print-input/actions/full-2/action.yaml --
+# Plugin action that attempts to claim already-used aliases
+# This entire action should be skipped due to alias conflicts
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Action alias       # Human-readable action name
+
+  # Alias Configuration (Conflicting):
+  # This action attempts to claim aliases already used by full-1
+  alias:
+    - alias2                               # Conflicted alias (already claimed)
+    - alias3                               # Unique alias (but action is skipped)
+
+  # Second Action Arguments:
+  # Uses argInteger2 to distinguish from first action
+  arguments:
+    - name: argInteger2                    # Different argument name
+      title: Argument Integer              # Human-readable argument name
+      description: This is a required integer argument    # Help text
+      type: integer                        # Expected type: integer
+      required: true                       # Must be provided by user
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Alias Conflict Resolution Rules:
+# 1. Aliases must be unique across the entire action system
+# 2. First action to define an alias wins the conflict
+# 3. Subsequent actions with conflicting aliases are entirely skipped
+# 4. Skipped actions cannot be executed by any method (full name or alias)
+# 5. Warning messages are displayed for all conflicts detected
+#
+# Conflict Detection Behavior:
+# - System scans all actions and builds alias registry
+# - Conflicts are detected during action discovery phase
+# - Conflicting actions are marked as skipped before execution
+# - Warning messages identify specific conflicts and ownership
+#
+# Execution Behavior During Conflicts:
+# - First action remains fully functional (full name + all aliases)
+# - Second action becomes completely unavailable
+# - Conflicted alias executes the first action that claimed it
+# - Unique aliases of skipped actions are also unavailable
+#
+# Error Message Format:
+# - Clear identification of skipped action
+# - Specific alias causing the conflict
+# - Reference to the action that owns the alias
+# - Consistent messaging across all execution methods
+#
+# Action Skipping Strategy:
+# - Entire action is skipped, not just conflicting aliases
+# - Even unique aliases become unavailable when action is skipped
+# - Full namespaced name execution is also blocked
+# - No partial functionality is preserved for conflicted actions
+#
+# System Reliability:
+# - Conflicts are handled gracefully without system errors
+# - Warning messages provide clear debugging information
+# - First-wins strategy ensures deterministic behavior
+# - No stderr output ensures clean error handling
+#
+# =============================================================================
