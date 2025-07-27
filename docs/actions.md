@@ -177,3 +177,62 @@ If run in the remote runtime (docker, kubernetes) or with a flag `--remote-runti
 2. Action directory is copied to a new volume `volume_action:/action`
 
 To copy back the result of the execution, use `--remote-copy-back` flag.
+
+### Environment Variables in Container Runtime
+
+Environment variables are passed to Docker containers through the `runtime.env` configuration in the action YAML file. There are key differences between how container and shell runtimes handle environment variables:
+
+#### Container Runtime Environment Variable Behavior
+
+**Explicit Definition Required**: Unlike shell runtime which inherits all host environment variables, container runtime only passes explicitly defined environment variables from the action YAML.
+
+**Host Environment Variable Access**: To access host environment variables, you must explicitly reference them using `${VAR}` syntax in the action definition:
+
+```yaml
+runtime:
+  type: container
+  image: alpine:latest
+  env:
+    # Static environment variable
+    ACTION_ENV: "static_value"
+    
+    # Dynamic environment variable from host
+    USER_NAME: ${USER}
+    
+    # Environment variable with fallback (if HOST_VAR is not set, uses "default")
+    HOST_SETTING: ${HOST_VAR-default}
+```
+
+**Environment Variable Expansion**: During action loading, the system expands `${VAR}` patterns using the host's environment variables via `os.Expand()`. This happens before the container is created.
+
+**Supported Formats**: Environment variables can be defined using either YAML map or array syntax:
+
+```yaml
+# Map syntax (key-value pairs)
+runtime:
+  env:
+    KEY1: value1
+    KEY2: ${HOST_VAR}
+
+# Array syntax (KEY=value strings)
+runtime:
+  env:
+    - KEY1=value1
+    - KEY2=${HOST_VAR}
+```
+
+#### Shell Runtime vs Container Runtime
+
+**Shell Runtime**:
+- Inherits all host environment variables automatically
+- Additional variables defined in `runtime.env` are appended
+- Uses: `cmd.Env = append(os.Environ(), rt.Shell.Env...)`
+
+**Container Runtime**:
+- Only passes explicitly defined environment variables
+- Host variables must be referenced with `${VAR}` syntax
+- No automatic inheritance of host environment
+
+#### Example
+
+For a practical example, see the [envvars action](../example/actions/envvars/action.yaml) which demonstrates both static and dynamic environment variable usage in containers.
