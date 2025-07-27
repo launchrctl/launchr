@@ -123,9 +123,7 @@ func existsInSlice[T comparable](slice []T, el T) bool {
 	return false
 }
 
-// MkdirTemp creates a temporary directory.
-// It tries to create a directory in memory (tmpfs).
-func MkdirTemp(pattern string) (string, error) {
+func mkdirTemp(pattern string) (string, error) {
 	var err error
 	u, err := osuser.Current()
 	if err != nil {
@@ -182,18 +180,21 @@ func MkdirTemp(pattern string) (string, error) {
 	return dirPath, nil
 }
 
-// MkdirTempWithCleanup creates a temporary directory with MkdirTemp.
+// MkdirTemp creates a temporary directory.
+// It tries to create a directory in memory (tmpfs).
 // The temp directory is removed when the app terminates.
-func MkdirTempWithCleanup(pattern string) (string, error) {
-	dirPath, err := MkdirTemp(pattern)
+func MkdirTemp(pattern string, keep bool) (string, error) {
+	dirPath, err := mkdirTemp(pattern)
 	if err != nil {
 		return "", err
 	}
 
-	// Make sure the dir is cleaned on finish.
-	RegisterCleanupFn(func() error {
-		return os.RemoveAll(dirPath)
-	})
+	if !keep {
+		// Remove dir on finish.
+		RegisterCleanupFn(func() error {
+			return os.RemoveAll(dirPath)
+		})
+	}
 
 	return dirPath, nil
 }

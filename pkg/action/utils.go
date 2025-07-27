@@ -188,7 +188,7 @@ func getRuntimeShellBashFromEnv() (string, error) {
 // exportScriptToFile exports the shell script to a temporary file and returns the file path
 func exportScriptToFile(script string) (string, error) {
 	// Create temporary file with action-specific naming
-	tmpDir, err := launchr.MkdirTempWithCleanup("runtime_shell_")
+	tmpDir, err := launchr.MkdirTemp("runtime_shell_", false)
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp directory: %w", err)
 	}

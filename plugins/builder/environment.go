@@ -63,13 +63,7 @@ type buildEnvironment struct {
 }
 
 func newBuildEnvironment(b *Builder) (*buildEnvironment, error) {
-	var err error
-	var tmpDir string
-	if !b.Debug {
-		tmpDir, err = launchr.MkdirTempWithCleanup("build_")
-	} else {
-		tmpDir, err = launchr.MkdirTemp("build_")
-	}
+	tmpDir, err := launchr.MkdirTemp("build_", b.Debug)
 	if err != nil {
 		return nil, err
 	}
