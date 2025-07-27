@@ -146,12 +146,12 @@ func (a *Action) syncToDisk() (err error) {
 	// Export to a temporary path.
 	// Make sure the path doesn't have semicolons, because Docker bind doesn't like it.
 	tmpDirName := strings.Replace(a.ID, ":", "_", -1)
-	tmpDir, err := launchr.MkdirTemp(tmpDirName)
+	tmpDir, err := launchr.MkdirTempWithCleanup(tmpDirName)
 	if err != nil {
 		return
 	}
 	// We use subpath if there are multiple directories in the FS.
-	fsys, err := fs.Sub(a.fs.fs, filepath.Dir(a.Filepath()))
+	fsys, err := fs.Sub(a.fs.fs, filepath.ToSlash(filepath.Dir(a.Filepath())))
 	if err != nil {
 		return
 	}
@@ -162,6 +162,7 @@ func (a *Action) syncToDisk() (err error) {
 	}
 	// Set a new filesystem to a cached path.
 	a.fs = NewDiscoveryFS(os.DirFS(tmpDir), a.fs.wd)
+	a.fpath = filepath.Base(a.fpath)
 	return
 }
 
@@ -270,4 +271,76 @@ func (a *Action) Execute(ctx context.Context) error {
 		return err
 	}
 	return a.runtime.Execute(ctx, a)
+}
+
+func (a *Action) getTemplateVars() *actionVars {
+	return newPredefinedVars(a)
+}
+
+type actionVars struct {
+	a *Action
+
+	uid          string
+	gid          string
+	actionID     string
+	currentBin   string // Get the path of the executable on the host.
+	actionWD     string // app working directory
+	actionDir    string // directory of action file
+	discoveryDir string // root directory where the action was found
+}
+
+func newPredefinedVars(a *Action) *actionVars {
+	pv := &actionVars{a: a}
+	pv.init()
+	return pv
+}
+
+func (v *actionVars) init() {
+	cuser := getCurrentUser()
+	v.currentBin = launchr.Executable()
+	v.uid = cuser.UID
+	v.gid = cuser.GID
+	if v.a != nil {
+		v.actionID = v.a.ID
+		v.actionWD = v.a.WorkDir()
+		v.actionDir = v.a.Dir()
+		v.discoveryDir = v.a.fs.Realpath()
+	}
+}
+
+func (v *actionVars) templateData() map[string]string {
+	return map[string]string{
+		"current_uid":         v.uid,
+		"current_gid":         v.gid,
+		"current_bin":         v.currentBin,
+		"current_working_dir": v.actionWD,
+		"action_dir":          v.actionDir,
+		"actions_base_dir":    v.discoveryDir,
+	}
+}
+
+func (v *actionVars) envData() map[string]string {
+	return map[string]string{
+		"UID":           v.uid,
+		"GID":           v.gid,
+		"CBIN":          v.currentBin,
+		"ACTION_ID":     v.actionID,
+		"ACTION_WD":     v.actionWD,
+		"ACTION_DIR":    v.actionDir,
+		"DISCOVERY_DIR": v.discoveryDir,
+	}
+}
+
+func (v *actionVars) envStrings() []string {
+	res := make([]string, 0, len(v.envData()))
+	for key, val := range v.envData() {
+		res = append(res, key+"="+val)
+	}
+	return res
+}
+
+func (v *actionVars) getenv(key string) (string, bool) {
+	env := v.envData()
+	res, ok := env[key]
+	return res, ok
 }

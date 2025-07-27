@@ -66,6 +66,9 @@ func (c *WithLogger) SetLogger(l *launchr.Logger) {
 
 // Log implements [RuntimeLoggerAware] interface
 func (c *WithLogger) Log() *launchr.Logger {
+	if c.logWith == nil {
+		return launchr.Log()
+	}
 	return c.logger
 }
 
@@ -76,8 +79,8 @@ func (c *WithLogger) LogWith(attrs ...any) *launchr.Logger {
 	}
 
 	return &launchr.Logger{
-		Slog:       c.logger.With(c.logWith...),
-		LogOptions: c.logger.LogOptions,
+		Slog:       c.Log().With(c.logWith...),
+		LogOptions: c.Log().LogOptions,
 	}
 }
 
@@ -102,6 +105,9 @@ func (c *WithTerm) SetTerm(t *launchr.Terminal) {
 
 // Term implements [RuntimeTermAware] interface
 func (c *WithTerm) Term() *launchr.Terminal {
+	if c.term == nil {
+		return launchr.Term()
+	}
 	return c.term
 }
 

@@ -163,3 +163,12 @@ func GetRandomString(length int) string {
 	}
 	return string(b)
 }
+
+// Executable returns the path name for the executable that started.
+func Executable() string {
+	currentBin, err := os.Executable()
+	if err != nil {
+		return name
+	}
+	return currentBin
+}

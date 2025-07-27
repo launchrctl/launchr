@@ -31,7 +31,7 @@ func (f *LockedFile) unlock() {
 	ol := new(windows.Overlapped)
 	err := windows.UnlockFileEx(windows.Handle(f.file.Fd()), 0, allBytes, allBytes, ol)
 	if err != nil {
-		Log().Warn("unlock is called on a not locked file: %s", err)
+		Log().Warn("unlock is called on a not locked file", "err", err)
 	}
 	f.locked = false
 }

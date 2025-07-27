@@ -81,7 +81,7 @@ type buildVars struct {
 	Cwd     string
 }
 
-// NewBuilder creates build environment.
+// NewBuilder creates a build environment.
 func NewBuilder(opts *BuildOptions) (*Builder, error) {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -94,25 +94,19 @@ func NewBuilder(opts *BuildOptions) (*Builder, error) {
 }
 
 // Build prepares build environment, generates go files and build the binary.
-func (b *Builder) Build(ctx context.Context, streams launchr.Streams) error {
+func (b *Builder) Build(ctx context.Context) error {
 	b.Term().Info().Printfln("Starting to build %s", b.PkgName)
-	// Prepare build environment dir and go executable.
+	// Prepare a build environment dir and go executable.
 	var err error
-	b.env, err = newBuildEnvironment(streams)
+	b.env, err = newBuildEnvironment(b)
 	if err != nil {
 		return err
 	}
 
-	b.env.SetLogger(b.Log())
-	b.env.SetTerm(b.Term())
-
-	// Delete temp files in case of error.
-	defer func() {
-		if err != nil {
-			_ = b.Close()
-		}
-	}()
 	b.Log().Debug("creating build environment", "temp_dir", b.env.wd, "env", b.env.env)
+	if b.Debug {
+		b.Term().Warning().Printfln("Debug flag is set. The build temporary directory will not be deleted: %s", b.env.wd)
+	}
 
 	// Write files to dir and generate go mod.
 	b.Term().Info().Println("Creating the project files and fetching dependencies")
@@ -195,6 +189,7 @@ func (b *Builder) goBuild(ctx context.Context) error {
 	// Include or trim debug information.
 	if b.Debug {
 		args = append(args, "-gcflags", "all=-N -l")
+		b.Log().Debug("binary will be built with debug headers for delve debuggin")
 	} else {
 		ldflags = append(ldflags, "-s", "-w")
 		args = append(args, "-trimpath")

@@ -20,7 +20,7 @@ func (app *appImpl) gen() error {
 		// Set absolute paths.
 		config.WorkDir = launchr.MustAbs(config.WorkDir)
 		config.BuildDir = launchr.MustAbs(config.BuildDir)
-		// Change working directory to the selected.
+		// Change the working directory to the selected.
 		err = os.Chdir(config.WorkDir)
 		if err != nil {
 			return err

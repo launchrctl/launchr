@@ -6,7 +6,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"syscall"
 	"text/template"
 
 	"github.com/launchrctl/launchr/internal/launchr"
@@ -59,22 +58,17 @@ func (p *pipeProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
 
 type envProcessor struct{}
 
-func (p envProcessor) Process(_ LoadContext, b []byte) ([]byte, error) {
+func (p envProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
+	pv := newPredefinedVars(ctx.Action)
+	getenv := func(key string) string {
+		v, ok := pv.getenv(key)
+		if ok {
+			return v
+		}
+		return launchr.Getenv(key)
+	}
 	s := os.Expand(string(b), getenv)
 	return []byte(s), nil
-}
-
-func getenv(key string) string {
-	if key == "$" {
-		return "$"
-	}
-	// Replace all subexpressions.
-	if strings.Contains(key, "$") {
-		key = os.Expand(key, getenv)
-	}
-	// @todo implement ${var-$DEFAULT}, ${var:-$DEFAULT}, ${var+$DEFAULT}, ${var:+$DEFAULT},
-	v, _ := syscall.Getenv(key)
-	return v
 }
 
 type inputProcessor struct{}
@@ -186,22 +180,13 @@ func (p inputProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
 	tpl := template.New(a.ID).Funcs(actionTplFuncs(a.Input()))
 
 	_, err := tpl.Parse(string(b))
+	// Check if variables have dashes to show the error properly.
+	err = checkDashErr(err, data)
 	if err != nil {
-		// Check if variables have dashes to show the error properly.
-		hasDash := false
-		for k := range data {
-			if strings.Contains(k, "-") {
-				hasDash = true
-				break
-			}
-		}
-		if hasDash && strings.Contains(err.Error(), "bad character U+002D '-'") {
-			return nil, fmt.Errorf(`unexpected '-' symbol in a template variable. 
-Action definition is correct, but dashes are not allowed in templates, replace "-" with "_" in {{ }} blocks`)
-		}
 		return nil, err
 	}
 
+	// Execute template.
 	buf := bytes.NewBuffer(make([]byte, 0, len(b)))
 	err = tpl.Execute(buf, data)
 	if err != nil {
@@ -209,21 +194,10 @@ Action definition is correct, but dashes are not allowed in templates, replace "
 	}
 
 	// Find if some vars were used but not defined in arguments or options.
-	miss := make(map[string]struct{})
 	res := buf.Bytes()
-	if bytes.Contains(res, []byte("<no value>")) {
-		matches := rgxTplVar.FindAllSubmatch(b, -1)
-		for _, m := range matches {
-			k := string(m[1])
-			if _, ok := data[k]; !ok {
-				miss[k] = struct{}{}
-			}
-		}
-		// If we don't have parameter names here, it means that all parameters are defined but the values were nil.
-		// It's ok, users will be able to identify missing parameters.
-		if len(miss) != 0 {
-			return nil, errMissingVar{miss}
-		}
+	err = findMissingVars(b, res, data)
+	if err != nil {
+		return nil, err
 	}
 
 	// Remove all lines containing [tokenRmLine].
@@ -264,22 +238,48 @@ func collectInputVars(values map[string]any, params InputParams, def ParametersL
 }
 
 func addPredefinedVariables(data map[string]any, a *Action) {
-	cuser := getCurrentUser()
-	// Set zeros for running in environments like Windows
-	data["current_uid"] = 0
-	data["current_gid"] = 0
-	if cuser != "" {
-		s := strings.Split(cuser, ":")
-		data["current_uid"] = s[0]
-		data["current_gid"] = s[1]
+	// TODO: Deprecated, use env variables.
+	pv := newPredefinedVars(a)
+	for k, v := range pv.templateData() {
+		data[k] = v
 	}
-	data["current_working_dir"] = a.wd         // app working directory
-	data["actions_base_dir"] = a.fs.Realpath() // root directory where the action was found
-	data["action_dir"] = a.Dir()               // directory of action file
-	// Get the path of the executable on the host.
-	bin, err := os.Executable()
-	if err != nil {
-		bin = launchr.Version().Name
+}
+
+func checkDashErr(err error, data map[string]any) error {
+	if err == nil {
+		return nil
 	}
-	data["current_bin"] = bin
+	// Check if variables have dashes to show the error properly.
+	hasDash := false
+	for k := range data {
+		if strings.Contains(k, "-") {
+			hasDash = true
+			break
+		}
+	}
+	if hasDash && strings.Contains(err.Error(), "bad character U+002D '-'") {
+		return fmt.Errorf(`unexpected '-' symbol in a template variable. 
+Action definition is correct, but dashes are not allowed in templates, replace "-" with "_" in {{ }} blocks`)
+	}
+	return err
+}
+
+func findMissingVars(orig, repl []byte, data map[string]any) error {
+	miss := make(map[string]struct{})
+	if !bytes.Contains(repl, []byte("<no value>")) {
+		return nil
+	}
+	matches := rgxTplVar.FindAllSubmatch(orig, -1)
+	for _, m := range matches {
+		k := string(m[1])
+		if _, ok := data[k]; !ok {
+			miss[k] = struct{}{}
+		}
+	}
+	// If we don't have parameter names here, it means that all parameters are defined but the values were nil.
+	// It's ok, users will be able to identify missing parameters.
+	if len(miss) != 0 {
+		return errMissingVar{miss}
+	}
+	return nil
 }

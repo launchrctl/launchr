@@ -79,6 +79,16 @@ func (h *ioStreamer) stream(ctx context.Context) error {
 	outputDone := h.beginOutputStream(restoreInput)
 	inputDone := h.beginInputStream(restoreInput)
 
+	// Close input.
+	defer func() {
+		if conn, ok := h.io.In.(interface{ CloseWrite() error }); ok {
+			err := conn.CloseWrite()
+			if err != nil {
+				launchr.Log().Debug("couldn't send EOF", "error", err)
+			}
+		}
+	}()
+
 	select {
 	case err := <-outputDone:
 		return err
@@ -186,13 +196,6 @@ func (h *ioStreamer) beginInputStream(restoreInput func()) (doneC <-chan struct{
 				// side (from stdout) where it will be
 				// propagated back to the caller.
 				launchr.Log().Debug("Error send Stdin", "error", err)
-			}
-		}
-
-		if conn, ok := h.io.In.(interface{ CloseWrite() error }); ok {
-			err := conn.CloseWrite()
-			if err != nil {
-				launchr.Log().Debug("couldn't send EOF", "error", err)
 			}
 		}
 

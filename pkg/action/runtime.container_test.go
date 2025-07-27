@@ -275,11 +275,12 @@ func Test_ContainerExec_createContainerDef(t *testing.T) {
 			"env1=var1",
 			"env2=var2",
 		},
-		User: getCurrentUser(),
+		User: getCurrentUser().String(),
 	}
 	defaultCmd := []string{"my", "cmd"}
 	var defaultEntrypoint []string
-	actionDir := launchr.MustAbs("my/action/test")
+	actionDir := normalizeContainerMountPath("my/action/test")
+	workingDir := normalizeContainerMountPath("./")
 
 	tts := []testCase{
 		{
@@ -298,7 +299,7 @@ func Test_ContainerExec_createContainerDef(t *testing.T) {
 				Command:       defaultCmd,
 				Entrypoint:    defaultEntrypoint,
 				Binds: []string{
-					launchr.MustAbs("./") + ":" + containerHostMount,
+					workingDir + ":" + containerHostMount,
 					actionDir + ":" + containerActionMount,
 				},
 				Streams: driver.ContainerStreamsOptions{
@@ -324,7 +325,7 @@ func Test_ContainerExec_createContainerDef(t *testing.T) {
 				Command:       defaultCmd,
 				Entrypoint:    defaultEntrypoint,
 				Binds: []string{
-					launchr.MustAbs("../myactiondir") + ":" + containerHostMount,
+					normalizeContainerMountPath("../myactiondir") + ":" + containerHostMount,
 					actionDir + ":" + containerActionMount,
 				},
 				Streams: driver.ContainerStreamsOptions{
@@ -411,12 +412,12 @@ func Test_ContainerExec(t *testing.T) {
 		Image:         runConf.Image,
 		ExtraHosts:    runConf.ExtraHosts,
 		Binds: []string{
-			launchr.MustAbs(act.WorkDir()) + ":" + containerHostMount,
-			launchr.MustAbs(act.Dir()) + ":" + containerActionMount,
+			normalizeContainerMountPath(act.WorkDir()) + ":" + containerHostMount,
+			normalizeContainerMountPath(act.Dir()) + ":" + containerActionMount,
 		},
 		WorkingDir: containerHostMount,
 		Env:        runConf.Env,
-		User:       getCurrentUser(),
+		User:       getCurrentUser().String(),
 	}
 
 	errImgEns := errors.New("image ensure error")

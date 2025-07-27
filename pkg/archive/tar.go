@@ -16,6 +16,9 @@ import (
 // Compression is the state represents if compressed or not.
 type Compression compression.Compression
 
+// ChownOpts has ownership of files in the archive.
+type ChownOpts archive.ChownOpts
+
 // Compressions types.
 const (
 	Uncompressed = Compression(archive.Uncompressed) // Uncompressed represents the uncompressed.
@@ -32,6 +35,7 @@ type TarOptions struct {
 	Compression     Compression
 	RebaseNames     map[string]string
 	SrcInfo         CopyInfo
+	ChownOpts       *ChownOpts
 }
 
 // CopyInfo holds basic info about the source
@@ -69,6 +73,10 @@ func Tar(src CopyInfo, dst CopyInfo, opts *TarOptions) (io.ReadCloser, error) {
 	sourceDir, sourceBase := archive.SplitPathDirEntry(srcInfo.Path)
 	tarOpts := archive.TarResourceRebaseOpts(sourceBase, srcInfo.RebaseName)
 	tarOpts.ExcludePatterns = opts.ExcludePatterns
+	if opts.ChownOpts != nil {
+		chownOpts := archive.ChownOpts(*opts.ChownOpts)
+		tarOpts.ChownOpts = &chownOpts
+	}
 	maps.Insert(tarOpts.RebaseNames, maps.All(opts.RebaseNames))
 	tarOpts.Compression = compression.Compression(opts.Compression)
 	slices.AppendSeq(tarOpts.IncludeFiles, slices.Values(opts.IncludeFiles))

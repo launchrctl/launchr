@@ -3,7 +3,6 @@ package action
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,12 +29,13 @@ func Test_Action(t *testing.T) {
 	require.NotEmpty(actions)
 	act := actions[0]
 	// Override the real path to skip [Action.syncToDisc].
-	act.fs.real = "/fstest/"
+	act.fs.real = filepath.FromSlash("/fstest/")
 
 	// Test dir
 	assert.Equal(act.fs.real+filepath.Dir(act.fpath), act.Dir())
-	act.fpath = "test/file/path/action.yaml"
-	assert.Equal(act.fs.real+"test/file/path", act.Dir())
+	// Test dir when fpath changed.
+	act.fpath = filepath.FromSlash("test/file/path/action.yaml")
+	assert.Equal(filepath.FromSlash(act.fs.real+"test/file/path"), act.Dir())
 
 	// Test arguments and options.
 	inputArgs := InputParams{"arg1": "arg1", "arg2": "arg2", "arg-1": "arg-1", "arg_12": "arg_12_enum1"}
@@ -103,20 +103,11 @@ func Test_Action(t *testing.T) {
 
 func Test_Action_NewYAMLFromFS(t *testing.T) {
 	t.Parallel()
-	// Prepare FS.
-	fsys := genFsTestMapActions(1, validFullYaml, genPathTypeArbitrary)
-	// Get first key to make subdir.
-	var key string
-	for key = range fsys {
-		// There is only 1 entry, we get the only key.
-		break
-	}
-
-	// Create action.
-	subfs, _ := fs.Sub(fsys, filepath.Dir(key))
-	a, err := NewYAMLFromFS("test", subfs)
-	require.NotNil(t, a)
+	// Create action in memory FS.
+	fsys := genFsTestMapActions(1, validFullYaml, genPathTypeRoot)
+	a, err := NewYAMLFromFS("test", fsys)
 	require.NoError(t, err)
+	require.NotNil(t, a)
 	assert.Equal(t, "test", a.ID)
 	require.NoError(t, a.EnsureLoaded())
 	assert.Equal(t, "Title", a.ActionDef().Title)

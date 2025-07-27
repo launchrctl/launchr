@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	osuser "os/user"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/launchrctl/launchr/internal/launchr"
@@ -371,20 +371,6 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 	return err
 }
 
-func getCurrentUser() string {
-	curuser := ""
-	// If running in a container native environment, run container as a current user.
-	// @todo review, it won't work with a remote context.
-	switch runtime.GOOS {
-	case "linux", "darwin":
-		u, err := osuser.Current()
-		if err == nil {
-			curuser = u.Uid + ":" + u.Gid
-		}
-	}
-	return curuser
-}
-
 func (c *runtimeContainer) Close() error {
 	if c.crt == nil {
 		return nil
@@ -404,7 +390,6 @@ func (c *runtimeContainer) imageRemove(ctx context.Context, a *Action) error {
 }
 
 func (c *runtimeContainer) isRebuildRequired(bi *driver.BuildDefinition) (bool, error) {
-	// @todo test image cache resolution somehow.
 	if c.imgccres == nil || bi == nil || !c.rebuildImage {
 		return false, nil
 	}
@@ -492,7 +477,7 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 		// Output docker status only in Debug.
 		err = status.Progress.Stream(streams.Out())
 		if err != nil {
-			c.Term().Error().Println("Error occurred while building the image %q", image)
+			c.Term().Error().Printfln("Error occurred while building the image %q", image)
 			log.Error("error while building the image", "error", err)
 		}
 	}
@@ -538,7 +523,7 @@ func (c *runtimeContainer) createContainerDef(a *Action, cname string) driver.Co
 		WorkingDir:    containerHostMount,
 		ExtraHosts:    runDef.Container.ExtraHosts,
 		Env:           runDef.Container.Env,
-		User:          getCurrentUser(),
+		User:          getCurrentUser().String(),
 		Entrypoint:    entrypoint,
 		Streams: driver.ContainerStreamsOptions{
 			Stdin:  !streams.In().IsDiscard(),
@@ -556,8 +541,8 @@ func (c *runtimeContainer) createContainerDef(a *Action, cname string) driver.Co
 		)
 	} else {
 		createOpts.Binds = []string{
-			launchr.MustAbs(a.WorkDir()) + ":" + containerHostMount + c.volumeFlags,
-			launchr.MustAbs(a.Dir()) + ":" + containerActionMount + c.volumeFlags,
+			normalizeContainerMountPath(a.WorkDir()) + ":" + containerHostMount + c.volumeFlags,
+			normalizeContainerMountPath(a.Dir()) + ":" + containerActionMount + c.volumeFlags,
 		}
 	}
 	return createOpts
@@ -575,7 +560,6 @@ func (c *runtimeContainer) copyAllToContainer(ctx context.Context, cid string, a
 	if !c.isRemote() {
 		return nil
 	}
-	// @todo test somehow.
 	launchr.Term().Info().Printfln(`Running in the remote environment. Copying the working directory and action directory inside the container.`)
 	// Copy dir to a container to have the same owner in the destination directory.
 	// Copying only the content of the dir will not override the parent dir ownership.
@@ -610,10 +594,20 @@ func (c *runtimeContainer) copyAllFromContainer(ctx context.Context, cid string,
 
 // copyToContainer copies dir/file to a container. Directory will be copied as a subdirectory.
 func (c *runtimeContainer) copyToContainer(ctx context.Context, cid, srcPath, dstPath, rebaseName string) error {
+	var tarOpts *archive.TarOptions
+	copyOpts := driver.CopyToContainerOptions{}
 	// Prepare destination copy info by stat-ing the container path.
 	dstStat, err := c.crt.ContainerStatPath(ctx, cid, dstPath)
 	if err != nil {
 		return err
+	}
+
+	// Set UID explicitly when run on Windows because files are copied as root.
+	if runtime.GOOS == "windows" { //nolint:goconst
+		user := getCurrentUser()
+		uid, _ := strconv.Atoi(user.UID)
+		gid, _ := strconv.Atoi(user.GID)
+		tarOpts = &archive.TarOptions{ChownOpts: &archive.ChownOpts{UID: uid, GID: gid}}
 	}
 
 	arch, err := archive.Tar(
@@ -626,7 +620,7 @@ func (c *runtimeContainer) copyToContainer(ctx context.Context, cid, srcPath, ds
 			Exists: true,
 			IsDir:  dstStat.Mode.IsDir(),
 		},
-		nil,
+		tarOpts,
 	)
 	if err != nil {
 		return err
@@ -637,11 +631,8 @@ func (c *runtimeContainer) copyToContainer(ctx context.Context, cid, srcPath, ds
 	if !dstStat.Mode.IsDir() {
 		dstDir = filepath.Base(dstPath)
 	}
-	options := driver.CopyToContainerOptions{
-		AllowOverwriteDirWithFile: false,
-		CopyUIDGID:                false,
-	}
-	return c.crt.CopyToContainer(ctx, cid, dstDir, arch, options)
+
+	return c.crt.CopyToContainer(ctx, cid, dstDir, arch, copyOpts)
 }
 
 func (c *runtimeContainer) copyFromContainer(ctx context.Context, cid, srcPath, dstPath, rebaseName string) (err error) {

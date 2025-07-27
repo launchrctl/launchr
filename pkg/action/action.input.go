@@ -264,7 +264,8 @@ func CastSliceTypedToAny(slice any) []any {
 func CastSliceAnyToTyped[T any](orig []any) []T {
 	res := make([]T, len(orig))
 	for i := 0; i < len(orig); i++ {
-		res[i] = orig[i].(T)
+		// Ignore the convert error if the value is not of the specified type.
+		res[i], _ = orig[i].(T)
 	}
 	return res
 }

@@ -3,6 +3,7 @@ package action
 import (
 	"fmt"
 	"maps"
+	"path/filepath"
 
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
@@ -33,7 +34,7 @@ func (a *Action) JSONSchema() jsonschema.Schema {
 	// Set ID to a filepath. It's not exactly JSON Schema, but some canonical path.
 	// It's better to override the value, if the ID is needed by a validator.
 	// In launchr, the id is overridden on loader, in web plugin with a server url.
-	s.ID = a.Filepath()
+	s.ID = "file:///" + filepath.ToSlash(a.Filepath())
 	// For plugin defined actions, filepath may be empty.
 	if s.ID == "" {
 		s.ID = a.ID

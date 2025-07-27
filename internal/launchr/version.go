@@ -43,22 +43,25 @@ func NewVersion(name, ver, bwith string, plugins PluginsMap) *AppVersion {
 	buildInfo, _ := debug.ReadBuildInfo()
 	// Add self as a dependency to get version for it also.
 	buildInfo.Deps = append(buildInfo.Deps, &buildInfo.Main)
-	// Check core version when built or used in a plugin.
+	// Check a core version when built or used in a plugin.
 	var coreRep string
 	coreVer, coreRep := getCoreInfo(ver, buildInfo)
 	if bwith == "" {
 		ver = coreVer
 	}
 
+	plver, plrepl := getPluginModules(plugins, buildInfo)
 	return &AppVersion{
 		Name:        name,
 		Version:     ver,
 		OS:          runtime.GOOS,
 		Arch:        runtime.GOARCH,
+		Debug:       isDebugAvailable(buildInfo),
 		CoreVersion: coreVer,
 		CoreReplace: coreRep,
 		BuiltWith:   bwith,
-		Plugins:     getPluginModules(plugins, buildInfo),
+		Plugins:     plver,
+		PluginsRepl: plrepl,
 	}
 }
 
@@ -101,12 +104,13 @@ func getCoreInfo(v string, bi *debug.BuildInfo) (ver string, repl string) {
 	return
 }
 
-func getPluginModules(plugins PluginsMap, bi *debug.BuildInfo) []string {
+func getPluginModules(plugins PluginsMap, bi *debug.BuildInfo) (res []string, repl []string) {
 	if bi == nil {
-		return nil
+		return
 	}
 
-	res := make([]string, 0, len(plugins))
+	res = make([]string, 0, len(plugins))
+	repl = make([]string, 0, len(plugins))
 	for pi := range plugins {
 		if strings.HasPrefix(pi.pkgPath, PkgPath) {
 			// Do not include info about the default package.
@@ -116,15 +120,32 @@ func getPluginModules(plugins PluginsMap, bi *debug.BuildInfo) []string {
 			// Path may be empty on "go run".
 			if d.Path != "" && strings.HasPrefix(pi.pkgPath, d.Path) {
 				s := fmt.Sprintf("%s %s", pi.pkgPath, d.Version)
+				r := s
 				if d.Replace != nil {
-					s = fmt.Sprintf("%s => %s %s", s, d.Replace.Path, d.Replace.Version)
+					r = fmt.Sprintf("%s => %s %s", r, d.Replace.Path, d.Replace.Version)
 				}
 				res = append(res, s)
+				repl = append(res, r)
 			}
 		}
 	}
 	sort.Strings(res)
-	return res
+	sort.Strings(repl)
+	return
+}
+
+// isDebugAvailable checks if the current binary has debug headers available.
+func isDebugAvailable(bi *debug.BuildInfo) bool {
+	// Check for debug-related build settings
+	for _, setting := range bi.Settings {
+		if setting.Key == "-gcflags" {
+			// Check if gcflags contains debug-related flags
+			if strings.Contains(setting.Value, "-N") && strings.Contains(setting.Value, "-l") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 var versionTmpl = template.Must(template.New("version").Parse(versionTmplStr))
@@ -134,15 +155,18 @@ const versionTmplStr = `
 {{- if .BuiltWith}}
 Built with {{.BuiltWith}}
 {{- end}}
+{{- if .Debug}}
+Built with debug headers
+{{- end}}
 {{- if ne .CoreVersion .Version}}
 Core version: {{.CoreVersion}}
 {{- end}}
 {{- if .CoreReplace}}
 Core replace: {{.CoreReplace}}
 {{- end}}
-{{- if .Plugins}}
+{{- if .PluginsRepl}}
 Plugins:
-  {{- range .Plugins}}
+  {{- range .PluginsRepl}}
   - {{.}}
   {{- end}}
 {{end}}`
