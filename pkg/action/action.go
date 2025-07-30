@@ -145,7 +145,7 @@ func (a *Action) syncToDisk() (err error) {
 	}
 	// Export to a temporary path.
 	// Make sure the path doesn't have semicolons, because Docker bind doesn't like it.
-	tmpDirName := strings.Replace(a.ID, ":", "_", -1)
+	tmpDirName := strings.ReplaceAll(a.ID, ":", "_")
 	tmpDir, err := launchr.MkdirTemp(tmpDirName, false)
 	if err != nil {
 		return

@@ -79,7 +79,7 @@ func Tar(src CopyInfo, dst CopyInfo, opts *TarOptions) (io.ReadCloser, error) {
 	}
 	maps.Insert(tarOpts.RebaseNames, maps.All(opts.RebaseNames))
 	tarOpts.Compression = compression.Compression(opts.Compression)
-	slices.AppendSeq(tarOpts.IncludeFiles, slices.Values(opts.IncludeFiles))
+	tarOpts.IncludeFiles = slices.AppendSeq(tarOpts.IncludeFiles, slices.Values(opts.IncludeFiles))
 
 	r, err := archive.TarWithOptions(sourceDir, tarOpts)
 	if err != nil {

@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/launchrctl/launchr/internal/launchr"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/launchrctl/launchr/internal/launchr"
 )
 
 func testLoaderAction() *Action {
@@ -153,7 +153,9 @@ func Test_PipeProcessor(t *testing.T) {
 	)
 
 	_ = os.Setenv("TEST_ENV1", "VAL1")
-	defer os.Unsetenv("TEST_ENV1")
+	defer func() {
+		_ = os.Unsetenv("TEST_ENV1")
+	}()
 	input := NewInput(act, InputParams{"arg1": "arg1"}, InputParams{"optStr": "optVal1"}, nil)
 	input.SetValidated(true)
 	err := act.SetInput(input)

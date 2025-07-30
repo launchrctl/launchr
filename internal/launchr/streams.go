@@ -75,10 +75,10 @@ func (o *Out) Write(p []byte) (int, error) {
 
 // SetRawTerminal sets raw mode on the input terminal.
 func (o *Out) SetRawTerminal() (err error) {
-	if !o.commonStream.IsTerminal() {
+	if !o.IsTerminal() {
 		return nil
 	}
-	o.commonStream.state, err = mobyterm.SetRawTerminalOutput(o.commonStream.fd)
+	o.state, err = mobyterm.SetRawTerminalOutput(o.fd)
 	return err
 }
 
@@ -148,10 +148,10 @@ func (i *In) Close() error {
 
 // SetRawTerminal sets raw mode on the input terminal.
 func (i *In) SetRawTerminal() (err error) {
-	if !i.commonStream.IsTerminal() {
+	if !i.IsTerminal() {
 		return nil
 	}
-	i.commonStream.state, err = mobyterm.SetRawTerminal(i.commonStream.fd)
+	i.state, err = mobyterm.SetRawTerminal(i.fd)
 	return err
 }
 

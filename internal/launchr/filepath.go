@@ -205,7 +205,7 @@ func EscapePathString(s string) string {
 	if filepath.Separator == '/' {
 		return s
 	}
-	return strings.Replace(s, "\\", "\\\\", -1)
+	return strings.ReplaceAll(s, "\\", "\\\\")
 }
 
 // ConvertWindowsPath converts Windows paths to Docker-compatible paths

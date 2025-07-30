@@ -174,7 +174,7 @@ func addTestValueProcessors(am Manager) {
 	procReplace := GenericValueProcessor[procTestReplaceOptions]{
 		Types: []jsonschema.Type{jsonschema.String},
 		Fn: func(v any, opts procTestReplaceOptions, _ ValueProcessorContext) (any, error) {
-			return strings.Replace(v.(string), opts.Fields.O, opts.Fields.N, -1), nil
+			return strings.ReplaceAll(v.(string), opts.Fields.O, opts.Fields.N), nil
 		},
 	}
 	procErr := GenericValueProcessor[ValueProcessorOptionsEmpty]{

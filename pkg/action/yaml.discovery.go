@@ -155,8 +155,8 @@ func (p escapeYamlTplCommentsProcessor) Process(_ LoadContext, b []byte) ([]byte
 		if i := bytes.IndexByte(l, '#'); i != -1 {
 			// Check the comment symbol is not inside a string.
 			// Multiline strings are not supported for now.
-			if !(bytes.LastIndexByte(l[:i], '"') != -1 && bytes.IndexByte(l[i:], '"') != -1 ||
-				bytes.LastIndexByte(l[:i], '\'') != -1 && bytes.IndexByte(l[i:], '\'') != -1) {
+			if (bytes.LastIndexByte(l[:i], '"') == -1 || bytes.IndexByte(l[i:], '"') == -1) &&
+				(bytes.LastIndexByte(l[:i], '\'') == -1 || bytes.IndexByte(l[i:], '\'') == -1) {
 				// Strip data after comment symbol.
 				l = l[:i]
 			}
