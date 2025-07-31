@@ -1,55 +1,56 @@
-# More info on config here: https://github.com/golangci/golangci-lint#config-file
-run:
-  deadline: 10s
-  issues-exit-code: 1
-  tests: true
-
+# yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.jsonschema.json
+version: "2"
 output:
   formats:
-    - format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
-
-linters-settings:
-  govet:
-    shadow: true
-  golint:
-    min-confidence: 0
-  dupl:
-    threshold: 100
-  goconst:
-    min-len:         2
-    min-occurrences: 2
- 
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
 linters:
-  disable-all: true
+  default: none
   enable:
-    - revive
-    - govet
-    - errcheck
-    - unused
-    - ineffassign
-    - typecheck
     - dupl
+    - errcheck
     - goconst
     - gosec
-    - goimports
-    - gosimple
+    - govet
+    - ineffassign
+    - revive
     - staticcheck
     - unused
-
-issues:
-  exclude-use-default: false
-  exclude-dirs:
-    - bin
-    - vendor
-    - var
-    - tmp
-  exclude-files:
-    - \.pb\.go$
-    - \.pb\.goclay\.go$
-  exclude:
-#    # _ instead of err checks
-#    - G104
-    # errcheck: Almost all programs ignore errors on these functions and in most cases it's ok
-    - Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*printf?|os\.(Un)?Setenv|.*Rollback). is not checked
+  settings:
+    dupl:
+      threshold: 100
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+  exclusions:
+    generated: lax
+    rules:
+      - path: (.+)\.go$
+        text: Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*printf?|os\.(Un)?Setenv|.*Rollback). is not checked
+    paths:
+      - \.pb\.go$
+      - \.pb\.goclay\.go$
+      - bin
+      - vendor
+      - var
+      - tmp
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - \.pb\.go$
+      - \.pb\.goclay\.go$
+      - bin
+      - vendor
+      - var
+      - tmp
+      - third_party$
+      - builtin$
+      - examples$

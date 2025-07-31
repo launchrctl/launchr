@@ -4,7 +4,6 @@ package launchr
 
 import (
 	"path/filepath"
-	"strings"
 )
 
 var skipRootDirs = []string{
@@ -46,17 +45,7 @@ var skipUserDirs = []string{
 }
 
 func isHiddenPath(path string) bool {
-	if path == "." {
-		return false
-	}
-	dirs := strings.Split(path, string(filepath.Separator))
-	for _, v := range dirs {
-		if v[0] == '.' {
-			return true
-		}
-	}
-
-	return false
+	return isDotPath(path)
 }
 
 func isRootPath(path string) bool {
@@ -68,4 +57,15 @@ func isUserHomeDir(path string) bool {
 	linux, _ := filepath.Match("/home/*/*", abs)
 	macOs, _ := filepath.Match("/Users/*/*", abs)
 	return linux || macOs
+}
+
+// KnownBashPaths returns paths where bash can be found. Used when PATH is not available.
+func KnownBashPaths() []string {
+	return []string{
+		"/bin/bash",
+		"/usr/bin/bash",
+		"/usr/local/bin/bash",
+		"/bin/ash",
+		"/bin/sh", // Fallback to sh.
+	}
 }

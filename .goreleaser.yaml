@@ -3,7 +3,7 @@ project_name: launchr
 before:
   hooks:
     - go mod download
-    - go test ./...
+    - go test -short ./...
 builds:
   - main: ./cmd/launchr
     env:

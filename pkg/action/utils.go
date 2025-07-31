@@ -2,11 +2,25 @@ package action
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/launchrctl/launchr/internal/launchr"
+
 	"gopkg.in/yaml.v3"
 )
+
+type userInfo struct {
+	UID string
+	GID string
+}
+
+func (u userInfo) String() string {
+	return u.UID + ":" + u.GID
+}
 
 func yamlTypeError(s string) *yaml.TypeError {
 	return &yaml.TypeError{Errors: []string{s}}
@@ -122,4 +136,78 @@ func collectAllNodes(n *yaml.Node) []*yaml.Node {
 		res = append(res, collectAllNodes(n.Content[i])...)
 	}
 	return res
+}
+
+// EnvVarRuntimeShellBash defines path to bash shell.
+var EnvVarRuntimeShellBash = launchr.EnvVar("runtime_shell_bash")
+
+func createRTShellBashContext(a *Action) (*shellContext, error) {
+	path, err := getBashPath()
+	if err != nil {
+		return nil, err
+	}
+	return prepareShellContext(a, path)
+}
+
+func getBashPath() (string, error) {
+	path, err := getRuntimeShellBashFromEnv()
+	if err != nil {
+		launchr.Log().Warn("failed to get shell from "+EnvVarRuntimeShellBash.String()+". Fallback to PATH lookup", "err", err)
+	}
+	if path != "" {
+		return path, nil
+	}
+	path, err = exec.LookPath("bash")
+	if err != nil {
+		// Try to find bash.
+		for _, path = range launchr.KnownBashPaths() {
+			if _, err := os.Stat(path); err == nil {
+				return path, nil
+			}
+		}
+		return "", err
+	}
+	return path, nil
+}
+
+var errPathNotExecutable = fmt.Errorf("file is not executable")
+
+func getRuntimeShellBashFromEnv() (string, error) {
+	shell := EnvVarRuntimeShellBash.Get()
+	if shell == "" {
+		return "", nil
+	}
+
+	// Check if the file is executable.
+	if err := isExecutable(shell); err != nil {
+		return "", fmt.Errorf("runtime shell %q is not executable: %w", shell, err)
+	}
+	return shell, nil
+}
+
+// exportScriptToFile exports the shell script to a temporary file and returns the file path
+func exportScriptToFile(script string) (string, error) {
+	// Create temporary file with action-specific naming
+	tmpDir, err := launchr.MkdirTemp("runtime_shell_", false)
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	path := filepath.Join(tmpDir, "action.sh")
+	scriptFile, err := os.Create(path) //nolint:gosec // G304 We create the path.
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp script file: %w", err)
+	}
+	defer scriptFile.Close()
+
+	// Write the script content to the file
+	if _, err := scriptFile.WriteString(script); err != nil {
+		return "", fmt.Errorf("failed to write script to file: %w", err)
+	}
+
+	// Make the script executable
+	if err := scriptFile.Chmod(0755); err != nil {
+		return "", fmt.Errorf("failed to make script executable: %w", err)
+	}
+
+	return path, nil
 }

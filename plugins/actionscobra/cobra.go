@@ -139,26 +139,37 @@ func setFlag(flags *pflag.FlagSet, param *action.DefParameter) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Skip silently incorrect or duplicated shorthands.
+	shorthand := param.Shorthand
+	if len(shorthand) > 1 {
+		launchr.Log().Warn("incorrect shorthand definition for cobra flag, skipping", "parameter", param.Name, "shorthand", shorthand)
+		shorthand = ""
+	}
+	if flags.ShorthandLookup(shorthand) != nil {
+		launchr.Log().Warn("duplicate shorthand definition for cobra flag, skipping", "parameter", param.Name, "shorthand", shorthand)
+		shorthand = ""
+	}
 	switch param.Type {
 	case jsonschema.String:
-		val = flags.StringP(param.Name, param.Shorthand, dval.(string), desc)
+		val = flags.StringP(param.Name, shorthand, dval.(string), desc)
 	case jsonschema.Integer:
-		val = flags.IntP(param.Name, param.Shorthand, dval.(int), desc)
+		val = flags.IntP(param.Name, shorthand, dval.(int), desc)
 	case jsonschema.Number:
-		val = flags.Float64P(param.Name, param.Shorthand, dval.(float64), desc)
+		val = flags.Float64P(param.Name, shorthand, dval.(float64), desc)
 	case jsonschema.Boolean:
-		val = flags.BoolP(param.Name, param.Shorthand, dval.(bool), desc)
+		val = flags.BoolP(param.Name, shorthand, dval.(bool), desc)
 	case jsonschema.Array:
 		dslice := dval.([]any)
 		switch param.Items.Type {
 		case jsonschema.String:
-			val = flags.StringSliceP(param.Name, param.Shorthand, action.CastSliceAnyToTyped[string](dslice), desc)
+			val = flags.StringSliceP(param.Name, shorthand, action.CastSliceAnyToTyped[string](dslice), desc)
 		case jsonschema.Integer:
-			val = flags.IntSliceP(param.Name, param.Shorthand, action.CastSliceAnyToTyped[int](dslice), desc)
+			val = flags.IntSliceP(param.Name, shorthand, action.CastSliceAnyToTyped[int](dslice), desc)
 		case jsonschema.Number:
-			val = flags.Float64SliceP(param.Name, param.Shorthand, action.CastSliceAnyToTyped[float64](dslice), desc)
+			val = flags.Float64SliceP(param.Name, shorthand, action.CastSliceAnyToTyped[float64](dslice), desc)
 		case jsonschema.Boolean:
-			val = flags.BoolSliceP(param.Name, param.Shorthand, action.CastSliceAnyToTyped[bool](dslice), desc)
+			val = flags.BoolSliceP(param.Name, shorthand, action.CastSliceAnyToTyped[bool](dslice), desc)
 		default:
 			// @todo use flags.Var() and define a custom value, jsonschema accepts "any".
 			return nil, fmt.Errorf("json schema array type %q is not implemented", param.Items.Type)
@@ -195,6 +206,8 @@ func derefOpt(v any) any {
 	case *[]string:
 		return *v
 	case *[]int:
+		return *v
+	case *[]float64:
 		return *v
 	case *[]bool:
 		return *v

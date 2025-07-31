@@ -1,12 +1,15 @@
 package action
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/launchrctl/launchr/internal/launchr"
 )
 
 func testLoaderAction() *Action {
@@ -34,12 +37,24 @@ func testLoaderAction() *Action {
 
 func Test_EnvProcessor(t *testing.T) {
 	t.Parallel()
+	act := testLoaderAction()
 	proc := envProcessor{}
+	defer func() {
+		_ = os.Unsetenv("TEST_ENV1")
+		_ = os.Unsetenv("TEST_ENV2")
+	}()
 	_ = os.Setenv("TEST_ENV1", "VAL1")
 	_ = os.Setenv("TEST_ENV2", "VAL2")
 	s := "$TEST_ENV1$TEST_ENV1,${TEST_ENV2},$$TEST_ENV1,${TEST_ENV_UNDEF},${TODO-$TEST_ENV1},${TODO:-$TEST_ENV1},${TODO+$TEST_ENV1},${TODO:+$TEST_ENV1}"
-	res, _ := proc.Process(LoadContext{}, []byte(s))
+	res, err := proc.Process(LoadContext{Action: act}, []byte(s))
+	assert.NoError(t, err)
 	assert.Equal(t, "VAL1VAL1,VAL2,$TEST_ENV1,,,,,", string(res))
+	// Test action predefined env variables.
+	s = "$CBIN,$ACTION_ID,$ACTION_WD,$ACTION_DIR,$DISCOVERY_DIR"
+	res, err = proc.Process(LoadContext{Action: act}, []byte(s))
+	exp := fmt.Sprintf("%s,%s,%s,%s,%s", launchr.Executable(), act.ID, act.WorkDir(), act.Dir(), act.fs.Realpath())
+	assert.NoError(t, err)
+	assert.Equal(t, exp, string(res))
 }
 
 func Test_InputProcessor(t *testing.T) {
@@ -138,6 +153,9 @@ func Test_PipeProcessor(t *testing.T) {
 	)
 
 	_ = os.Setenv("TEST_ENV1", "VAL1")
+	defer func() {
+		_ = os.Unsetenv("TEST_ENV1")
+	}()
 	input := NewInput(act, InputParams{"arg1": "arg1"}, InputParams{"optStr": "optVal1"}, nil)
 	input.SetValidated(true)
 	err := act.SetInput(input)

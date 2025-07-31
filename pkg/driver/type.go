@@ -191,7 +191,6 @@ type ContainerDefinition struct {
 	Command    []string
 	WorkingDir string
 
-	// @todo review binds and volumes, because binds won't work for remote environments.
 	Binds   []string
 	Volumes []ContainerVolume
 

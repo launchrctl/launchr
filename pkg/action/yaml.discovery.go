@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+	"path/filepath"
 	"regexp"
 	"sync"
 )
 
 var (
 	// rgxYamlFilepath is a regex for a yaml path with unix and windows support.
-	rgxYamlFilepath = regexp.MustCompile(`(^actions|.*[\\/]actions)[\\/][^\\/]+[\\/]action\.y(a)?ml$`)
+	rgxYamlFilepath = regexp.MustCompile(`^(actions|[^\s!<>:"|?*]+/actions)/[^\s!<>:"|?*/]+/action\.y(a)?ml$`)
 	// rgxYamlRootFile is a regex for a yaml file located in root dir only.
 	rgxYamlRootFile = regexp.MustCompile(`^action\.y(a)?ml$`)
 )
@@ -28,7 +29,7 @@ type YamlDiscoveryStrategy struct {
 
 // IsValid implements [DiscoveryStrategy].
 func (y YamlDiscoveryStrategy) IsValid(path string) bool {
-	return y.TargetRgx.MatchString(path)
+	return y.TargetRgx.MatchString(filepath.ToSlash(path))
 }
 
 // Loader implements [DiscoveryStrategy].
@@ -154,8 +155,8 @@ func (p escapeYamlTplCommentsProcessor) Process(_ LoadContext, b []byte) ([]byte
 		if i := bytes.IndexByte(l, '#'); i != -1 {
 			// Check the comment symbol is not inside a string.
 			// Multiline strings are not supported for now.
-			if !(bytes.LastIndexByte(l[:i], '"') != -1 && bytes.IndexByte(l[i:], '"') != -1 ||
-				bytes.LastIndexByte(l[:i], '\'') != -1 && bytes.IndexByte(l[i:], '\'') != -1) {
+			if (bytes.LastIndexByte(l[:i], '"') == -1 || bytes.IndexByte(l[i:], '"') == -1) &&
+				(bytes.LastIndexByte(l[:i], '\'') == -1 || bytes.IndexByte(l[i:], '\'') == -1) {
 				// Strip data after comment symbol.
 				l = l[:i]
 			}

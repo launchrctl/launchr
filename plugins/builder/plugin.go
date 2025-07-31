@@ -23,9 +23,7 @@ func init() {
 }
 
 // Plugin is a [launchr.Plugin] to build launchr application.
-type Plugin struct {
-	app launchr.App
-}
+type Plugin struct{}
 
 // PluginInfo implements [launchr.Plugin] interface.
 func (p *Plugin) PluginInfo() launchr.PluginInfo {
@@ -51,8 +49,7 @@ type builderInput struct {
 
 // OnAppInit implements [launchr.OnAppInitPlugin] interface.
 func (p *Plugin) OnAppInit(app launchr.App) error {
-	p.app = app
-	actionYaml = bytes.Replace(actionYaml, []byte("DEFAULT_NAME_PLACEHOLDER"), []byte(p.app.Name()), 1)
+	actionYaml = bytes.Replace(actionYaml, []byte("DEFAULT_NAME_PLACEHOLDER"), []byte(app.Name()), 1)
 	return nil
 }
 
@@ -85,7 +82,7 @@ func (p *Plugin) DiscoverActions(_ context.Context) ([]*action.Action, error) {
 		}
 		flags.SetTerm(term)
 
-		return Execute(ctx, p.app.Streams(), &flags)
+		return Execute(ctx, &flags)
 	}))
 	return []*action.Action{a}, nil
 }
@@ -103,7 +100,7 @@ func (p *Plugin) Generate(config launchr.GenerateConfig) error {
 }
 
 // Execute runs launchr and executes build of launchr.
-func Execute(ctx context.Context, streams launchr.Streams, flags *builderInput) error {
+func Execute(ctx context.Context, flags *builderInput) error {
 	// Set build timeout.
 	timeout, err := time.ParseDuration(flags.timeout)
 	if err != nil {
@@ -156,7 +153,11 @@ func Execute(ctx context.Context, streams launchr.Streams, flags *builderInput) 
 	builder.WithTerm = flags.WithTerm
 
 	defer builder.Close()
-	return builder.Build(ctx, streams)
+	err = builder.Build(ctx)
+	if err == context.DeadlineExceeded {
+		err = fmt.Errorf("build timed out after %v", timeout)
+	}
+	return err
 }
 
 func corePkgInfo() UsePluginInfo {

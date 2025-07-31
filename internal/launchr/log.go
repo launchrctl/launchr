@@ -137,7 +137,7 @@ func (o *slogOpts) Level() LogLevel {
 
 func (o *slogOpts) SetLevel(l LogLevel) {
 	o.LogLevel = l
-	o.LevelVar.Set(o.mapLevel(l))
+	o.Set(o.mapLevel(l))
 }
 
 func (o *slogOpts) SetOutput(w io.Writer) {

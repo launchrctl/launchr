@@ -58,8 +58,11 @@ func (m *MaskingWriter) Write(p []byte) (n int, err error) {
 
 	// If no complete sensitive data was found, keep everything in the buf.
 	// Write the buffer periodically if the input slice `p` is less than its capacity.
-	if len(p) < cap(p) && m.buf.Len() > 0 {
-		// Write all remaining buffer content after masking.
+	// Check if we should flush based on content
+	shouldFlush := m.shouldFlush(p)
+
+	// If we should flush AND there's no potential sensitive data at the end, flush
+	if shouldFlush && !m.hasPotentialSensitiveData() {
 		if _, writeErr := m.w.Write(m.buf.Bytes()); writeErr != nil {
 			return 0, writeErr
 		}
@@ -68,6 +71,58 @@ func (m *MaskingWriter) Write(p []byte) (n int, err error) {
 	}
 
 	return len(p), nil
+}
+
+// shouldFlush determines if we should flush based on the content
+func (m *MaskingWriter) shouldFlush(p []byte) bool {
+	// Flush on newlines (most common for terminal output)
+	if bytes.Contains(p, []byte{'\n'}) {
+		return true
+	}
+
+	// Flush on other natural boundaries
+	if bytes.Contains(p, []byte{'\r'}) || bytes.Contains(p, []byte{'\t'}) {
+		return true
+	}
+
+	// Flush if buffer is getting large (safety valve)
+	if m.buf.Len() > 4096 {
+		return true
+	}
+
+	return false
+}
+
+// hasPotentialSensitiveData checks if buffer might contain partial sensitive data
+func (m *MaskingWriter) hasPotentialSensitiveData() bool {
+	if len(m.mask.strings) == 0 {
+		return false
+	}
+
+	bufData := m.buf.Bytes()
+	bufLen := len(bufData)
+
+	// Check if any sensitive string could be partially present at the end
+	for _, sensitive := range m.mask.strings {
+		sensitiveLen := len(sensitive)
+		if sensitiveLen <= 1 {
+			continue // Skip very short patterns
+		}
+
+		// Check if any prefix of the sensitive string matches the end of our buffer
+		maxCheck := sensitiveLen - 1
+		if maxCheck > bufLen {
+			maxCheck = bufLen
+		}
+
+		for i := 1; i <= maxCheck; i++ {
+			if bytes.HasSuffix(bufData, sensitive[:i]) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // Close flushes any remaining data in the buf.

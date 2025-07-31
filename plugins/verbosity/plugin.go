@@ -146,6 +146,8 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	logFormat := LogFormatPretty
 	if pflags.Changed("log-format") {
 		logFormat = logFormatStr
+	} else if launchr.EnvVarLogFormat.Get() != "" {
+		logFormat = LogFormat(launchr.EnvVarLogFormat.Get())
 	}
 
 	streams := app.Streams()

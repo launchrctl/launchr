@@ -3,6 +3,7 @@ package builder
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -57,13 +58,12 @@ type buildEnvironment struct {
 	action.WithLogger
 	action.WithTerm
 
-	wd      string
-	env     envVars
-	streams launchr.Streams
+	wd  string
+	env envVars
 }
 
-func newBuildEnvironment(streams launchr.Streams) (*buildEnvironment, error) {
-	tmpDir, err := launchr.MkdirTemp("build_")
+func newBuildEnvironment(b *Builder) (*buildEnvironment, error) {
+	tmpDir, err := launchr.MkdirTemp("build_", b.Debug)
 	if err != nil {
 		return nil, err
 	}
@@ -72,12 +72,13 @@ func newBuildEnvironment(streams launchr.Streams) (*buildEnvironment, error) {
 		return nil, err
 	}
 
-	env := envFromOs()
-	return &buildEnvironment{
-		wd:      tmpDir,
-		env:     env,
-		streams: streams,
-	}, nil
+	env := &buildEnvironment{
+		wd:  tmpDir,
+		env: envFromOs(),
+	}
+	env.SetLogger(b.Log())
+	env.SetTerm(b.Term())
+	return env, nil
 }
 
 func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptions) error {
@@ -107,18 +108,9 @@ func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptio
 	}
 
 	// Download core.
-	var coreRepl bool
-	for repl := range opts.ModReplace {
-		if strings.HasPrefix(opts.CorePkg.Path, repl) {
-			coreRepl = true
-			break
-		}
-	}
-	if !coreRepl {
-		err = env.execGoGet(ctx, opts.CorePkg.String())
-		if err != nil {
-			return err
-		}
+	err = env.execGoGet(ctx, opts.CorePkg.String())
+	if err != nil {
+		return err
 	}
 
 	// Download plugins.
@@ -126,7 +118,7 @@ nextPlugin:
 	for _, p := range opts.Plugins {
 		// Do not get plugins of module subpath.
 		for repl := range opts.ModReplace {
-			if strings.HasPrefix(p.Path, repl) {
+			if p.Path != repl && strings.HasPrefix(p.Path, repl) {
 				continue nextPlugin
 			}
 		}
@@ -148,23 +140,33 @@ func (env *buildEnvironment) NewCommand(ctx context.Context, command string, arg
 	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.Dir = env.wd
 	cmd.Env = env.env
-	cmd.Stdout = env.streams.Out()
-	cmd.Stderr = env.streams.Err()
+	cmd.Stdout = env.Term()
+	cmd.Stderr = env.Term()
 	return cmd
 }
 
 func (env *buildEnvironment) execGoMod(ctx context.Context, args ...string) error {
 	cmd := env.NewCommand(ctx, env.Go(), append([]string{"mod"}, args...)...)
+	// Don't output go output unless some verbosity is requested.
+	if env.Log().Level() != launchr.LogLevelDebug {
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+	}
 	return env.RunCmd(ctx, cmd)
 }
 
 func (env *buildEnvironment) execGoGet(ctx context.Context, args ...string) error {
 	cmd := env.NewCommand(ctx, env.Go(), append([]string{"get"}, args...)...)
+	// Don't output go output unless some verbosity is requested.
+	if env.Log().Level() == launchr.LogLevelDisabled {
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+	}
 	return env.RunCmd(ctx, cmd)
 }
 
 func (env *buildEnvironment) RunCmd(ctx context.Context, cmd *exec.Cmd) error {
-	env.Log().Debug("executing shell", "cmd", cmd)
+	env.Log().Debug("executing shell", "cmd", cmd, "pwd", cmd.Dir)
 	err := cmd.Start()
 	if err != nil {
 		return err

@@ -6,10 +6,15 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 )
+
+type shellContext struct {
+	Shell  string
+	Env    []string
+	Script string
+}
 
 type runtimeShell struct {
 	WithLogger
@@ -25,9 +30,6 @@ func (r *runtimeShell) Clone() Runtime {
 }
 
 func (r *runtimeShell) Init(_ context.Context, _ *Action) (err error) {
-	if runtime.GOOS == "windows" {
-		return fmt.Errorf("shell runtime is not supported in Windows")
-	}
 	return nil
 }
 
@@ -36,15 +38,16 @@ func (r *runtimeShell) Execute(ctx context.Context, a *Action) (err error) {
 	log.Debug("starting execution of the action")
 
 	streams := a.Input().Streams()
-	rt := a.RuntimeDef()
-	defaultShell := os.Getenv("SHELL")
-	if defaultShell == "" {
-		defaultShell = "/bin/bash"
+	shctx, err := createRTShellBashContext(a)
+	if err != nil {
+		return err
 	}
+	log.Debug("using shell", "shell", shctx.Shell, "env", shctx.Env, "script", shctx.Script)
 
-	cmd := exec.CommandContext(ctx, defaultShell, "-l", "-c", rt.Shell.Script) //nolint:gosec // G204 user script is expected.
+	// Execute the script file directly
+	cmd := exec.CommandContext(ctx, shctx.Shell, shctx.Script) //nolint:gosec // G204 user script is expected.
 	cmd.Dir = a.WorkDir()
-	cmd.Env = append(os.Environ(), rt.Shell.Env...)
+	cmd.Env = shctx.Env
 	cmd.Stdout = streams.Out()
 	cmd.Stderr = streams.Err()
 	// Do no attach stdin, as it may not work as expected.
@@ -53,6 +56,7 @@ func (r *runtimeShell) Execute(ctx context.Context, a *Action) (err error) {
 	if err != nil {
 		return err
 	}
+	log.Debug("started process", "pid", cmd.Process.Pid)
 
 	// If we attached with TTY, all signals will be processed by a child process.
 	sigc := launchr.NotifySignals()
@@ -72,7 +76,7 @@ func (r *runtimeShell) Execute(ctx context.Context, a *Action) (err error) {
 			exitCode = 130
 			msg = fmt.Sprintf("action %q was interrupted, finished with exit code %d", a.ID, exitCode)
 		}
-		log.Info("action finished with the exit code", "exit_code", exitCode)
+		log.Info("action finished with exit code", "exit_code", exitCode)
 		return launchr.NewExitError(exitCode, msg)
 	}
 	return cmdErr
