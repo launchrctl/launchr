@@ -1,0 +1,156 @@
+# =============================================================================
+# Launchr Sensitive Value Masking and Security Test Suite
+# =============================================================================
+#
+# This comprehensive test file validates the Launchr tool's ability to:
+# 1. Detect and mask sensitive values in various output streams
+# 2. Protect sensitive data across different output methods
+# 3. Maintain security while preserving functionality
+# 4. Handle partial secret matching and variable substitution
+#
+# Test Structure:
+# - Tests baseline behavior without secret masking
+# - Tests complete secret masking with exact matches
+# - Tests partial secret masking with substring matches
+# - Validates masking across stdout, stderr, and log outputs
+# - Tests different output methods (terminal, fmt, streams)
+# =============================================================================
+
+# Test 1: Baseline Behavior - No Secret Masking
+# -----------------------------------------------------------------------------
+# Execute plugin with sensitive value but no environment secret configured
+# This establishes baseline behavior where no masking should occur
+exec launchr testplugin:sensitive -v 'MySuper SecretValue'
+
+# Validate terminal output shows unmasked value
+# Without secret configuration, all outputs should display the actual value
+stdout '^terminal output: MySuper SecretValue$'
+
+# Validate log output shows unmasked value with trailing whitespace
+# Log entries may include additional formatting or timestamp information
+stdout '.+ log output: MySuper SecretValue\s+'
+
+# Validate fmt.Print output shows unmasked value
+# Direct fmt.Print calls should display the raw value without modification
+stdout '^fmt print: MySuper SecretValue$'
+
+# Validate fmt stdout stream output shows unmasked value
+# Stdout stream writes should display the raw value without modification
+stdout '^fmt stdout streams print: MySuper SecretValue$'
+
+# Validate split output shows unmasked value
+# Split or processed output should display the raw value without modification
+stdout '^split output: MySuper SecretValue$'
+
+# Validate fmt stderr stream output shows unmasked value
+# Stderr stream writes should display the raw value without modification
+stderr '^fmt stderr streams print: MySuper SecretValue$'
+
+# Test 2: Complete Secret Masking - Exact Match
+# -----------------------------------------------------------------------------
+# Configure environment variable with exact secret value for masking
+# The TEST_SECRET environment variable defines the sensitive value to mask
+env TEST_SECRET='MySuper SecretValue'
+
+# Execute plugin with the same value that matches the environment secret
+# This should trigger complete masking of the sensitive value
+exec launchr testplugin:sensitive -v 'MySuper SecretValue'
+
+# Validate terminal output shows completely masked value
+# The entire secret should be replaced with asterisks for security
+stdout '^terminal output: \*\*\*\*$'
+
+# Validate log output shows completely masked value with trailing whitespace
+# Log entries should mask the secret while preserving formatting
+stdout '.+ log output: \*\*\*\*\s+'
+
+# Validate fmt.Print output shows unmasked value
+# Direct fmt.Print calls may bypass the masking system for internal use
+stdout '^fmt print: MySuper SecretValue$'
+
+# Validate fmt stdout stream output shows completely masked value
+# Stdout stream writes should be masked for security
+stdout '^fmt stdout streams print: \*\*\*\*$'
+
+# Validate split output shows completely masked value
+# Split or processed output should be masked for security
+stdout '^split output: \*\*\*\*$'
+
+# Validate fmt stderr stream output shows completely masked value
+# Stderr stream writes should be masked for security
+stderr '^fmt stderr streams print: \*\*\*\*$'
+
+# Test 3: Partial Secret Masking - Substring Match
+# -----------------------------------------------------------------------------
+# Configure environment variable with partial secret value for substring masking
+# The TEST_SECRET contains only a portion of the full sensitive value
+env TEST_SECRET='Super Secret'
+
+# Execute plugin with value containing the partial secret as substring
+# This should trigger partial masking where only the matching portion is masked
+exec launchr testplugin:sensitive -v 'MySuper SecretValue'
+
+# Validate terminal output shows partially masked value
+# Only the matching substring should be replaced with asterisks
+stdout '^terminal output: My\*\*\*\*Value$'
+
+# Validate log output shows partially masked value with trailing whitespace
+# Log entries should mask only the matching substring while preserving format
+stdout '.+ log output: My\*\*\*\*Value\s+'
+
+# Validate fmt.Print output shows unmasked value
+# Direct fmt.Print calls may bypass the masking system for internal use
+stdout '^fmt print: MySuper SecretValue$'
+
+# Validate fmt stdout stream output shows partially masked value
+# Stdout stream writes should mask only the matching substring
+stdout '^fmt stdout streams print: My\*\*\*\*Value$'
+
+# Validate split output shows partially masked value
+# Split or processed output should mask only the matching substring
+stdout '^split output: My\*\*\*\*Value$'
+
+# Validate fmt stderr stream output shows partially masked value
+# Stderr stream writes should mask only the matching substring
+stderr '^fmt stderr streams print: My\*\*\*\*Value$'
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Secret Detection and Masking:
+# 1. Exact matches result in complete masking with asterisks
+# 2. Partial matches result in substring masking with asterisks
+# 3. Masking applies to most output streams for security
+# 4. Some internal outputs (fmt.Print) may bypass masking for debugging
+#
+# Output Stream Behavior:
+# - Terminal output: Masked according to secret configuration
+# - Log output: Masked with potential additional formatting
+# - Fmt print: Typically unmasked for internal/debug purposes
+# - Stdout streams: Masked for security
+# - Split output: Masked for security
+# - Stderr streams: Masked for security
+#
+# Security Features:
+# - Prevents accidental exposure of sensitive values in logs
+# - Maintains functionality while protecting confidential data
+# - Supports both complete and partial secret masking
+# - Applies masking across multiple output channels
+# - Uses asterisks as universal masking character
+#
+# Masking Algorithm:
+# - Exact match: Replace entire value with ****
+# - Substring match: Replace only matching portion with ****
+# - Case-sensitive matching for precise secret detection
+# - Preserves non-sensitive portions of the output
+# - Maintains output structure and formatting
+#
+# Environment Configuration:
+# - TEST_SECRET environment variable defines sensitive values
+# - Supports multiple secret configurations simultaneously
+# - Runtime configuration without code changes
+# - Flexible secret definition for different scenarios
+# - Environment-based security policy enforcement
+#
+# =============================================================================

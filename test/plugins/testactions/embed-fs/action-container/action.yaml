@@ -1,0 +1,9 @@
+action:
+  title: embed action
+
+runtime:
+  type: container
+  image: alpine:latest
+  command:
+    - sh
+    - /action/main.sh

@@ -1,0 +1,159 @@
+# =============================================================================
+# Launchr Action Option Shorthand Conflict Test Suite
+# =============================================================================
+#
+# This test file validates the Launchr tool's ability to:
+# 1. Handle duplicate shorthand definitions within a single action
+# 2. Resolve shorthand conflicts with predictable behavior
+# 3. Support mixed usage of shorthand and long-form options
+# 4. Process multiple options with the same shorthand correctly
+# 5. Maintain independent processing of different options
+# 6. Apply shorthand mapping consistently across option combinations
+#
+# Test Focus:
+# - Shorthand conflict resolution behavior
+# - Priority handling when multiple options share shorthand
+# - Mixed shorthand/long-form option processing
+# - Option independence with conflicting shorthands
+# - Predictable shorthand mapping behavior
+# =============================================================================
+
+# Test 1: Shorthand Usage with Conflict (First Option Priority)
+# -----------------------------------------------------------------------------
+# Execute with shorthand that maps to multiple options
+exec launchr test-print-input:shorthand -i 73
+
+# Validate shorthand maps to first defined option:
+# Should process the first option with matching shorthand
+stdout '^optInteger: 73 int true$'
+
+# Validate second option remains unset:
+# Should show second option as nil since shorthand didn't map to it
+stdout '^optIntegerDup: <nil> <nil> false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 2: Shorthand with Long-Form Override
+# -----------------------------------------------------------------------------
+# Execute with shorthand and explicit long-form for same option
+exec launchr test-print-input:shorthand -i 73 --optInteger=37
+
+# Validate long-form takes precedence:
+# Should use the long-form value (37) over shorthand value (73)
+stdout '^optInteger: 37 int true$'
+
+# Validate second option remains unset:
+# Should show second option as nil since it wasn't specified
+stdout '^optIntegerDup: <nil> <nil> false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 3: Shorthand with Different Long-Form Option
+# -----------------------------------------------------------------------------
+# Execute with shorthand and long-form for different option
+exec launchr test-print-input:shorthand -i 73 --optIntegerDup=37
+
+# Validate shorthand maps to first option:
+# Should process first option using shorthand value
+stdout '^optInteger: 73 int true$'
+
+# Validate second option uses long-form:
+# Should process second option using explicit long-form value
+stdout '^optIntegerDup: 37 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Test Data Files - Action Configuration with Duplicate Shorthand
+# =============================================================================
+
+# Shorthand Conflict Action
+-- test-print-input/actions/shorthand/action.yaml --
+# Plugin action demonstrating shorthand conflict handling
+# Shows behavior when multiple options define the same shorthand
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input - Option shorthand    # Human-readable action name
+
+  options:
+    # First option with shorthand 'i'
+    - name: optInteger                     # Option identifier
+      shorthand: i                         # Shorthand alias (will have priority)
+      title: Option Integer                # Human-readable option name
+      description: This is an optional integer option    # Help text
+      type: integer                        # Explicit integer type
+
+    # Second option with same shorthand 'i' (potential conflict)
+    - name: optIntegerDup                  # Different option identifier
+      shorthand: i                         # Same shorthand alias (conflict)
+      title: Option Integer                # Human-readable option name
+      description: This is an optional integer option    # Help text
+      type: integer                        # Explicit integer type
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Shorthand Conflict Resolution:
+# 1. First-defined option gets priority for shorthand mapping
+# 2. Subsequent options with same shorthand are ignored for shorthand usage
+# 3. Long-form option names always work regardless of shorthand conflicts
+# 4. No error is generated for duplicate shorthand definitions
+# 5. Behavior is predictable and deterministic based on definition order
+#
+# Priority Rules:
+# - Declaration order determines shorthand priority
+# - First option in options array gets the shorthand
+# - Later options with same shorthand lose shorthand access
+# - Long-form names remain unaffected by shorthand conflicts
+#
+# Option Independence:
+# - Each option maintains its own value and state
+# - Shorthand conflicts don't affect option functionality
+# - Long-form access works for all options regardless of shorthand
+# - Options can be set independently using long-form names
+#
+# Command-Line Processing:
+# - Shorthand -i maps to first option with shorthand 'i'
+# - Long-form --optInteger always maps to optInteger
+# - Long-form --optIntegerDup always maps to optIntegerDup
+# - Multiple flags can be used in same command
+#
+# Value Precedence:
+# - Later flags override earlier flags for same option
+# - Long-form and shorthand can target same option
+# - Last specified value wins for any given option
+# - Different options maintain independent values
+#
+# Error Handling:
+# - No errors for duplicate shorthand definitions
+# - No warnings about shorthand conflicts
+# - Silent priority-based resolution
+# - Normal validation applies to all options
+#
+# Design Implications:
+# - Shorthand conflicts are handled gracefully
+# - Predictable behavior based on simple rules
+# - No complex conflict resolution needed
+# - Maintains backward compatibility
+# - Encourages unique shorthand usage in practice
+#
+# Best Practices:
+# - Use unique shorthand characters per action
+# - Document shorthand conflicts if intentional
+# - Prefer long-form names for clarity
+# - Test shorthand behavior when conflicts exist
+# - Consider shorthand assignment carefully in action design
+#
+# Use Cases:
+# - Graceful handling of configuration errors
+# - Backward compatibility when adding new options
+# - Simple conflict resolution without user intervention
+# - Predictable behavior for automated tools
+# - Clear precedence rules for option processing
+#
+# =============================================================================

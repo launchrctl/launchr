@@ -1,0 +1,164 @@
+name: 📦 [Reusable] Multi-Platform Test Suite
+on:
+  workflow_call:
+    inputs:
+      use-docker-sidecar:
+        description: '🐳 Enable Docker sidecar for remote testing environments'
+        required: false
+        type: boolean
+        default: false
+      use-sidecar-remote-share:
+        description: '📁 Enable remote file sharing in Docker sidecar'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  client-ssh-key:
+    name: 🔑 Generate SSH Key
+    runs-on: ubuntu-latest
+    outputs:
+      private-key: ${{ steps.generate-key.outputs.private-key }}
+      public-key: ${{ steps.generate-key.outputs.public-key }}
+    steps:
+      - name: 🔐 Generate ED25519 SSH key pair
+        id: generate-key
+        run: |
+          echo "🔑 Generating SSH key pair..."
+          ssh-keygen -t ed25519 -N "" -f ./id_ed25519
+
+          echo "📤 Exporting private SSH key"
+          {
+            echo "private-key<<EOF"
+            cat ./id_ed25519
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "public-key=$(cat ./id_ed25519.pub)" >> $GITHUB_OUTPUT
+          echo "✅ SSH key pair generated successfully!"
+
+  linux-sidecar:
+    name: 🐳 Linux Docker Sidecar
+    needs: [ client-ssh-key ]
+    runs-on: ubuntu-latest
+    if: ${{ inputs.use-docker-sidecar }}
+    steps:
+      - name: 🚀 Run Linux Docker sidecar
+        uses: lexbritvin/docker-sidecar-action/run-sidecar@main
+        with:
+          ssh-server-authorized-keys: ${{ needs.client-ssh-key.outputs.public-key }}
+          use-bore: 'true'
+
+      - name: ⏳ Wait for related jobs
+        uses: lexbritvin/wait-action@v1
+        with:
+          condition-type: 'job'
+          job-name: '/\(sidecar\)$/'
+          timeout-seconds: 1800
+          poll-interval-seconds: 30
+
+  test:
+    name: 🧪 Test ${{ matrix.name }} ${{ matrix.needs-sidecar && '(sidecar)' }}
+    strategy:
+      matrix:
+        include:
+          - name: 🐧 Linux (amd64)
+            os: ubuntu-latest
+          - name: 🐧 Linux (arm64)
+            os: ubuntu-24.04-arm
+          - name: 🍎 MacOS (amd64)
+            os: macos-13
+          - name: 🍎 MacOS (arm64)
+            os: macos-latest
+            needs-sidecar: true
+          - name: 🖥️ Windows (amd64)
+            os: windows-latest
+          - name: 🖥️ Windows (arm64)
+            os: windows-11-arm
+            needs-sidecar: true
+    runs-on: ${{ matrix.os }}
+    needs: [ client-ssh-key ]
+    continue-on-error: ${{ matrix.continue-on-error || false }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📊 OS Info
+        uses: lexbritvin/os-info-action@v1
+
+      - name: 🏗️ Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: 📦 Prepare dependencies
+        run: |
+          echo "📥 Downloading Go modules..."
+          go mod download
+          go install github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt@latest
+          echo "✅ Dependencies downloaded successfully!"
+
+      - name: 🐳 Install Local Docker
+        uses: lexbritvin/setup-docker-action@main
+        if: ${{ !matrix.needs-sidecar && runner.os != 'Linux' }}
+
+      # Set up the Docker sidecar environment
+      - name: 🐳 Set up Remote Docker
+        id: docker-setup
+        uses: lexbritvin/docker-sidecar-action/setup-remote-docker@main
+        if: ${{ matrix.needs-sidecar && inputs.use-docker-sidecar }}
+        with:
+          private-key: ${{ needs.client-ssh-key.outputs.private-key }}
+          use-remote-share: ${{ inputs.use-sidecar-remote-share }}
+
+      - name: 🧪 Go Test
+        id: go-tests
+        run: |
+          echo "🚀 Starting Go tests..."
+          export GOTMPDIR="$(pwd)/.gotmp"
+          mkdir -p $GOTMPDIR
+          echo "📁 Using temp directory: $GOTMPDIR"
+          
+          echo "Make sure the binary can be built, warm up build cache..."
+          make build
+          
+          echo "🔍 Running tests..."
+          set -euo pipefail
+          go test -json -v ./... 2>&1 | tee .gotmp/gotest.log | gotestfmt -hide all
+          
+          echo "✅ All tests completed successfully!"
+
+      # Upload the original go test log as an artifact for later review.
+      - name: ⬆️ Upload test log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-log-${{ matrix.os }}
+          path: .gotmp/gotest.log
+          retention-days: 3
+          if-no-files-found: error
+
+  lint:
+    name: 🧹 Lint & Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🏗️ Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: 🔍 Lint Code
+        run: |
+          echo "🔧 Installing linter..."
+          make .install-lint
+          
+          echo "🧹 Running code linting..."
+          bin/golangci-lint run --timeout=5m ./...
+          
+          echo "✅ Code linting completed successfully!"
