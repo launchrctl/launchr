@@ -68,7 +68,8 @@ func CmdTxtProc(ts *testscript.TestScript, neg bool, args []string) {
 	var content string
 	var err error
 
-	if inputFile == "stdout" {
+	switch inputFile {
+	case "stdout":
 		// Special case: read from testscript's stdout buffer
 		content = ts.Getenv("stdout")
 		if content == "" {
@@ -76,13 +77,13 @@ func CmdTxtProc(ts *testscript.TestScript, neg bool, args []string) {
 			// This is a workaround since testscript doesn't expose stdout directly
 			ts.Fatalf("txtproc: no stdout content available. Make sure to run 'exec' command before using txtproc with stdout")
 		}
-	} else if inputFile == "stderr" {
+	case "stderr":
 		// Special case: read from testscript's stderr buffer
 		content = ts.Getenv("stderr")
 		if content == "" {
 			ts.Fatalf("txtproc: no stderr content available. Make sure to run 'exec' command before using txtproc with stderr")
 		}
-	} else {
+	default:
 		// Regular file
 		inputPath := ts.MkAbs(inputFile)
 		// #nosec G304 - File path is validated by testscript framework
