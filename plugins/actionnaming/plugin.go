@@ -40,7 +40,7 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	// Load naming configuration.
 	var launchrConfig launchrCfg
 	// @todo refactor yaml property position.
-	err := cfg.Get("launchrctl", &launchrConfig)
+	err := cfg.Get(launchr.ConfigKey, &launchrConfig)
 	if err != nil {
 		return err
 	}

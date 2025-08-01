@@ -539,7 +539,7 @@ func WithDefaultRuntime(cfg launchr.Config) DecorateWithFn {
 		DefaultRuntime string `yaml:"default_runtime"`
 	}
 	var rtConfig configContainer
-	err := cfg.Get("runtime.container", &rtConfig)
+	err := cfg.Get(fmt.Sprintf("%s.runtime.container", launchr.ConfigKey), &rtConfig)
 	if err != nil {
 		launchr.Term().Warning().Printfln("configuration file field %q is malformed", "container")
 	}
