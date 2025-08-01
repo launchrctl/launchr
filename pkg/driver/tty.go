@@ -2,12 +2,7 @@ package driver
 
 import (
 	"context"
-	"os"
-	gosignal "os/signal"
-	"runtime"
 	"time"
-
-	"github.com/moby/sys/signal"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 )
@@ -74,35 +69,5 @@ func (t *TtySizeMonitor) Start(ctx context.Context, streams launchr.Streams) {
 		return
 	}
 	initTtySize(ctx, streams, t.resizeFn)
-	if runtime.GOOS == "windows" {
-		go func() {
-			prevH, prevW := streams.Out().GetTtySize()
-			for {
-				h, w := streams.Out().GetTtySize()
-
-				if prevW != w || prevH != h {
-					err := resizeTty(ctx, streams, t.resizeFn)
-					if err != nil {
-						// Stop monitoring
-						return
-					}
-				}
-				prevH = h
-				prevW = w
-			}
-		}()
-	} else {
-		sigchan := make(chan os.Signal, 1)
-		gosignal.Notify(sigchan, signal.SIGWINCH)
-		go func() {
-			defer gosignal.Stop(sigchan)
-			for range sigchan {
-				err := resizeTty(ctx, streams, t.resizeFn)
-				if err != nil {
-					// Stop monitoring
-					return
-				}
-			}
-		}()
-	}
+	watchTtySize(ctx, streams, t.resizeFn)
 }
