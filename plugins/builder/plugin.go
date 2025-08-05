@@ -70,16 +70,8 @@ func (p *Plugin) DiscoverActions(_ context.Context) ([]*action.Action, error) {
 			nocache: input.Opt("no-cache").(bool),
 		}
 
-		log := launchr.Log()
-		if rt, ok := a.Runtime().(action.RuntimeLoggerAware); ok {
-			log = rt.LogWith()
-		}
+		log, term := action.GetLoggerAndTerminal(a)
 		flags.SetLogger(log)
-
-		term := launchr.Term()
-		if rt, ok := a.Runtime().(action.RuntimeTermAware); ok {
-			term = rt.Term()
-		}
 		flags.SetTerm(term)
 
 		return Execute(ctx, &flags)

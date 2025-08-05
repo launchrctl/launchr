@@ -211,3 +211,20 @@ func exportScriptToFile(script string) (string, error) {
 
 	return path, nil
 }
+
+// GetLoggerAndTerminal returns action logger and terminal if any.
+func GetLoggerAndTerminal(a *Action) (log *launchr.Logger, term *launchr.Terminal) {
+	// Fallback to default launchr logger.
+	log = launchr.Log()
+	if rt, ok := a.Runtime().(RuntimeLoggerAware); ok {
+		log = rt.LogWith()
+	}
+
+	// Fallback to default launchr term.
+	term = launchr.Term()
+	if rt, ok := a.Runtime().(RuntimeTermAware); ok {
+		term = rt.Term()
+	}
+
+	return
+}
