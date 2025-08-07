@@ -17,8 +17,9 @@ To change the default container runtime:
 
 ```yaml
 # ...
-container:
-  runtime: kubernetes
+runtime:
+  container:
+    default_runtime: kubernetes
 # ...
 ```
 

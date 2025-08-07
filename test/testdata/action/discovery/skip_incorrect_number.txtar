@@ -1,0 +1,96 @@
+# =============================================================================
+# Launchr Action Option Type Validation Test Suite - Number Default Mismatch
+# =============================================================================
+#
+# This test file validates the Launchr tool's ability to:
+# 1. Detect type mismatches between number option declarations and default values
+# 2. Provide clear error messages for number option configuration errors
+# 3. Skip actions with invalid option configurations
+# 4. Report specific line and column information for validation errors
+# 5. Handle locale-specific number formatting issues
+#
+# Test Focus:
+# - Number (float64) option type validation
+# - Default value type checking for floating-point types
+# - Locale-specific number format validation (comma vs. dot decimal separators)
+# - Error message formatting and content
+# - Action skipping behavior for invalid configurations
+# =============================================================================
+
+# Test 1: Number Option Default Value Type Validation
+# -----------------------------------------------------------------------------
+# Execute action with incorrectly formatted default value for number option
+# This should trigger validation error and skip the action
+exec launchr opt-number-incorrect-default
+
+# Validate action skip notification:
+# Action should be skipped due to type validation failure
+stdout 'Action "opt-number-incorrect-default" was skipped:'
+
+# Validate specific type mismatch error details:
+# Should identify the type conflict between string and float64
+stdout 'given value type \(string\) and expected type \(float64\) mismatch, line 13, col 16'
+
+# Validate clean execution (no error output to stderr)
+! stderr .
+
+# =============================================================================
+# Test Data Files - Action Configuration with Type Mismatch
+# =============================================================================
+
+# Number Option with Invalid Locale-Formatted Default
+-- actions/opt-number-incorrect-default/action.yaml --
+# Plugin action demonstrating number option type validation failure
+# This configuration intentionally contains a locale-specific formatting error
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option Number    # Human-readable action name
+
+  options:
+    - name: optNumber                      # Option identifier
+      title: Option number                 # Human-readable option name
+      description: This is an optional float option    # Help text
+      type: number                         # Expected type: number (float64)
+      default: 37,73                       # ERROR: Comma as decimal separator
+      # Valid number defaults would be: 37.73, -10.5, 0.0, 42
+      # Invalid: "37,73" (European format), "abc", true, or non-numeric strings
+      # Note: YAML/JSON standard requires dot (.) as decimal separator
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Type Validation Rules:
+# 1. Option default values must match declared option types
+# 2. Number options accept only numeric values with dot decimal separator
+# 3. Locale-specific formatting (comma separators) is not supported
+# 4. Type mismatches should be reported with specific location information
+# 5. Actions with invalid option configurations should be skipped
+#
+# Error Message Format:
+# - Action name and skip notification with colon
+# - Specific type mismatch description (string vs float64)
+# - Line and column number for precise error location
+# - Clear indication of expected vs. actual types
+#
+# Validation Behavior:
+# - Actions are validated before execution
+# - Invalid actions are skipped rather than causing runtime errors
+# - Error messages provide enough detail for debugging
+# - Process continues normally after skipping invalid actions
+#
+# Number Format Requirements:
+# - Number options require standard JSON/YAML numeric format
+# - Decimal separator must be dot (.) not comma (,)
+# - Scientific notation (1.23e-4) should be supported
+# - Locale-specific formatting is not automatically converted
+# - Type checking is strict and follows JSON/YAML standards
+#
+# Common Format Issues:
+# - European decimal format: "37,73" → should be "37.73"
+# - Thousand separators: "1,000.50" → should be "1000.50"
+# - Currency symbols: "$37.73" → should be "37.73"
+# - Percentage format: "37%" → should be "0.37" or "37"
+#
+# =============================================================================

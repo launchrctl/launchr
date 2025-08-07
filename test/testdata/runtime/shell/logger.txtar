@@ -1,0 +1,107 @@
+# =============================================================================
+# Launchr Log Format and Level Propagation Test
+# =============================================================================
+#
+# This test validates the Launchr tool's ability to:
+# 1. Propagate log format settings to subprocess actions
+# 2. Propagate log level settings to subprocess actions
+# 3. Handle mixed log formats within single execution
+# 4. Apply quiet mode to suppress all subprocess output
+# 5. Maintain consistent logging behavior across action boundaries
+#
+# Test Focus:
+# - Log configuration inheritance by subprocess actions
+# - Format propagation (plain and JSON) to nested calls
+# - Level propagation and filtering in subprocess execution
+# - Quiet mode effect on subprocess logging
+# - Shutdown cleanup logging across action hierarchy
+# =============================================================================
+
+# Test Log Configuration Propagation
+# -----------------------------------------------------------------------------
+# Execute action with plain format and DEBUG level
+# Subprocess actions should inherit these settings and display all log levels
+exec launchr --log-format=plain --log-level=DEBUG test-shell:log-levels
+
+# Validate subprocess inherits plain format and shows all levels
+stdout '^time=.* level=DEBUG msg="this is DEBUG log"$'
+stdout '^time=.* level=INFO msg="this is INFO log"$'
+stdout '^time=.* level=WARN msg="this is WARN log"$'
+stdout '^time=.* level=ERROR msg="this is ERROR log"$'
+
+# Validate subprocess can override format to JSON while maintaining level
+stdout '^{"time":".+","level":"ERROR","msg":"log output: MySensitiveValue"}$'
+
+# Validate shutdown cleanup appears for each subprocess
+stdout -count=2 '^time=.* level=DEBUG msg="shutdown cleanup"'
+
+# Test Quiet Mode Propagation
+# -----------------------------------------------------------------------------
+# Execute action in quiet mode
+# All subprocess output should be suppressed
+exec launchr -q test-shell:log-levels
+
+# Validate that subprocess outputs are suppressed
+! stdout .
+! stderr .
+
+# =============================================================================
+# Test Data Files - Log Propagation Action Configuration
+# =============================================================================
+
+# Shell Action that Spawns Subprocess Actions
+-- test-shell/actions/log-levels/action.yaml --
+# Action demonstrating log configuration propagation to subprocess actions
+# Tests inheritance and override of log format and level settings
+action:
+  title: shell action - log levels       # Human-readable action name
+
+# Shell Runtime Configuration:
+# Executes subprocess actions to test log configuration propagation
+runtime:
+  type: shell                            # Shell execution type
+  script: |                              # Inline shell script
+    # Subprocess inherits parent log format and level
+    # Should display logs according to parent configuration
+    $$CBIN testplugin:log-levels
+
+    # Subprocess overrides format to JSON but inherits level
+    # Tests selective override of log configuration
+    $$CBIN testplugin:sensitive --log-format=json --log-level=ERROR 'MySensitiveValue'
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Log Configuration Inheritance:
+# 1. Subprocess actions inherit parent log format by default
+# 2. Subprocess actions inherit parent log level by default
+# 3. Subprocess actions can override specific log settings
+# 4. Overrides affect only that subprocess, not siblings
+# 5. Inheritance ensures consistent logging behavior
+#
+# Format Propagation:
+# - Plain format propagates to subprocess unless overridden
+# - JSON format can be selectively applied to specific subprocess
+# - Mixed formats within single execution are supported
+# - Format inheritance maintains output consistency
+#
+# Level Propagation:
+# - DEBUG level shows all subprocess log messages
+# - Level filtering applies consistently to all subprocess
+# - Subprocess can override level for specific needs
+# - Shutdown cleanup messages respect parent level settings
+#
+# Quiet Mode Propagation:
+# - Quiet mode suppresses all subprocess output
+# - Propagation is absolute - no subprocess output appears
+# - Overrides any log format or level configuration
+# - Provides complete silence across action hierarchy
+#
+# Subprocess Action Behavior:
+# - Each subprocess maintains separate log context
+# - Shutdown cleanup occurs for each subprocess
+# - Multiple subprocess calls generate multiple cleanup messages
+# - Log settings are inherited at subprocess spawn time
+#
+# =============================================================================

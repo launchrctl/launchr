@@ -1,0 +1,125 @@
+# =============================================================================
+# Launchr Plugin Integration and Generate Test Suite
+# =============================================================================
+#
+# This comprehensive test file validates the Launchr tool's ability to:
+# 1. Build binaries with external plugin dependencies from public repositories
+# 2. Integrate local plugins with version replacement and path mapping
+# 3. Generate proper version output including plugin information
+# 4. Create functional actions from plugin-generated code
+# 5. Handle mixed plugin scenarios (external + local) correctly
+#
+# Test Structure:
+# - Tests plugin integration during binary building
+# - Tests version reporting with plugin information
+# - Tests generate functionality
+# - Validates plugin replacement and version tracking
+# =============================================================================
+
+# Setup Phase: Environment Configuration
+# -----------------------------------------------------------------------------
+# Configure application metadata for testing
+# These variables define the test application identity and version information
+env APP_NAME=launchr
+env APP_VERSION='v0.0.0-testscript'
+env APP_BUILT_WITH='testscript v0.0.0'
+
+# Define validation patterns for architecture strings
+# This regex validates the expected architecture format in version output
+env ARCH_RGX=[a-z0-9]+/[a-z0-9]+
+
+# Compute expected version strings for validation
+# This creates the expected short version format for comparison
+env APP_VERSION_SHORT=$APP_NAME' version '${APP_VERSION@R}' '$ARCH_RGX
+
+# Configure build environment with real home for caching optimization
+# Reuse actual home directory to enable build caching and dependency resolution
+env HOME=$REAL_HOME
+
+# Define expected version strings for core replacement validation
+# These patterns validate that core replacement information is properly tracked
+env APP_VERSION_CORE='Core version: v.*\nCore replace: '${CORE_PKG@R}' v.* => '${REPO_PATH@R}' \(devel\)'
+env APP_VERSION_FULL='launchr version dev '$ARCH_RGX'\nBuilt with '${APP_VERSION_SHORT}'\n'$APP_VERSION_CORE
+
+# Plugin Configuration
+# -----------------------------------------------------------------------------
+# Configure an external plugin from a public repository.
+# This plugin is intentionally not a Launchr plugin, but it is acceptable for integration testing.
+# We include it to verify that public URLs are supported.
+# We avoid using a real plugin, as it may not be compatible with the current version.
+env APP_PLUGIN_EXTERNAL=golang.org/x/example/hello/reverse@master
+
+# Configure local plugin with version and replacement path
+# This tests local plugin integration with path mapping functionality
+env APP_PLUGIN_LOCAL=example.com/genaction@v1.1.1
+env APP_PLUGIN_LOCAL_PATH=$REPO_PATH/test/plugins/genaction
+
+# Test 1: Plugin Integration During Binary Building
+# -----------------------------------------------------------------------------
+# Verify target binary does not exist before build
+! exists $APP_NAME
+
+# Execute build with mixed plugin configuration
+# This command integrates both external and local plugins with core replacement
+exec launchr build -r $CORE_PKG=$REPO_PATH -p $APP_PLUGIN_EXTERNAL -p $APP_PLUGIN_LOCAL -r $APP_PLUGIN_LOCAL=$APP_PLUGIN_LOCAL_PATH
+
+# Validate clean build execution (no error output)
+! stderr .
+
+# Verify target binary was successfully created
+exists $APP_NAME
+
+# Test 2: Version Reporting with Plugin Information
+# -----------------------------------------------------------------------------
+# Execute version command on plugin-integrated binary
+exec ./$APP_NAME --version
+
+# Validate version output includes complete plugin information
+# Expected format includes core version, plugin list, and replacement details
+stdout ^$APP_VERSION_FULL'\nPlugins:\n  - example\.com/genaction v1\.1\.1\n  - example\.com/genaction v1\.1\.1 => '$REPO_PATH'/test/plugins/genaction \(devel\)\n\z$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 3: Generated Action Functionality
+# -----------------------------------------------------------------------------
+# Execute the generated action from the integrated plugin
+# This tests that plugin-generated actions are properly functional
+exec ./$APP_NAME genaction:example
+
+# Validate the action produces expected output
+# The plugin should generate a working action that outputs the expected message
+stdout 'hello world'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Plugin Integration Rules:
+# 1. External plugins are resolved from public repositories
+# 2. Local plugins use path replacement for development workflow
+# 3. Both plugin types can be integrated in the same build
+# 4. Plugin dependencies are properly resolved and linked
+# 5. Version information tracks all plugin sources and replacements
+#
+# Version Output Format:
+# - Core version with replacement information
+# - Plugin list with version numbers
+# - Replacement paths for local plugins marked as (devel)
+# - Clean formatting with proper line breaks and indentation
+#
+# Generate Behavior:
+# - Generation is done during build process
+# - Plugin-generated actions become available as commands
+# - Actions execute with expected functionality
+# - Clean output without errors or warnings
+#
+# Build Process:
+# - Validates plugin compatibility before integration
+# - Maintains proper dependency resolution
+# - Creates fully functional binary with plugins
+#
+# =============================================================================

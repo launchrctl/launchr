@@ -1,0 +1,997 @@
+# =============================================================================
+# Launchr Action Options Type Validation Test Suite
+# =============================================================================
+#
+# This test file validates the Launchr tool's ability to:
+# 1. Handle different option types (string, integer, number, boolean, enum, array)
+# 2. Support optional and required options with default values
+# 3. Validate option types and provide appropriate error messages
+# 4. Handle array options with various item types
+# 5. Validate formatted strings (IP addresses)
+# 6. Support multiple option syntax formats (--flag, --flag=value)
+# 7. Handle default value validation and type checking
+# 8. Provide clear error messages for validation failures
+#
+# Test Focus:
+# - Named option parsing and validation
+# - Array option handling with type constraints
+# - Default value behavior and validation
+# - Required option enforcement
+# - Format validation for specialized string types
+# - Boolean option flag syntax variations
+# =============================================================================
+
+# =============================================================================
+# String Option Tests
+# =============================================================================
+
+# Test 1: Valid String Option
+# -----------------------------------------------------------------------------
+# Provide 1 optional string option
+exec launchr test-print-input:opt-string --optString bar
+
+# Validate successful string option processing:
+# Should output the string value with type information
+stdout '^optString: bar string true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 2: Missing String Option with Default
+# -----------------------------------------------------------------------------
+# No error when optional option is missing
+exec launchr test-print-input:opt-string
+
+# Validate default value usage:
+# Should use default value when option is not provided
+stdout '^optString: foo string false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Required Option Tests
+# =============================================================================
+
+# Test 3: Missing Required Option
+# -----------------------------------------------------------------------------
+# Have error when required option is missing
+! exec launchr test-print-input:opt-required
+
+# Validate missing required option error:
+# Should show JSON Schema validation error for missing required option
+stdout '- \[options\]: missing property ''optString'''
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 4: Valid Required Option with Default
+# -----------------------------------------------------------------------------
+# Provide 1 required string option with default value
+exec launchr test-print-input:opt-required-default --optString bar
+
+# Validate successful required option processing:
+# Should output the provided string value
+stdout '^optString: bar string true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 5: Missing Required Option with Default
+# -----------------------------------------------------------------------------
+# Use default value when required option with default is missing
+! exec launchr test-print-input:opt-required-default
+
+# Validate CLI framework error for missing required flag:
+# Should show command-line parsing error for missing required flag
+stdout 'required flag\(s\) "optString" not set'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Integer Option Tests
+# =============================================================================
+
+# Test 6: Valid Integer Option
+# -----------------------------------------------------------------------------
+# Provide 1 optional integer option
+exec launchr test-print-input:opt-integer --optInt 42
+
+# Validate successful integer option processing:
+# Should output the integer value with type information
+stdout '^optInt: 42 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 7: Invalid Integer Option
+# -----------------------------------------------------------------------------
+# Have error when option is not an integer
+! exec launchr test-print-input:opt-integer --optInt foo
+
+# Validate integer parsing error:
+# Should show Go strconv parsing error for invalid integer
+# TODO Change error in code.
+stdout 'strconv\.ParseInt: parsing "foo": invalid syntax'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 8: Missing Integer Option with Default
+# -----------------------------------------------------------------------------
+# No error when optional integer option is missing
+exec launchr test-print-input:opt-integer
+
+# Validate default value usage:
+# Should use default value when option is not provided
+stdout '^optInt: 42 int false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Number (Float) Option Tests
+# =============================================================================
+
+# Test 9: Valid Number Option
+# -----------------------------------------------------------------------------
+# Provide 1 optional number option
+exec launchr test-print-input:opt-number --optNumber 73.37
+
+# Validate successful number option processing:
+# Should output the float value with type information
+stdout '^optNumber: 73\.37 float64 true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 10: Invalid Number Option (Locale Format)
+# -----------------------------------------------------------------------------
+# Have error when option is not a number
+! exec launchr test-print-input:opt-number --optNumber 73,37
+
+# Validate number parsing error:
+# Should show Go strconv parsing error for invalid number format
+# TODO Change error in code.
+stdout 'strconv\.ParseFloat: parsing "73,37": invalid syntax'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 11: Missing Number Option with Default
+# -----------------------------------------------------------------------------
+# No error when optional number option is missing
+exec launchr test-print-input:opt-number
+
+# Validate default value usage:
+# Should use default value when option is not provided
+stdout '^optNumber: 37.73 float64 false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Enum Option Tests
+# =============================================================================
+
+# Test 12: Valid Enum Option
+# -----------------------------------------------------------------------------
+# Provide 1 optional int enum option
+exec launchr test-print-input:opt-enum --optEnum 73
+
+# Validate successful enum option processing:
+# Should output the enum value with type information
+stdout '^optEnum: 73 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 13: Invalid Enum Option
+# -----------------------------------------------------------------------------
+# Have error when option is not correct enum
+! exec launchr test-print-input:opt-enum --optEnum 99
+
+# Validate enum validation error:
+# Should show JSON Schema validation error with allowed enum values
+stdout '- \[options optEnum\]: value must be one of 37, 73'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 14: Missing Enum Option with Default
+# -----------------------------------------------------------------------------
+# No error when optional enum option is missing
+exec launchr test-print-input:opt-enum
+
+# Validate default value usage:
+# Should use default value when option is not provided
+stdout '^optEnum: 37 int false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 15: Valid Enum Option with Incorrect Default
+# -----------------------------------------------------------------------------
+# No error when optional enum option is missing
+exec launchr test-print-input:opt-enum-incorrect-default --optEnum 37
+
+# Validate successful enum option processing:
+# Should work when valid value is provided
+stdout '^optEnum: 37 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 16: Missing Enum Option with Invalid Default
+# -----------------------------------------------------------------------------
+# No error when optional enum option is missing
+! exec launchr test-print-input:opt-enum-incorrect-default
+
+# Validate default value validation error:
+# Should show validation error for invalid default value
+stdout '- \[options optEnum\]: value must be one of 37, 73'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Boolean Option Tests
+# =============================================================================
+
+# Test 17-21: Valid Boolean Options (Various Formats)
+# -----------------------------------------------------------------------------
+# Provide 1 optional boolean option - flag syntax
+exec launchr test-print-input:opt-boolean --optBoolean
+stdout '^optBoolean: true bool true$'
+! stderr .
+
+# Provide 1 optional boolean option - numeric true
+exec launchr test-print-input:opt-boolean --optBoolean=1
+stdout '^optBoolean: true bool true$'
+! stderr .
+
+# Provide 1 optional boolean option - capitalized true
+exec launchr test-print-input:opt-boolean --optBoolean=True
+stdout '^optBoolean: true bool true$'
+! stderr .
+
+# Provide 1 optional boolean option - numeric false
+exec launchr test-print-input:opt-boolean --optBoolean=0
+stdout '^optBoolean: false bool true$'
+! stderr .
+
+# Provide 1 optional boolean option - capitalized false
+exec launchr test-print-input:opt-boolean --optBoolean=False
+stdout '^optBoolean: false bool true$'
+! stderr .
+
+# Test 22: Invalid Boolean Option
+# -----------------------------------------------------------------------------
+# Have error when option is not correct boolean
+! exec launchr test-print-input:opt-boolean --optBoolean=no
+
+# Validate boolean parsing error:
+# Should show Go strconv parsing error for invalid boolean
+# TODO Change error in code.
+stdout 'strconv\.ParseBool: parsing "no": invalid syntax'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 23: Missing Boolean Option with Default
+# -----------------------------------------------------------------------------
+# No error when optional boolean option is missing
+exec launchr test-print-input:opt-boolean
+
+# Validate default value usage:
+# Should use default value when option is not provided
+stdout '^optBoolean: true bool false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Formatted String Option Tests (IP Address)
+# =============================================================================
+
+# Test 24: Valid IP Option
+# -----------------------------------------------------------------------------
+# Provide 1 optional formatted IP option
+exec launchr test-print-input:opt-ip --optIP 192.168.1.1
+
+# Validate successful IP option processing:
+# Should output the IP address with type information
+stdout '^optIP: 192\.168\.1\.1 string true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 25: Invalid IP Option
+# -----------------------------------------------------------------------------
+# Have error when option is not a valid IP
+! exec launchr test-print-input:opt-ip --optIP 999.999.999.999
+
+# Validate IP format validation error:
+# Should show specific IP validation error
+stdout '- \[options optIP\]: ''999\.999\.999\.999'' is not valid ipv4'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 26: Missing IP Option with Default
+# -----------------------------------------------------------------------------
+# No error when optional IP option is missing
+exec launchr test-print-input:opt-ip
+
+# Validate default value usage:
+# Should use default IP address when option is not provided
+stdout '^optIP: 1\.1\.1\.1 string false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Array Option Tests - String Arrays
+# =============================================================================
+
+# Test 27: String Array Option (Single Value)
+# -----------------------------------------------------------------------------
+# Provide 1 optional string array option (single value)
+exec launchr test-print-input:opt-array-string --optArrayString foo
+
+# Validate successful string array option processing:
+# Should output array with single string value
+stdout '^optArrayString: \[foo\] \[\]interface {} true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 28: String Array Option (Multiple Values)
+# -----------------------------------------------------------------------------
+# Provide 1 optional string array option (multiple values)
+exec launchr test-print-input:opt-array-string --optArrayString foo --optArrayString bar --optArrayString=bar,buz
+
+# Validate successful multiple string array processing:
+# Should output array with all provided values (including comma-separated)
+stdout '^optArrayString: \[foo bar bar buz\] \[\]interface {} true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 29: Missing String Array Option with Default
+# -----------------------------------------------------------------------------
+# No error when optional string array option is missing
+exec launchr test-print-input:opt-array-string
+
+# Validate default array value usage:
+# Should use default array when option is not provided
+stdout '^optArrayString: \[foo bar\] \[\]interface {} false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Array Option Tests - Integer Arrays
+# =============================================================================
+
+# Test 30: Integer Array Option (Single Value)
+# -----------------------------------------------------------------------------
+# Provide 1 optional integer array option (single value)
+exec launchr test-print-input:opt-array-integer --optArrayInteger 42
+
+# Validate successful integer array option processing:
+# Should output array with single integer value
+stdout '^optArrayInteger: \[42\] \[\]interface {} true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 31: Integer Array Option (Multiple Values)
+# -----------------------------------------------------------------------------
+# Provide 1 optional integer array option (multiple values)
+exec launchr test-print-input:opt-array-integer --optArrayInteger 42 --optArrayInteger 24
+
+# Validate successful multiple integer array processing:
+# Should output array with all provided integer values
+stdout '^optArrayInteger: \[42 24\] \[\]interface {} true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 32: Invalid Integer Array Option
+# -----------------------------------------------------------------------------
+# Have error when array option contains non-integer
+! exec launchr test-print-input:opt-array-integer --optArrayInteger foo
+
+# Validate integer array parsing error:
+# Should show Go strconv parsing error for invalid integer in array
+# TODO Change error in code.
+stdout 'strconv\.Atoi: parsing "foo": invalid syntax'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 33: Missing Integer Array Option with Default
+# -----------------------------------------------------------------------------
+# No error when optional integer array option is missing
+exec launchr test-print-input:opt-array-integer
+
+# Validate default array value usage:
+# Should use default integer array when option is not provided
+stdout '^optArrayInteger: \[37 73\] \[\]interface {} false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Array Option Tests - Number Arrays
+# =============================================================================
+
+# Test 34: Number Array Option (Single Value)
+# -----------------------------------------------------------------------------
+# Provide 1 optional number array option (single value)
+exec launchr test-print-input:opt-array-number --optArrayNumber 37.73
+
+# Validate successful number array option processing:
+# Should output array with single number value
+stdout '^optArrayNumber: \[37\.73\] \[\]interface {} true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 35: Number Array Option (Multiple Values)
+# -----------------------------------------------------------------------------
+# Provide 1 optional number array option (multiple values)
+exec launchr test-print-input:opt-array-number --optArrayNumber 37.73 --optArrayNumber 42.5 --optArrayNumber=37.37,73.73
+
+# Validate successful multiple number array processing:
+# Should output array with all provided number values (including comma-separated)
+stdout '^optArrayNumber: \[37\.73 42\.5\ 37\.37 73\.73] \[\]interface {} true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 36: Invalid Number Array Option
+# -----------------------------------------------------------------------------
+# Have error when array option contains non-number
+! exec launchr test-print-input:opt-array-number --optArrayNumber 37-73
+
+# Validate number array parsing error:
+# Should show Go strconv parsing error for invalid number in array
+# TODO Change error in code.
+stdout 'strconv\.ParseFloat: parsing "37-73": invalid syntax'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 37: Missing Number Array Option with Default
+# -----------------------------------------------------------------------------
+# No error when optional number array option is missing
+exec launchr test-print-input:opt-array-number
+
+# Validate default array value usage:
+# Should use default number array when option is not provided
+stdout '^optArrayNumber: \[37\.73 73\.37\] \[\]interface {} false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 38: Number Array Option with Incorrect Default Type
+# -----------------------------------------------------------------------------
+# No error when optional number array option is missing
+! exec launchr test-print-input:opt-array-number-incorrect-default
+
+# Validate default value type validation error:
+# Should show validation error for incorrect default array item type
+stdout '- \[options optArrayNumber 0\]: got string, want number'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Array Option Tests - Boolean Arrays
+# =============================================================================
+
+# Test 39: Boolean Array Option (Single Value)
+# -----------------------------------------------------------------------------
+# Provide 1 optional boolean array option (single value)
+exec launchr test-print-input:opt-array-boolean --optArrayBoolean true
+
+# Validate successful boolean array option processing:
+# Should output array with single boolean value
+stdout '^optArrayBoolean: \[true\] \[\]interface {} true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 40: Boolean Array Option (Multiple Values)
+# -----------------------------------------------------------------------------
+# Provide 1 optional boolean array option (multiple values)
+exec launchr test-print-input:opt-array-boolean --optArrayBoolean false --optArrayBoolean true --optArrayBoolean=true,false
+
+# Validate successful multiple boolean array processing:
+# Should output array with all provided boolean values (including comma-separated)
+stdout '^optArrayBoolean: \[false true true false\] \[\]interface {} true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 41: Boolean Array Option Missing Value
+# -----------------------------------------------------------------------------
+# Provide 1 optional boolean array option (multiple values)
+! exec launchr test-print-input:opt-array-boolean --optArrayBoolean
+
+# Validate boolean array requires explicit value:
+# Should show error that boolean array flag needs an argument
+stdout 'flag needs an argument: --optArrayBoolean'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 42: Invalid Boolean Array Option
+# -----------------------------------------------------------------------------
+# Have error when array option contains non-boolean
+! exec launchr test-print-input:opt-array-boolean --optArrayBoolean maybe
+
+# Validate boolean array parsing error:
+# Should show Go strconv parsing error for invalid boolean in array
+# TODO Change error in code.
+stdout 'strconv\.ParseBool: parsing "maybe": invalid syntax'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 43: Missing Boolean Array Option with Default
+# -----------------------------------------------------------------------------
+# No error when optional boolean array option is missing
+exec launchr test-print-input:opt-array-boolean
+
+# Validate default array value usage:
+# Should use default boolean array when option is not provided
+stdout '^optArrayBoolean: \[true false\] \[\]interface {} false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Array Option Tests - Enum Arrays
+# =============================================================================
+
+# Test 44: Enum Array Option (Single Value)
+# -----------------------------------------------------------------------------
+# Provide 1 optional enum array option (single value)
+exec launchr test-print-input:opt-array-enum --optArrayEnum 37
+
+# Validate successful enum array option processing:
+# Should output array with single enum value
+stdout '^optArrayEnum: \[37\] \[\]interface {} true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 45: Enum Array Option (Multiple Values)
+# -----------------------------------------------------------------------------
+# Provide 1 optional enum array option (multiple values)
+exec launchr test-print-input:opt-array-enum --optArrayEnum 37 --optArrayEnum 73 --optArrayEnum=37,73
+
+# Validate successful multiple enum array processing:
+# Should output array with all provided enum values (including comma-separated)
+stdout '^optArrayEnum: \[37 73 37 73\] \[\]interface {} true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 46: Invalid Enum Array Option (Invalid Enum Value)
+# -----------------------------------------------------------------------------
+# Have error when array option contains invalid enum value
+! exec launchr test-print-input:opt-array-enum --optArrayEnum 42
+
+# Validate enum array validation error:
+# Should show JSON Schema validation error for invalid enum value in array
+stdout '- \[options optArrayEnum 0\]: value must be one of 37, 73'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 47: Invalid Enum Array Option (Invalid Type)
+# -----------------------------------------------------------------------------
+# Have error when array option contains invalid enum value
+! exec launchr test-print-input:opt-array-enum --optArrayEnum badEnum
+
+# Validate enum array parsing error:
+# Should show Go strconv parsing error for invalid type in enum array
+stdout 'strconv\.Atoi: parsing "badEnum": invalid syntax'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 48: Missing Enum Array Option with Default
+# -----------------------------------------------------------------------------
+# No error when optional enum array option is missing
+exec launchr test-print-input:opt-array-enum
+
+# Validate default array value usage:
+# Should use default enum array when option is not provided
+stdout '^optArrayEnum: \[37 73\] \[\]interface {} false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Multiple Options Tests
+# =============================================================================
+
+# Test 49: All Three Options Provided
+# -----------------------------------------------------------------------------
+# Provide 3 options
+exec launchr test-print-input:opts-3 --optInteger=73 --optString=bar --optArray=buz
+
+# Validate all three options processed correctly:
+# Should output all three option values with their type information
+stdout '^optInteger: 73 int true$'
+stdout '^optString: bar string true$'
+stdout '^optArray: \[buz\] \[\]interface {} true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 50: One Option Provided (Others Use Defaults)
+# -----------------------------------------------------------------------------
+# Provide 3 arguments: 1 required, 2 optional with a default value, no 3rd
+exec launchr test-print-input:opts-3 --optInteger=73
+
+# Validate one option processed, others use defaults:
+# Should output provided option and default values for others
+stdout '^optInteger: 73 int true$'
+stdout '^optString: foo string false'
+stdout '^optArray: \[\] \[\]interface {} false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 51: No Options Provided (All Use Defaults)
+# -----------------------------------------------------------------------------
+# Provide 3 arguments, 1 required, 2 optional with a default value, no 3rd
+exec launchr test-print-input:opts-3
+
+# Validate all options use defaults or show as nil:
+# Should output default values or nil for all options
+stdout '^optInteger: <nil> <nil> false'
+stdout '^optString: foo string false$'
+stdout '^optArray: \[\] \[\]interface {} false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Test Data Files - Action Configurations for Different Option Types
+# =============================================================================
+
+# String Option Action
+-- test-print-input/actions/opt-string/action.yaml --
+# Plugin action demonstrating string option handling
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option String    # Human-readable action name
+
+  options:
+    - name: optString                      # Option identifier
+      description: This is an optional string option    # Help text
+      title: Option String                 # Human-readable option name
+      type: string                         # Explicit string type
+      default: foo                         # Default value when not provided
+
+# Required String Option Action (No Default)
+-- test-print-input/actions/opt-required/action.yaml --
+# Plugin action demonstrating required string option without default
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option String Required No default    # Human-readable action name
+
+  options:
+    - name: optString                      # Option identifier
+      description: This is a required string option without a default value.    # Help text
+      title: Option String                 # Human-readable option name
+      type: string                         # Explicit string type
+      required: true                       # Must be provided by user
+
+# Required String Option Action (With Default)
+-- test-print-input/actions/opt-required-default/action.yaml --
+# Plugin action demonstrating required string option with default
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option String Required Default    # Human-readable action name
+
+  options:
+    - name: optString                      # Option identifier
+      description: This is a required string option with a default value    # Help text
+      title: Option String                 # Human-readable option name
+      type: string                         # Explicit string type
+      default: foo                         # Default value when not provided
+      required: true                       # Must be provided by user
+
+# Integer Option Action
+-- test-print-input/actions/opt-integer/action.yaml --
+# Plugin action demonstrating integer option handling
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option Integer    # Human-readable action name
+
+  options:
+    - name: optInt                         # Option identifier
+      title: Option Integer                # Human-readable option name
+      description: This is an optional integer option    # Help text
+      type: integer                        # Explicit integer type
+      default: 42                          # Default value when not provided
+
+# Number Option Action
+-- test-print-input/actions/opt-number/action.yaml --
+# Plugin action demonstrating number (float) option handling
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option Number    # Human-readable action name
+
+  options:
+    - name: optNumber                      # Option identifier
+      title: Option number                 # Human-readable option name
+      description: This is an optional float option    # Help text
+      type: number                         # Explicit number (float64) type
+      default: 37.73                       # Default value when not provided
+
+# Enum Option Action
+-- test-print-input/actions/opt-enum/action.yaml --
+# Plugin action demonstrating enum option handling
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option Integer enum    # Human-readable action name
+
+  options:
+    - name: optEnum                        # Option identifier
+      title: Option Enum Integer           # Human-readable option name
+      description: This is an optional integer enum option    # Help text
+      type: integer                        # Base type: integer
+      enum: [37, 73]                       # Allowed values enumeration
+      default: 37                          # Default value when not provided
+
+# Enum Option Action with Invalid Default
+-- test-print-input/actions/opt-enum-incorrect-default/action.yaml --
+# Plugin action demonstrating enum validation of default values
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option Integer enum    # Human-readable action name
+
+  options:
+    - name: optEnum                        # Option identifier
+      title: Option Enum Integer           # Human-readable option name
+      description: This is an optional integer enum option    # Help text
+      type: integer                        # Base type: integer
+      enum: [37, 73]                       # Allowed values enumeration
+      default: 99                          # Invalid default value (not in enum)
+
+# Boolean Option Action
+-- test-print-input/actions/opt-boolean/action.yaml --
+# Plugin action demonstrating boolean option handling
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option Boolean    # Human-readable action name
+
+  options:
+    - name: optBoolean                     # Option identifier
+      title: Option Boolean                # Human-readable option name
+      type: boolean                        # Explicit boolean type
+      description: This is an optional boolean option    # Help text
+      default: true                        # Default value when not provided
+
+# IP Address Option Action
+-- test-print-input/actions/opt-ip/action.yaml --
+# Plugin action demonstrating formatted string option handling
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option String Format    # Human-readable action name
+
+  options:
+    - name: optIP                          # Option identifier
+      title: Option IP                     # Human-readable option name
+      description: This is an optional formatted option    # Help text
+      type: string                         # Base type: string
+      format: ipv4                         # Format validation: IPv4 address
+      default: 1.1.1.1                    # Default IP address
+
+# String Array Option Action
+-- test-print-input/actions/opt-array-string/action.yaml --
+# Plugin action demonstrating string array option handling
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option Array String    # Human-readable action name
+
+  options:
+    - name: optArrayString                 # Option identifier
+      title: Option Array String           # Human-readable option name
+      type: array                          # Array type
+      description: This is an optional array<string> option    # Help text
+      default: ["foo", "bar"]              # Default array values
+      # Note: items type defaults to string for arrays
+
+# Integer Array Option Action
+-- test-print-input/actions/opt-array-integer/action.yaml --
+# Plugin action demonstrating integer array option handling
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option Array Integer    # Human-readable action name
+
+  options:
+    - name: optArrayInteger                # Option identifier
+      title: Option Array Integer          # Human-readable option name
+      type: array                          # Array type
+      description: This is a optional array<integer> option    # Help text
+      default: [37, 73]                    # Default array values
+      items:
+        type: integer                      # Array item type: integer
+
+# Number Array Option Action
+-- test-print-input/actions/opt-array-number/action.yaml --
+# Plugin action demonstrating number array option handling
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option Array Number    # Human-readable action name
+
+  options:
+    - name: optArrayNumber                 # Option identifier
+      title: Option Array Number           # Human-readable option name
+      type: array                          # Array type
+      description: This is a optional array<number> option    # Help text
+      default: [37.73, 73.37]              # Default array values
+      items:
+        type: number                       # Array item type: number
+
+# Number Array Option Action with Invalid Default
+-- test-print-input/actions/opt-array-number-incorrect-default/action.yaml --
+# Plugin action demonstrating array default value validation
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option Array Number    # Human-readable action name
+
+  options:
+    - name: optArrayNumber                 # Option identifier
+      title: Option Array Number           # Human-readable option name
+      type: array                          # Array type
+      description: This is a optional array<number> option    # Help text
+      default: ["37,73"]                   # Invalid default (string instead of number)
+      items:
+        type: number                       # Array item type: number
+
+# Enum Array Option Action
+-- test-print-input/actions/opt-array-enum/action.yaml --
+# Plugin action demonstrating enum array option handling
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option Array Integer Enum    # Human-readable action name
+
+  options:
+    - name: optArrayEnum                   # Option identifier
+      title: Option Array Enum             # Human-readable option name
+      type: array                          # Array type
+      description: This is a optional array<integer> option    # Help text
+      default: [37, 73]                    # Default array values
+      items:
+        type: integer                      # Array item type: integer
+        enum: [37, 73]                     # Allowed values for each array item
+
+# Boolean Array Option Action
+-- test-print-input/actions/opt-array-boolean/action.yaml --
+# Plugin action demonstrating boolean array option handling
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Option Array Boolean    # Human-readable action name
+
+  options:
+    - name: optArrayBoolean                # Option identifier
+      title: Option Array Boolean          # Human-readable option name
+      type: array                          # Array type
+      description: This is a optional array<boolean> option    # Help text
+      default: [true, false]               # Default array values
+      items:
+        type: boolean                      # Array item type: boolean
+
+# Multiple Options Action
+-- test-print-input/actions/opts-3/action.yaml --
+# Plugin action demonstrating multiple option handling
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - 3 options    # Human-readable action name
+
+  options:
+    # Optional integer option (no default)
+    - name: optInteger                     # Option identifier
+      title: Option Integer                # Human-readable option name
+      description: This is an optional integer option    # Help text
+      type: integer                        # Explicit integer type
+      # Note: no default value, will show as nil
+
+    # Optional string option with default
+    - name: optString                      # Option identifier
+      description: This is an optional string option with a default value    # Help text
+      type: string                         # Explicit string type
+      default: "foo"                       # Default value when not provided
+
+    # Optional array option (no default)
+    - name: optArray                       # Option identifier
+      title: Option Array                  # Human-readable option name
+      description: This is an optional array<string> option    # Help text
+      type: array                          # Array type
+      # Note: no default value, will show as empty array
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Option Type Support:
+# 1. String: Basic text input with optional default values
+# 2. Integer: Numeric input with validation and conversion to int
+# 3. Number: Floating-point input with validation and conversion to float64
+# 4. Boolean: Flag syntax (--flag) or explicit value (--flag=true)
+# 5. Enum: Type-constrained values with validation against allowed set
+# 6. Array: Multiple values of specified item type
+# 7. Formatted: String with format validation (IP, email, etc.)
+#
+# Option Syntax Support:
+# - Flag syntax: --option value
+# - Assignment syntax: --option=value
+# - Boolean flag syntax: --option (implies true)
+# - Array multiple: --option value1 --option value2
+# - Array comma-separated: --option=value1,value2
+#
+# Validation Rules:
+# - Optional options can be omitted
+# - Required options must be provided (rare for options)
+# - Type validation occurs before action execution
+# - Enum validation shows allowed values in error messages
+# - Array validation applies to each item individually
+# - Default values are validated against type and enum constraints
+#
+# Error Message Types:
+# - JSON Schema validation errors for missing/invalid properties
+# - Go strconv parsing errors for type conversion failures
+# - Format-specific validation errors for formatted strings
+# - Command-line parsing errors for syntax issues
+# - Array-specific errors with item index identification
+#
+# Default Value Behavior:
+# - Used when options are not provided
+# - Must conform to type and enum constraints
+# - Invalid defaults cause validation errors
+# - Array defaults can be empty arrays or contain values
+# - Boolean defaults work with flag syntax
+#
+# Array Option Behavior:
+# - Support multiple --option calls to build array
+# - Support comma-separated values in single call
+# - Type validation applies to each array item
+# - Enum validation applies to each array item
+# - Boolean arrays require explicit values (no flag syntax)
+# - Empty arrays are valid defaults
+#
+# Required Options:
+# - Rare but supported for options
+# - Must be provided even if they have default values
+# - Generate command-line parsing errors when missing
+# - Different error messages than JSON Schema validation
+#
+# =============================================================================

@@ -1,0 +1,121 @@
+# =============================================================================
+# Launchr Sensitive Data Handling and Output Filtering Test
+# =============================================================================
+#
+# This test validates the Launchr tool's ability to:
+# 1. Handle sensitive data in shell action outputs
+# 2. Filter sensitive values from stdout and stderr streams
+# 3. Handle split sensitive strings across multiple echo commands
+# 4. Process sensitive data through nested action calls
+#
+# Test Focus:
+# - Sensitive data detection and redaction
+# - Cross-stream filtering (stdout and stderr)
+# - Nested action execution with sensitive data
+# =============================================================================
+
+# Windows WSL Environment Configuration
+# -----------------------------------------------------------------------------
+# Configure WSL environment variables for Windows compatibility
+# WSLENV allows environment variables to be passed between Windows and WSL
+[windows] env WSLENV="TEST_SECRET:$WSLENV"
+
+# Test Normal Mode Execution
+# -----------------------------------------------------------------------------
+# Execute sensitive action in normal mode (no filtering)
+# Should display all sensitive values as-is without redaction
+exec launchr test-shell:sensitive
+
+# Validate unfiltered output contains actual sensitive values
+stdout '^subshell: MySuper SecretValue$'
+stdout '^subshell split: MySuper SecretValue$'
+stdout '^terminal output: MySuper SecretValue$'
+stdout 'log output: MySuper SecretValue\s+'
+stdout '^terminal output: OtherSecret$'
+stdout 'log output: OtherSecret\s+'
+stderr '^subshell stderr: MySuper SecretValue$'
+
+# Test Environment Variable Based Filtering
+# -----------------------------------------------------------------------------
+# Set environment variable to enable sensitive value detection
+# When TEST_SECRET is set, matching values should be redacted as ****
+env TEST_SECRET='MySuper SecretValue'
+exec launchr test-shell:sensitive
+
+# Validate that sensitive values are redacted when environment variable is set
+stdout '^subshell: \*\*\*\*$'
+stdout '^subshell split: \*\*\*\*$'
+stdout -count=2 '^terminal output: \*\*\*\*$' # We check twice for the 2nd "OtherSecret"
+stdout -count=2  'log output: \*\*\*\*\s+'
+stderr '^subshell stderr: \*\*\*\*$'
+stderr -count=2 '^fmt stderr streams print: \*\*\*\*$'
+
+# =============================================================================
+# Test Data Files - Sensitive Data Action Configuration
+# =============================================================================
+
+# Shell Action with Sensitive Data Output
+-- test-shell/actions/sensitive/action.yaml --
+# Action demonstrating sensitive data handling across multiple output streams
+# Tests various scenarios of sensitive value detection and filtering
+action:
+  title: shell action - sensitive        # Human-readable action name
+
+# Shell Runtime Configuration:
+# Executes shell script that outputs sensitive data in multiple ways
+runtime:
+  type: shell                            # Shell execution type
+  script: |                              # Inline shell script
+    # Direct sensitive output to stdout
+    echo 'subshell: MySuper SecretValue'
+
+    # Direct sensitive output to stderr
+    echo 'subshell stderr: MySuper SecretValue' >&2
+
+    # Split sensitive string across multiple echo commands
+    # Tests detection of sensitive values assembled from parts
+    echo -n 'subshell split: MySuper'
+    echo -n ' '
+    echo 'SecretValue'
+
+    # Environment variable based sensitive value switching
+    # If TEST_SECRET is set, use different sensitive value
+    [[ -n "$$TEST_SECRET" ]] && export TEST_SECRET=OtherSecret
+
+    # Nested action calls with sensitive data
+    # Tests sensitive handling through action composition
+    $$CBIN testplugin:sensitive -v 'MySuper SecretValue'
+    $$CBIN testplugin:sensitive -v 'OtherSecret'
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Sensitive Data Detection Rules:
+# 1. Normal mode displays all sensitive values without filtering
+# 2. Sensitive values are redacted as **** when detection is enabled
+# 3. Detection works across stdout and stderr streams
+# 4. Split sensitive strings are properly detected and handled
+#
+# Output Filtering Modes:
+# - Environment-based filtering: Sensitive values redacted as ****
+# - Cross-stream filtering: Both stdout and stderr are processed
+#
+# Sensitive Value Detection:
+# - Direct string matching for known sensitive values
+# - Multi-part string assembly detection
+# - Nested action output filtering
+# - Both exact matches and partial matches are handled
+#
+# Stream Handling:
+# - stdout: Regular output stream processing
+# - stderr: Error stream processing with same filtering rules
+# - Log output: Formatted log messages with sensitive data
+#
+# Action Composition:
+# - Nested action calls ($$CBIN testplugin:sensitive)
+# - Sensitive data passed through action parameters
+# - Consistent filtering across action boundaries
+# - Proper handling of composed sensitive operations
+#
+# =============================================================================

@@ -1,0 +1,82 @@
+# =============================================================================
+# Launchr Build Timeout and Process Management Test Suite
+# =============================================================================
+#
+# This comprehensive test file validates the Launchr tool's ability to:
+# 1. Apply custom timeout limits during build operations
+# 2. Terminate build processes when timeout threshold is exceeded
+# 3. Provide clear timeout error messages to users
+# 4. Handle timeout scenarios gracefully without system corruption
+# 5. Validate timeout parameter parsing and enforcement
+#
+# Test Structure:
+# - Tests timeout parameter application during build process
+# - Tests build termination when timeout is exceeded
+# - Tests error message formatting for timeout scenarios
+# - Validates clean process termination and error handling
+# =============================================================================
+
+# Setup Phase: Environment Configuration
+# -----------------------------------------------------------------------------
+# Configure build environment with real home for caching optimization
+# Reuse actual home directory to enable build caching and dependency resolution
+env HOME=$REAL_HOME
+
+# Test 1: Build Timeout Enforcement and Error Handling
+# -----------------------------------------------------------------------------
+# Execute build with extremely short timeout to trigger timeout condition
+# The 1-second timeout is intentionally too short for any meaningful build
+! exec launchr build --timeout 1s
+
+# Validate timeout error message is displayed
+# The system should clearly indicate that the build timed out after the specified duration
+stdout 'build timed out after 1s'
+
+# Validate clean error handling (no stderr output)
+# Timeout should be handled gracefully without system error messages
+! stderr .
+
+# Test 2: Invalid Timeout Parameter Validation
+# -----------------------------------------------------------------------------
+# Execute build with invalid timeout format to test parameter validation
+# The "foo" value is not a valid Go duration format and should be rejected
+! exec launchr build --timeout foo
+
+# Validate invalid duration error message is displayed
+# The system should clearly indicate that the duration format is invalid
+stdout 'time: invalid duration "foo"'
+
+# Validate clean error handling (no stderr output)
+# Parameter validation errors should be handled gracefully
+! stderr .
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Timeout Behavior:
+# 1. Custom timeout values are parsed and applied correctly
+# 2. Build process is terminated when timeout threshold is exceeded
+# 3. Clear error messages indicate timeout condition and duration
+# 4. Process termination is clean without system corruption
+# 5. No binary artifacts are created when timeout occurs
+#
+# Error Handling:
+# - Timeout errors are reported to stdout, not stderr
+# - Error messages include specific timeout duration
+# - Clean process termination without resource leaks
+# - Proper exit codes for timeout conditions
+#
+# Timeout Parameter Format:
+# - Supports standard Go duration format (e.g., 1s, 30m, 2h)
+# - Validates timeout parameter syntax
+# - Applies timeout to entire build process
+# - Enforces timeout strictly without grace period
+#
+# Process Management:
+# - Terminates build subprocess when timeout is reached
+# - Cleans up temporary files and resources
+# - Prevents incomplete builds from producing artifacts
+# - Maintains system stability during forced termination
+#
+# =============================================================================
