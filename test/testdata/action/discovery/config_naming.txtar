@@ -1,0 +1,92 @@
+# =============================================================================
+# Launchr Action Discovery and Naming Test
+# =============================================================================
+#
+# This test file validates the Launchr tool's ability to:
+# 1. Discover and display available actions with proper naming transformations
+# 2. Apply custom naming rules defined in the configuration
+# 3. Handle environment variable overrides for action paths
+#
+# Test Structure:
+# - Tests default action discovery behavior
+# - Tests custom action path via environment variable
+# - Validates output format and content matching
+# =============================================================================
+
+# Test 1: Default Action Discovery
+# -----------------------------------------------------------------------------
+# Test that launchr correctly discovers actions from the default path
+# and applies naming transformations as defined in the configuration
+exec launchr --help
+
+# Expected output validation:
+# - Should find action at foo.baz.bar-bar:waldo-fred-thud with title "foo"
+# - Naming rules should transform underscores to hyphens and collapse dots
+stdout '^\s+foo\.baz\.bar-bar:waldo-fred-thud\s+foo$'
+
+# Ensure no error output is produced
+! stderr .
+
+# Test 2: Custom Action Path via Environment Variable
+# -----------------------------------------------------------------------------
+# Test that LAUNCHR_ACTIONS_PATH environment variable correctly overrides
+# the default action discovery path
+env LAUNCHR_ACTIONS_PATH=./foo
+exec launchr --help
+
+# Expected output validation:
+# - Should find action at bar.baz.bar-bar:waldo-fred-thud with title "foo"
+# - Path change should affect the discovered action namespace
+stdout '^\s+bar\.baz\.bar-bar:waldo-fred-thud\s+foo$'
+
+# Ensure no error output is produced
+! stderr .
+
+# =============================================================================
+# Test Data Files
+# =============================================================================
+
+# Action Definition File
+# This file defines a simple action with:
+# - Title: "foo" (displayed in help output)
+# - Runtime: "plugin" (specifies execution environment)
+-- foo/bar/baz/bar/bar_bar/actions/waldo-fred_thud/action.yaml --
+action:
+  title: foo        # Human-readable action title
+runtime: plugin     # Execution runtime specification
+
+# Launchr Configuration File
+# Configuration file that defines action naming transformation rules:
+# 1. Replace ".bar." with "." to simplify nested namespaces
+# 2. Replace "_" with "-" for consistent kebab-case naming
+-- .launchr/config.yaml --
+launchrctl:
+  actions_naming:
+    # Rule 1: Simplify nested bar namespaces
+    - search: ".bar."     # Find pattern: .bar.
+      replace: "."        # Replace with: .
+
+    # Rule 2: Convert underscores to hyphens for consistency
+    - search: "_"         # Find pattern: _
+      replace: "-"        # Replace with: -
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# 1. Action Discovery:
+#    - Scans directory structure for action.yaml files
+#    - Builds action names from directory path structure
+#    - Applies naming transformations from configuration
+#
+# 2. Naming Transformations:
+#    - Original path: foo/bar/baz/bar/bar_bar/actions/waldo-fred_thud
+#    - After .bar. → . : foo/baz/bar_bar/actions/waldo-fred_thud
+#    - After _ → - : foo/baz/bar-bar/actions/waldo-fred-thud
+#    - Final action name: foo.baz.bar-bar:waldo-fred-thud
+#
+# 3. Environment Override:
+#    - LAUNCHR_ACTIONS_PATH=./foo changes the root discovery path
+#    - Results in different namespace prefix for discovered actions
+#
+# =============================================================================

@@ -1,0 +1,320 @@
+# =============================================================================
+# Launchr Container Image Build and Caching Test Suite
+# =============================================================================
+#
+# This comprehensive test file validates the Launchr tool's ability to:
+# 1. Build container images dynamically when they don't exist locally
+# 2. Cache built images and skip rebuilding when images exist
+# 3. Force rebuild images using --no-cache flag
+# 4. Clean up images automatically with --remove-image flag
+# 5. Handle custom build contexts, Dockerfiles, and build arguments
+# 6. Apply multiple tags to built images
+# 7. Use embedded filesystem actions for image building
+# 8. Track image checksums in actions.sum file
+#
+# Test Structure:
+# - Tests automatic image building on first run
+# - Tests image caching behavior on subsequent runs
+# - Tests forced rebuild with --no-cache flag
+# - Tests image cleanup with --remove-image flag
+# - Tests custom build contexts and Dockerfiles
+# - Tests build argument templating and environment variables
+# - Tests multiple image tagging
+# - Tests embedded filesystem action integration
+# - Validates checksum tracking and cleanup operations
+# =============================================================================
+
+# Prepare a randomized image registry for builds.
+# This ensures unique registry names in shared environments,
+# such as GitHub Actions on Windows/macOS, or in Kubernetes clusters.
+env IMAGE_REGISTRY=$RANDOM
+txtproc replace '[img_registy]' $IMAGE_REGISTRY actions/testimage-1/action.yaml actions/testimage-1/action.yaml
+txtproc replace '[img_registy]' $IMAGE_REGISTRY actions/testimage-2/action.yaml actions/testimage-2/action.yaml
+txtproc replace '[img_registy]' $IMAGE_REGISTRY actions/testimage-3/action.yaml actions/testimage-3/action.yaml
+txtproc replace '[img_registy]' $IMAGE_REGISTRY .launchr/config.yaml .launchr/config.yaml
+
+# Test 1: Initial Image Build with Multiple Tags
+# -----------------------------------------------------------------------------
+# Execute action that requires building a new image with multiple tags
+exec launchr testimage-1
+
+# Validate initial build output messages
+stdout '^Image "'$IMAGE_REGISTRY'/testimage-1:latest" doesn''t exist locally, building...$'
+stdout '^Successfully built .+$'
+stdout '^Successfully tagged '$IMAGE_REGISTRY'/testimage-1:latest$'
+stdout '^Successfully tagged '$IMAGE_REGISTRY'/testimage-1:bar$'
+stdout '^Successfully tagged '$IMAGE_REGISTRY'/testimage-1:buz$'
+
+# Validate container execution output (user ID verification)
+stdout '^uid=\d+\(foobar\) gid=\d+(\(.+\))? groups=\d+(\(.+\))?$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 2: Image Caching Behavior
+# -----------------------------------------------------------------------------
+# Execute same action again to test caching (should not rebuild)
+exec launchr testimage-1
+
+# Validate that rebuild messages do NOT appear (image cached)
+! stdout '^Image "'$IMAGE_REGISTRY'/testimage-1:latest" doesn''t exist locally, building...$'
+! stdout '^Successfully built .+$'
+! stdout '^Successfully tagged '$IMAGE_REGISTRY'/testimage-1:latest$'
+! stdout '^Successfully tagged '$IMAGE_REGISTRY'/testimage-1:bar$'
+! stdout '^Successfully tagged '$IMAGE_REGISTRY'/testimage-1:buz$'
+
+# Validate container execution still works (using cached image)
+stdout '^uid=\d+\(foobar\) gid=\d+(\(.+\))? groups=\d+(\(.+\))?$'
+
+# Validate clean execution
+! stderr .
+
+# Test 3: Forced Rebuild with --no-cache Flag
+# -----------------------------------------------------------------------------
+# Execute action with --no-cache to force rebuild despite existing image
+exec launchr testimage-1 --no-cache
+
+# Validate forced rebuild output messages
+stdout '^Image "'$IMAGE_REGISTRY'/testimage-1:latest" doesn''t exist locally, building...$'
+stdout '^Successfully built .+$'
+stdout '^Successfully tagged '$IMAGE_REGISTRY'/testimage-1:latest$'
+stdout '^Successfully tagged '$IMAGE_REGISTRY'/testimage-1:bar$'
+stdout '^Successfully tagged '$IMAGE_REGISTRY'/testimage-1:buz$'
+
+# Validate container execution after forced rebuild
+stdout '^uid=\d+\(foobar\) gid=\d+(\(.+\))? groups=\d+(\(.+\))?$'
+
+# Validate clean execution
+! stderr .
+
+# Test 4: Image Cleanup with --remove-image Flag
+# -----------------------------------------------------------------------------
+# Execute action with --remove-image to automatically clean up after execution
+exec launchr testimage-2 --remove-image
+
+# Validate build and execution output
+stdout '^Image "'$IMAGE_REGISTRY'/testimage-2:foo" doesn''t exist locally, building...$'
+stdout '^Successfully built .+$'
+stdout '^Successfully tagged '$IMAGE_REGISTRY'/testimage-2:foo$'
+stdout '^uid=\d+\(foobar\) gid=\d+(\(.+\))? groups=\d+(\(.+\))?$'
+
+# Validate clean execution
+! stderr .
+
+# Test 5: Verify Image Cleanup Worked
+# -----------------------------------------------------------------------------
+# Verify that image was actually removed after --remove-image execution
+! exec docker image inspect ${IMAGE_REGISTRY}/testimage-2:foo --format '{{ .Id }}'
+stderr 'No such image: '$IMAGE_REGISTRY'/testimage-2:foo'
+
+# Test 6: Rebuild After Cleanup
+# -----------------------------------------------------------------------------
+# Execute same action again to verify it rebuilds after cleanup
+exec launchr testimage-2
+
+# Validate rebuild occurs (image was successfully removed)
+stdout '^Image "'$IMAGE_REGISTRY'/testimage-2:foo" doesn''t exist locally, building...$'
+stdout '^Successfully built .+$'
+stdout '^Successfully tagged '$IMAGE_REGISTRY'/testimage-2:foo$'
+stdout '^uid=\d+\(foobar\) gid=\d+(\(.+\))? groups=\d+(\(.+\))?$'
+
+# Validate clean execution
+! stderr .
+
+# Test 7: Custom Build Configuration via Global Config
+# -----------------------------------------------------------------------------
+# Execute action that uses global image configuration from .launchr/config.yaml
+exec launchr testimage-3
+
+# Validate build output with custom configuration
+stdout '^Image "'$IMAGE_REGISTRY'/testimage-3" doesn''t exist locally, building...$'
+stdout '^Successfully built .+$'
+stdout '^Successfully tagged '$IMAGE_REGISTRY'/testimage-3:latest$'
+stdout '^Successfully tagged '$IMAGE_REGISTRY'/testimage-3:bar$'
+stdout '^Successfully tagged '$IMAGE_REGISTRY'/testimage-3:buz$'
+
+# Validate build argument templating (environment variables passed correctly)
+stdout '^MY_ARG_1=foo MY_ARG_2=bar$'
+
+# Validate clean execution
+! stderr .
+
+# Test 8: Embedded Filesystem Action Integration
+# -----------------------------------------------------------------------------
+# Execute embedded filesystem action that builds container image
+exec launchr test-registered-embed-fs:container-image-build
+
+# Validate embedded action build output
+stdout '^Image "'$IMAGE_REGISTRY'/testimage-embed:latest" doesn''t exist locally, building...$'
+stdout '^Successfully built .+$'
+stdout '^Successfully tagged '$IMAGE_REGISTRY'/testimage-embed:latest$'
+
+# Validate container execution from embedded action
+stdout '^uid=\d+\(foobar\) gid=\d+(\(.+\))? groups=\d+(\(.+\))?$'
+
+# Validate file operations from embedded action
+stdout '^action ls: Dockerfile action\.yaml container\.txt main\.sh$'
+stdout '^host ls: actions container\.txt$'
+
+# Validate file content written by container to host
+grep '^hello host from container$' ./container.txt
+
+# Validate clean execution
+! stderr .
+
+# Test 9: Checksum Tracking Validation
+# -----------------------------------------------------------------------------
+# Verify that all built images are properly tracked in actions.sum file
+grep '^'$IMAGE_REGISTRY'\/testimage-1:latest h1:' ./.launchr/actions.sum
+grep '^'$IMAGE_REGISTRY'\/testimage-1:bar h1:' ./.launchr/actions.sum
+grep '^'$IMAGE_REGISTRY'\/testimage-1:buz h1:' ./.launchr/actions.sum
+grep '^'$IMAGE_REGISTRY'\/testimage-2:foo h1:' ./.launchr/actions.sum
+grep '^'$IMAGE_REGISTRY'\/testimage-3 h1:' ./.launchr/actions.sum
+grep '^'$IMAGE_REGISTRY'\/testimage-3:bar h1:' ./.launchr/actions.sum
+grep '^'$IMAGE_REGISTRY'\/testimage-3:buz h1:' ./.launchr/actions.sum
+grep '^'$IMAGE_REGISTRY'\/testimage-embed:latest h1:' ./.launchr/actions.sum
+
+# Test Cleanup Phase: Remove Generated Images
+# -----------------------------------------------------------------------------
+# Clean up all generated images to avoid interfering with other tests
+exec docker rmi -f ${IMAGE_REGISTRY}/testimage-1:latest ${IMAGE_REGISTRY}/testimage-1:bar ${IMAGE_REGISTRY}/testimage-1:buz
+exec docker rmi -f ${IMAGE_REGISTRY}/testimage-2:foo
+exec docker rmi -f ${IMAGE_REGISTRY}/testimage-3 ${IMAGE_REGISTRY}/testimage-3:bar ${IMAGE_REGISTRY}/testimage-3:buz
+exec docker rmi -f ${IMAGE_REGISTRY}/testimage-embed:latest
+
+# =============================================================================
+# Test Data Files - Action Configurations and Build Files
+# =============================================================================
+
+# Test Image 1: Build Arguments and Multiple Tags
+-- actions/testimage-1/action.yaml --
+# Container action demonstrating build arguments and multiple image tags
+action:
+  title: buildargs                        # Human-readable action name
+  description: Test passing args to Dockerfile
+
+runtime:
+  type: container                         # Container execution type
+  image: [img_registy]/testimage-1:latest # Primary image name
+  build:
+    context: ./                           # Build context directory
+    args:
+      USER_ID: $UID                       # Template: current user ID
+      GROUP_ID: $GID                      # Template: current group ID
+      USER_NAME: foobar                   # Static build argument
+    tags:
+      - [img_registy]/testimage-1:bar     # Additional image tag
+      - [img_registy]/testimage-1:buz     # Additional image tag
+  command:
+    - id                                  # Command to display user info
+
+# Test Image 1: Dockerfile with Build Arguments
+-- actions/testimage-1/Dockerfile --
+# Dockerfile demonstrating build argument usage for user creation
+FROM alpine:latest
+ARG USER_ID                               # Build argument for user ID
+ARG USER_NAME                             # Build argument for username
+ARG GROUP_ID                              # Build argument for group ID
+RUN adduser -D -u ${USER_ID} -g ${GROUP_ID} ${USER_NAME} || true
+USER ${USER_NAME}                         # Switch to created user
+
+# Test Image 2: Custom Build Context and Dockerfile
+-- actions/testimage-2/action.yaml --
+# Container action demonstrating custom build context and Dockerfile name
+action:
+  title: buildargs                        # Human-readable action name
+  description: Test passing args to Dockerfile
+
+runtime:
+  type: container                         # Container execution type
+  image: [img_registy]/testimage-2:foo    # Custom image name with tag
+  build:
+    context: ./context                    # Custom build context subdirectory
+    buildfile: test.Dockerfile            # Custom Dockerfile name
+    args:
+      USER_ID: {{ .current_uid }}         # Template: current user ID
+      GROUP_ID: {{ .current_gid }}        # Template: current group ID
+      USER_NAME: foobar                   # Static build argument
+  command:
+    - id                                  # Command to display user info
+
+# Test Image 2: Custom Named Dockerfile
+-- actions/testimage-2/context/test.Dockerfile --
+# Custom named Dockerfile in subdirectory build context
+FROM alpine:latest
+ARG USER_ID                               # Build argument for user ID
+ARG USER_NAME                             # Build argument for username
+ARG GROUP_ID                              # Build argument for group ID
+RUN adduser -D -u ${USER_ID} -g ${GROUP_ID} ${USER_NAME} || true
+USER ${USER_NAME}                         # Switch to created user
+
+# Test Image 3: Global Configuration Reference
+-- actions/testimage-3/action.yaml --
+# Container action that uses global image configuration
+action:
+  title: buildargs                        # Human-readable action name
+  description: Test passing args to Dockerfile
+
+runtime:
+  type: container                         # Container execution type
+  image: [img_registy]/testimage-3        # Image name (config in .launchr/config.yaml)
+  command:
+    - sh                                  # Shell command execution
+    - -c                                  # Execute command string
+    - echo "MY_ARG_1=$${MY_ARG_1} MY_ARG_2=$${MY_ARG_2}"  # Display build args
+
+# Global Image Configuration
+-- .launchr/config.yaml --
+# Global configuration file defining image build settings
+images:
+  [img_registy]/testimage-3:              # Image name matching action
+    context: ./testimage-3                # Build context directory
+    buildfile: test1.Dockerfile           # Custom Dockerfile name
+    args:
+      MY_ARG_1: "foo"                     # Build argument value
+      MY_ARG_2: "bar"                     # Build argument value
+    tags:
+      - [img_registy]/testimage-3:bar     # Additional image tag
+      - [img_registy]/testimage-3:buz     # Additional image tag
+
+# Global Configuration Dockerfile
+-- .launchr/testimage-3/test1.Dockerfile --
+# Dockerfile for globally configured image with environment variables
+FROM alpine:latest
+ARG MY_ARG_1
+ARG MY_ARG_2
+ENV MY_ARG_1=${MY_ARG_1}
+ENV MY_ARG_2=${MY_ARG_2}
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Image Build Process:
+# 1. Check if image exists locally before building
+# 2. Build image using specified context and Dockerfile
+# 3. Apply build arguments with template substitution
+# 4. Tag image with primary name and additional tags
+# 5. Execute container command after successful build
+# 6. Track image checksums in .launchr/actions.sum file
+#
+# Caching Behavior:
+# - Images are cached after first build
+# - Subsequent runs skip building if image exists
+# - --no-cache flag forces rebuild regardless of cache
+# - --remove-image flag cleans up image after execution
+#
+# Configuration Options:
+# - Inline build configuration in action.yaml
+# - Global image configuration in .launchr/config.yaml
+# - Custom build contexts and Dockerfile names
+# - Build argument templating with system variables
+# - Multiple image tagging support
+#
+# Integration Features:
+# - Embedded filesystem action support
+# - Checksum tracking for cache validation
+# - Automatic cleanup and rebuild capabilities
+# - Template variable substitution ($UID, current_uid, current_gid, $GID)
+#
+# =============================================================================

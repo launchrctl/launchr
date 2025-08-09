@@ -1,0 +1,35 @@
+name: 🧪 Code Coverage & Testing
+
+on:
+  push:
+    branches:
+      - 'main'
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.goreleaser.yaml'
+      - 'example/**'
+      - 'docs/**'
+  pull_request:
+    branches:
+      - 'main'
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.goreleaser.yaml'
+      - 'example/**'
+      - 'docs/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: 🛡 Testing Suite
+    uses: ./.github/workflows/test-suite.yaml
+    with:
+      use-docker-sidecar: true        # 🐳 Enable full testing environment
+      use-sidecar-remote-share: true  # 📁 Enable remote file sharing for testing

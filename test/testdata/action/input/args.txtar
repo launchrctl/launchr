@@ -1,0 +1,489 @@
+# =============================================================================
+# Launchr Action Argument Type Validation Test Suite
+# =============================================================================
+#
+# This test file validates the Launchr tool's ability to:
+# 1. Handle different argument types (string, integer, number, boolean, enum, formatted)
+# 2. Validate required arguments and provide appropriate error messages
+# 3. Perform type-specific validation and conversion
+# 4. Handle enum validation with restricted value sets
+# 5. Validate formatted strings (email format)
+# 6. Handle optional arguments with default values
+# 7. Support multiple argument combinations
+#
+# Test Focus:
+# - Argument type validation and conversion
+# - Required argument enforcement
+# - JSON Schema validation integration
+# - Error message formatting and clarity
+# - Default value handling for optional arguments
+# =============================================================================
+
+# =============================================================================
+# String Argument Tests
+# =============================================================================
+
+# Test 1: Valid String Argument
+# -----------------------------------------------------------------------------
+# Provide 1 required string argument
+exec launchr test-print-input:arg-string foo
+
+# Validate successful string argument processing:
+# Should output the string value with type information
+stdout '^argString: foo string true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 2: Missing String Argument
+# -----------------------------------------------------------------------------
+# Have error when argument missing
+! exec launchr test-print-input:arg-string
+
+# Validate missing argument error message:
+# Should show JSON Schema validation error for missing required property
+stdout '- \[arguments\]: missing property ''argString'''
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Integer Argument Tests
+# =============================================================================
+
+# Test 3: Valid Integer Argument
+# -----------------------------------------------------------------------------
+# Provide 1 required integer argument
+exec launchr test-print-input:arg-integer 42
+
+# Validate successful integer argument processing:
+# Should output the integer value with type information
+stdout '^argInt: 42 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 4: Invalid Integer Argument
+# -----------------------------------------------------------------------------
+# Have error when argument is not an integer
+! exec launchr test-print-input:arg-integer foo
+
+# Validate integer parsing error message:
+# Should show Go strconv parsing error for invalid integer
+# TODO Change error in code.
+stdout 'strconv\.Atoi: parsing "foo": invalid syntax'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 5: Missing Integer Argument
+# -----------------------------------------------------------------------------
+# Have error when argument is missing
+! exec launchr test-print-input:arg-integer
+
+# Validate missing argument error message:
+# Should show JSON Schema validation error for missing required property
+stdout '- \[arguments\]: missing property ''argInt'''
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Number (Float) Argument Tests
+# =============================================================================
+
+# Test 6: Valid Number Argument
+# -----------------------------------------------------------------------------
+# Provide 1 required number argument
+exec launchr test-print-input:arg-number 37.73
+
+# Validate successful number argument processing:
+# Should output the float value with type information
+stdout '^argNumber: 37\.73 float64 true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 7: Invalid Number Argument (Locale Format)
+# -----------------------------------------------------------------------------
+# Have error when argument is not a number
+! exec launchr test-print-input:arg-number 37,73
+
+# Validate number parsing error message:
+# Should show Go strconv parsing error for invalid number format
+# TODO Change error in code.
+stdout 'strconv\.ParseFloat: parsing "37,73": invalid syntax'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 8: Missing Number Argument
+# -----------------------------------------------------------------------------
+# Have error when argument is missing
+! exec launchr test-print-input:arg-number
+
+# Validate missing argument error message:
+# Should show JSON Schema validation error for missing required property
+stdout '- \[arguments\]: missing property ''argNumber'''
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Enum Argument Tests
+# =============================================================================
+
+# Test 9: Valid Enum Argument
+# -----------------------------------------------------------------------------
+# Provide 1 required string enum argument
+exec launchr test-print-input:arg-enum enum2
+
+# Validate successful enum argument processing:
+# Should output the enum value with type information
+stdout '^argEnum: enum2 string true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 10: Invalid Enum Argument
+# -----------------------------------------------------------------------------
+# Have error when argument is not correct enum
+! exec launchr test-print-input:arg-enum badEnum
+
+# Validate enum validation error message:
+# Should show JSON Schema validation error with allowed enum values
+stdout '- \[arguments argEnum\]: value must be one of ''enum1'', ''enum2'''
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 11: Missing Enum Argument
+# -----------------------------------------------------------------------------
+# Have error when argument is missing
+! exec launchr test-print-input:arg-enum
+
+# Validate missing argument error message:
+# Should show JSON Schema validation error for missing required property
+stdout '- \[arguments\]: missing property ''argEnum'''
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Boolean Argument Tests
+# =============================================================================
+
+# Test 12-17: Valid Boolean Arguments (Various Formats)
+# -----------------------------------------------------------------------------
+# Provide 1 required boolean argument - numeric true
+exec launchr test-print-input:arg-boolean 1
+stdout '^argBoolean: true bool true$'
+! stderr .
+
+# Provide 1 required boolean argument - capitalized true
+exec launchr test-print-input:arg-boolean True
+stdout '^argBoolean: true bool true$'
+! stderr .
+
+# Provide 1 required boolean argument - lowercase true
+exec launchr test-print-input:arg-boolean true
+stdout '^argBoolean: true bool true$'
+! stderr .
+
+# Provide 1 required boolean argument - numeric false
+exec launchr test-print-input:arg-boolean 0
+stdout '^argBoolean: false bool true$'
+! stderr .
+
+# Provide 1 required boolean argument - capitalized false
+exec launchr test-print-input:arg-boolean False
+stdout '^argBoolean: false bool true$'
+! stderr .
+
+# Provide 1 required boolean argument - lowercase false
+exec launchr test-print-input:arg-boolean false
+stdout '^argBoolean: false bool true$'
+! stderr .
+
+# Test 18: Invalid Boolean Argument
+# -----------------------------------------------------------------------------
+# Have error when argument is not correct boolean
+! exec launchr test-print-input:arg-boolean no
+
+# Validate boolean parsing error message:
+# Should show Go strconv parsing error for invalid boolean
+# TODO Change error in code.
+stdout 'strconv\.ParseBool: parsing "no": invalid syntax'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 19: Missing Boolean Argument
+# -----------------------------------------------------------------------------
+# Have error when argument is missing
+! exec launchr test-print-input:arg-boolean
+
+# Validate missing argument error message:
+# Should show JSON Schema validation error for missing required property
+stdout '- \[arguments\]: missing property ''argBoolean'''
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Formatted String Argument Tests (Email)
+# =============================================================================
+
+# Test 20: Valid Email Argument
+# -----------------------------------------------------------------------------
+# Provide 1 required formatted string argument
+exec launchr test-print-input:arg-email foo@example.com
+
+# Validate successful email argument processing:
+# Should output the email value with type information
+stdout '^argEmail: foo@example.com string true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 21: Invalid Email Argument
+# -----------------------------------------------------------------------------
+# Have error when argument is not an integer
+! exec launchr test-print-input:arg-email foo
+
+# Validate email format validation error message:
+# Should show specific email validation error
+stdout '- \[arguments argEmail\]: ''foo'' is not valid email: missing @'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 22: Missing Email Argument
+# -----------------------------------------------------------------------------
+# Have error when argument is missing
+! exec launchr test-print-input:arg-email
+
+# Validate missing argument error message:
+# Should show JSON Schema validation error for missing required property
+stdout '- \[arguments\]: missing property ''argEmail'''
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Multiple Arguments Tests
+# =============================================================================
+
+# Test 23: All Three Arguments Provided
+# -----------------------------------------------------------------------------
+# Provide 3 arguments: 1 required, 2 optional with a default value, 3 optional
+exec launchr test-print-input:args-3 42 bar enum1
+
+# Validate all three arguments processed correctly:
+# Should output all three values with their type information
+stdout '^argInteger: 42 int true$'
+stdout '^argString: bar string true$'
+stdout '^argEnum: enum1 string true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 24: Two Arguments Provided (Third Optional Missing)
+# -----------------------------------------------------------------------------
+# Provide 3 arguments: 1 required, 2 optional with a default value, no 3rd
+exec launchr test-print-input:args-3 42 bar
+
+# Validate two arguments processed, third shows as nil:
+# Should output first two values and nil for missing optional
+stdout '^argInteger: 42 int true$'
+stdout '^argString: bar string true$'
+stdout '^argEnum: <nil> <nil> false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 25: One Argument Provided (Default Value Used)
+# -----------------------------------------------------------------------------
+# Provide 3 arguments, 1 required, 2 optional with a default value, no 3rd
+exec launchr test-print-input:args-3 42
+
+# Validate required argument and default value usage:
+# Should output required argument, default value, and nil for missing optional
+stdout '^argInteger: 42 int true$'
+stdout '^argString: foo string false$'
+stdout '^argEnum: <nil> <nil> false$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Test Data Files - Action Configurations for Different Argument Types
+# =============================================================================
+
+# String Argument Action
+-- test-print-input/actions/arg-string/action.yaml --
+# Plugin action demonstrating string argument handling
+# String type is implicit when no type is specified
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Argument String    # Human-readable action name
+
+  arguments:
+    - name: argString                      # Argument identifier
+      description: This is a required implicit string argument    # Help text
+      title: Argument String              # Human-readable argument name
+      required: true                       # Must be provided by user
+      # Note: type defaults to string when not specified
+
+# Integer Argument Action
+-- test-print-input/actions/arg-integer/action.yaml --
+# Plugin action demonstrating integer argument handling
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Argument Array Integer    # Human-readable action name
+
+  arguments:
+    - name: argInt                         # Argument identifier
+      title: Argument Integer              # Human-readable argument name
+      description: This is a required integer argument    # Help text
+      type: integer                        # Explicit integer type
+      required: true                       # Must be provided by user
+
+# Number (Float) Argument Action
+-- test-print-input/actions/arg-number/action.yaml --
+# Plugin action demonstrating number (float) argument handling
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Argument Number    # Human-readable action name
+
+  arguments:
+    - name: argNumber                      # Argument identifier
+      title: Argument number               # Human-readable argument name
+      description: This is a required float argument with a default value    # Help text
+      type: number                         # Explicit number (float64) type
+      required: true                       # Must be provided by user
+
+# Boolean Argument Action
+-- test-print-input/actions/arg-boolean/action.yaml --
+# Plugin action demonstrating boolean argument handling
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Argument Boolean    # Human-readable action name
+
+  arguments:
+    - name: argBoolean                     # Argument identifier
+      title: Argument Boolean              # Human-readable argument name
+      type: boolean                        # Explicit boolean type
+      description: This is a required boolean argument    # Help text
+      required: true                       # Must be provided by user
+
+# Enum Argument Action
+-- test-print-input/actions/arg-enum/action.yaml --
+# Plugin action demonstrating enum argument handling
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Argument String enum    # Human-readable action name
+
+  arguments:
+    - name: argEnum                        # Argument identifier
+      title: Argument Enum                 # Human-readable argument name
+      description: This is an required string enum argument    # Help text
+      type: string                         # Base type: string
+      enum: [enum1, enum2]                 # Allowed values enumeration
+      required: true                       # Must be provided by user
+
+# Email Format Argument Action
+-- test-print-input/actions/arg-email/action.yaml --
+# Plugin action demonstrating formatted string argument handling
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - Argument String Format    # Human-readable action name
+
+  arguments:
+    - name: argEmail                       # Argument identifier
+      title: Argument Email                # Human-readable argument name
+      description: This is a required formatted argument    # Help text
+      type: string                         # Base type: string
+      format: email                        # Format validation: email
+      required: true                       # Must be provided by user
+
+# Multiple Arguments Action
+-- test-print-input/actions/args-3/action.yaml --
+# Plugin action demonstrating multiple argument handling with defaults
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input type - 3 arguments    # Human-readable action name
+
+  arguments:
+    # Required integer argument (no default)
+    - name: argInteger                     # Argument identifier
+      title: Argument Integer              # Human-readable argument name
+      description: This is a required integer argument    # Help text
+      type: integer                        # Explicit integer type
+      required: true                       # Must be provided by user
+
+    # Required string argument with default value
+    - name: argString                      # Argument identifier
+      description: This is a required string argument with a default value    # Help text
+      type: string                         # Explicit string type
+      required: true                       # Must be provided by user
+      default: "foo"                       # Default value when not provided
+
+    # Optional enum argument (no default)
+    - name: argEnum                        # Argument identifier
+      title: Argument Enum                 # Human-readable argument name
+      description: This is an optional string enum argument    # Help text
+      type: string                         # Base type: string
+      enum: [enum1, enum2]                 # Allowed values enumeration
+      # Note: required defaults to false for optional arguments
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Argument Type Support:
+# 1. String: Implicit default type, accepts any text input
+# 2. Integer: Explicit type, validates and converts to int
+# 3. Number: Explicit type, validates and converts to float64
+# 4. Boolean: Explicit type, accepts various true/false formats
+# 5. Enum: String type with restricted value set
+# 6. Formatted: String type with format validation (email, etc.)
+#
+# Validation Rules:
+# - Required arguments must be provided or have default values
+# - Type validation occurs before action execution
+# - Invalid types show specific parsing errors
+# - Missing required arguments show JSON Schema errors
+# - Enum validation shows allowed values in error messages
+#
+# Error Message Types:
+# - JSON Schema validation errors for missing/invalid properties
+# - Go strconv parsing errors for type conversion failures
+# - Format-specific validation errors for formatted strings
+# - Clear identification of argument names and expected values
+#
+# Default Value Behavior:
+# - Default values are used when arguments are not provided
+# - Required arguments can have default values
+# - Optional arguments without defaults show as nil
+# - Default values are indicated in output (false for provided flag)
+#
+# Boolean Format Support:
+# - Numeric: 1 (true), 0 (false)
+# - Text: true/false, True/False (case variations)
+# - Invalid formats like "yes/no" are rejected
+#
+# Number Format Requirements:
+# - Standard JSON/YAML numeric format required
+# - Dot (.) decimal separator, not comma (,)
+# - Scientific notation supported
+# - Locale-specific formatting rejected
+#
+# =============================================================================

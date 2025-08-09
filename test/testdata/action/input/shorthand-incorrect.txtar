@@ -1,0 +1,119 @@
+# =============================================================================
+# Launchr Action Option Shorthand Validation Test Suite
+# =============================================================================
+#
+# This test file validates the Launchr tool's ability to:
+# 1. Validate shorthand flag definitions for correct format
+# 2. Handle invalid shorthand configurations gracefully
+# 3. Provide clear error messages for shorthand parsing failures
+# 4. Enforce shorthand format constraints (single character requirement)
+# 5. Distinguish between shorthand definition errors and usage errors
+# 6. Maintain consistent error handling for shorthand validation
+#
+# Test Focus:
+# - Shorthand format validation (single character constraint)
+# - Error handling for multi-character shorthand definitions
+# - Command-line parsing behavior with invalid shorthand configs
+# - Error message clarity for shorthand format violations
+# - Separation of configuration errors from usage errors
+# =============================================================================
+
+# Test 1: Invalid Multi-Character Shorthand Usage
+# -----------------------------------------------------------------------------
+# Execute with command that would use invalid multi-character shorthand
+! exec launchr test-print-input:shorthand -int 73
+
+# Validate shorthand parsing error:
+# Should show command-line parsing error for invalid shorthand format
+# The error indicates that 'i' is recognized as shorthand, not 'int'
+stdout 'unknown shorthand flag: ''i'' in -int'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Test Data Files - Action Configuration with Invalid Shorthand
+# =============================================================================
+
+# Invalid Shorthand Action
+-- test-print-input/actions/shorthand/action.yaml --
+# Plugin action demonstrating invalid shorthand configuration
+# Shows behavior when shorthand violates single-character constraint
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input - Option shorthand    # Human-readable action name
+
+  options:
+    - name: optInteger                     # Option identifier
+      shorthand: int                       # Invalid: multi-character shorthand
+      title: Option Integer                # Human-readable option name
+      description: This is an optional integer option    # Help text
+      type: integer                        # Explicit integer type
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Shorthand Format Constraints:
+# 1. Shorthand must be single character (not enforced at config level)
+# 2. Multi-character shorthand definitions cause parsing ambiguity
+# 3. Command-line parser treats multi-character shorthand as invalid
+# 4. Only first character of multi-character shorthand is recognized
+# 5. Error messages reflect command-line parsing perspective
+#
+# Error Behavior Analysis:
+# - Configuration allows multi-character shorthand definition
+# - Command-line parser only recognizes first character
+# - Flag '-int' is parsed as shorthand 'i' + characters 'nt'
+# - Parser reports 'i' as unknown shorthand, not 'int'
+# - This reveals internal parsing behavior and constraints
+#
+# Parsing Logic:
+# - Short flags expect single character after dash
+# - Multi-character sequences after dash are parsed character by character
+# - First character is treated as potential shorthand
+# - Remaining characters are treated as additional flag parsing
+# - Unknown shorthand generates specific error message
+#
+# Configuration vs Runtime Validation:
+# - Configuration schema doesn't enforce single-character shorthand
+# - Runtime parsing enforces single-character shorthand behavior
+# - Mismatch between configuration flexibility and parser constraints
+# - Error occurs at usage time, not configuration time
+#
+# Error Message Interpretation:
+# - "unknown shorthand flag: 'i' in -int" means:
+#   - Parser found 'i' as first character of '-int'
+#   - 'i' is not a defined shorthand for this action
+#   - Full string '-int' was provided but parsed as '-i' + 'nt'
+#   - This is a parsing error, not a shorthand definition error
+#
+# Design Implications:
+# - Shorthand validation should occur at configuration time
+# - Error messages could be more specific about format requirements
+# - Configuration schema should enforce single-character constraint
+# - Runtime errors should distinguish format violations from unknown shortcuts
+#
+# Best Practices:
+# - Always use single-character shorthand definitions
+# - Validate shorthand format during action configuration
+# - Use descriptive error messages for shorthand violations
+# - Consider configuration-time validation for shorthand constraints
+# - Document shorthand format requirements clearly
+#
+# Potential Improvements:
+# - Add configuration-time validation for shorthand format
+# - Improve error messages to explain shorthand format requirements
+# - Consider rejecting multi-character shorthand at config load time
+# - Provide clearer distinction between config and usage errors
+# - Add shorthand format documentation to action schema
+#
+# Technical Details:
+# - Command-line parsing treats '-int' as '-i' + 'nt'
+# - Only 'i' is checked against defined shorthand mappings
+# - Multi-character shorthand definitions are effectively ignored
+# - Parser behavior is consistent with Unix flag parsing conventions
+# - Single-character shorthand is a fundamental constraint of the parsing model
+#
+# =============================================================================

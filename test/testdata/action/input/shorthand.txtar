@@ -1,0 +1,171 @@
+# =============================================================================
+# Launchr Action Option Shorthand Test Suite
+# =============================================================================
+#
+# This test file validates the Launchr tool's ability to:
+# 1. Support shorthand flags for options (single character alternatives)
+# 2. Handle both long-form (--option) and short-form (-o) option syntax
+# 3. Validate shorthand flag recognition and processing
+# 4. Provide appropriate error messages for unknown shorthand flags
+# 5. Support shorthand flags across multiple actions
+# 6. Maintain consistent behavior between long and short option forms
+#
+# Test Focus:
+# - Shorthand flag definition and usage
+# - Command-line parsing for short flags
+# - Error handling for undefined shorthand flags
+# - Equivalence between long and short option forms
+# - Shorthand flag reusability across actions
+# =============================================================================
+
+# Test 1: Long-Form Option Syntax
+# -----------------------------------------------------------------------------
+# Execute with standard long-form option syntax
+exec launchr test-print-input:shorthand --optInteger 73
+
+# Validate successful long-form option processing:
+# Should process the integer option normally using full name
+stdout '^optInteger: 73 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 2: Short-Form Option Syntax (Valid Shorthand)
+# -----------------------------------------------------------------------------
+# Execute with short-form option syntax using defined shorthand
+exec launchr test-print-input:shorthand -i 73
+
+# Validate successful shorthand option processing:
+# Should process the integer option identically to long-form
+stdout '^optInteger: 73 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 3: Invalid Shorthand Flag
+# -----------------------------------------------------------------------------
+# Execute with undefined shorthand flag
+! exec launchr test-print-input:shorthand -n 73
+
+# Validate unknown shorthand error message:
+# Should show command-line parsing error for unknown shorthand
+stdout 'unknown shorthand flag: ''n'' in -n'
+
+# Validate option was not processed:
+# Should not show option processing output due to error
+! stdout '^optInteger: 73 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# Test 4: Shorthand Reusability Across Actions
+# -----------------------------------------------------------------------------
+# Execute different action with same shorthand flag
+exec launchr test-print-input:shorthand2 -i 73
+
+# Validate shorthand works across different actions:
+# Should process the integer option using shorthand in different action
+stdout '^optInteger: 73 int true$'
+
+# Validate clean execution (no error output)
+! stderr .
+
+# =============================================================================
+# Test Data Files - Action Configurations with Shorthand Options
+# =============================================================================
+
+# First Shorthand Action
+-- test-print-input/actions/shorthand/action.yaml --
+# Plugin action demonstrating option shorthand functionality
+# Shows how to define single-character aliases for options
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input - Option shorthand    # Human-readable action name
+
+  options:
+    - name: optInteger                     # Option identifier
+      shorthand: i                         # Single-character shorthand alias
+      title: Option Integer                # Human-readable option name
+      description: This is an optional integer option    # Help text
+      type: integer                        # Explicit integer type
+
+# Second Shorthand Action (Same Shorthand)
+-- test-print-input/actions/shorthand2/action.yaml --
+# Plugin action demonstrating shorthand reusability across actions
+# Shows that same shorthand can be used in different actions
+runtime: plugin                           # Plugin execution type
+
+action:
+  title: Test Plugin - Input - Option shorthand    # Human-readable action name
+
+  options:
+    - name: optInteger                     # Option identifier
+      shorthand: i                         # Same single-character shorthand alias
+      title: Option Integer                # Human-readable option name
+      description: This is an optional integer option    # Help text
+      type: integer                        # Explicit integer type
+
+# =============================================================================
+# Expected Behavior Summary
+# =============================================================================
+#
+# Shorthand Flag Support:
+# 1. Single-character aliases for options using 'shorthand' property
+# 2. Short flags use single dash syntax: -i instead of --optInteger
+# 3. Functional equivalence between long and short forms
+# 4. Same validation and processing for both forms
+# 5. Error handling for undefined shorthand flags
+#
+# Command-Line Syntax:
+# - Long form: --optionName value
+# - Short form: -s value (where 's' is the shorthand)
+# - Assignment form: --optionName=value or -s=value
+# - Boolean flags: --flag or -f (for boolean options)
+#
+# Shorthand Definition Rules:
+# - Must be single character
+# - Defined per option in action configuration
+# - Case-sensitive (presumably)
+# - Optional feature (not all options need shorthand)
+#
+# Error Handling:
+# - Unknown shorthand flags generate parsing errors
+# - Error messages identify the specific unknown flag
+# - Processing stops on shorthand errors
+# - Clear distinction between shorthand and option name errors
+#
+# Scope and Reusability:
+# - Shorthand flags are scoped to individual actions
+# - Same shorthand can be reused across different actions
+# - No global shorthand conflict resolution needed
+# - Each action defines its own shorthand namespace
+#
+# Processing Equivalence:
+# - Short and long forms produce identical output
+# - Same type validation and conversion
+# - Same error handling for invalid values
+# - Same default value behavior
+# - Same required option enforcement
+#
+# Integration with Other Features:
+# - Works with all option types (integer, string, boolean, array, etc.)
+# - Compatible with default values
+# - Compatible with required options
+# - Compatible with enum validation
+# - Compatible with format validation
+#
+# User Experience Benefits:
+# - Faster typing for frequently used options
+# - Reduced command line length
+# - Familiar Unix-style short flag conventions
+# - Maintains full option name availability
+# - Clear error messages when shortcuts are misused
+#
+# Implementation Considerations:
+# - Command-line parsing library handles short flag recognition
+# - Shorthand mapping occurs at action definition level
+# - No runtime shorthand registration or conflicts
+# - Each action maintains independent shorthand namespace
+#
+# =============================================================================

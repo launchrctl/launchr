@@ -1,0 +1,288 @@
+# 🚀 Remote Debug Workflow - SSH Tunnel Edition
+# ===============================================
+# This workflow creates a secure SSH tunnel for remote debugging sessions
+#
+# ✨ Features:
+#   • 🔐 Secure SSH access to build environments
+#   • 🐛 Pre-installed Go debugger (Delve)
+#   • 🌍 Multi-platform support (Linux, macOS, Windows)
+#   • 🔄 Port forwarding for seamless debug sessions
+#   • 🐳 Docker sidecar for enhanced compatibility
+#   • 📁 Persistent Go environment configuration
+
+name: 🚧 Debug with SSH
+
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        description: '🖥️ Select your debugging platform'
+        required: false
+        type: choice
+        options:
+          - '🐧 Ubuntu LTS (amd64)'
+          - '🐧 Ubuntu LTS (arm64)'
+          - '🍎 macOS Latest (arm64)'
+          - '🍎 macOS 13 (amd64)'
+          - '🪟 Windows Latest (amd64)'
+          - '🪟 Windows Latest (arm64)'
+
+jobs:
+  select-os:
+    name: 🗺️ Platform Selection → ${{ inputs.os }}
+    runs-on: ubuntu-latest
+    outputs:
+      runner-os: ${{ steps.map-os.outputs.runner-os }}
+      os-type: ${{ steps.map-os.outputs.os-type }}
+      use-docker-sidecar: ${{ steps.map-os.outputs.use-docker-sidecar }}
+      private-key: ${{ steps.generate-key.outputs.private-key }}
+      public-key: ${{ steps.generate-key.outputs.public-key }}
+    steps:
+      - name: 🎯 Map OS selection to runner
+        id: map-os
+        env:
+          INPUT_OS: ${{ inputs.os }}
+        run: |
+          echo "🔍 Mapping OS selection: $INPUT_OS"
+          case "$INPUT_OS" in
+            *"Ubuntu LTS (amd64)"*)
+              echo "✅ Selected: Ubuntu Latest (AMD64)"
+              echo "runner-os=ubuntu-latest" >> $GITHUB_OUTPUT
+              echo "os-type=linux" >> $GITHUB_OUTPUT
+              echo "use-docker-sidecar=false" >> $GITHUB_OUTPUT
+              ;;
+            *"Ubuntu LTS (arm64)"*)
+              echo "✅ Selected: Ubuntu 24.04 (ARM64)"
+              echo "runner-os=ubuntu-24.04-arm" >> $GITHUB_OUTPUT
+              echo "os-type=linux" >> $GITHUB_OUTPUT
+              echo "use-docker-sidecar=false" >> $GITHUB_OUTPUT
+              ;;
+            *"macOS Latest (arm64)"*)
+              echo "✅ Selected: macOS Latest (ARM64)"
+              echo "runner-os=macos-latest" >> $GITHUB_OUTPUT
+              echo "os-type=macos" >> $GITHUB_OUTPUT
+              echo "use-docker-sidecar=true" >> $GITHUB_OUTPUT
+              ;;
+            *"macOS 13 (amd64)"*)
+              echo "✅ Selected: macOS 13 (AMD64)"
+              echo "runner-os=macos-13" >> $GITHUB_OUTPUT
+              echo "os-type=macos" >> $GITHUB_OUTPUT
+              echo "use-docker-sidecar=false" >> $GITHUB_OUTPUT
+              ;;
+            *"Windows Latest (amd64)"*)
+              echo "✅ Selected: Windows Latest (AMD64)"
+              echo "runner-os=windows-latest" >> $GITHUB_OUTPUT
+              echo "os-type=windows" >> $GITHUB_OUTPUT
+              echo "use-docker-sidecar=false" >> $GITHUB_OUTPUT
+              ;;
+            *"Windows Latest (arm64)"*)
+              echo "✅ Selected: Windows 11 (ARM64)"
+              echo "runner-os=windows-11-arm" >> $GITHUB_OUTPUT
+              echo "os-type=windows" >> $GITHUB_OUTPUT
+              echo "use-docker-sidecar=true" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "⚠️  No specific OS selected, defaulting to Ubuntu Latest"
+              echo "runner-os=ubuntu-latest" >> $GITHUB_OUTPUT
+              echo "os-type=linux" >> $GITHUB_OUTPUT
+              echo "use-docker-sidecar=false" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: 🔑 Generate SSH Key Pair (ED25519)
+        id: generate-key
+        run: |
+          echo "🔐 Generating secure SSH key pair..."
+          ssh-keygen -t ed25519 -N "" -f ./id_ed25519
+          
+          echo "📤 Exporting private SSH key"
+          {
+            echo "private-key<<EOF"
+            cat ./id_ed25519
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          
+          echo "📤 Exporting public SSH key"
+          echo "public-key=$(cat ./id_ed25519.pub)" >> $GITHUB_OUTPUT
+          echo "✅ SSH key pair generated successfully!"
+
+  linux-sidecar:
+    name: 🐳 Linux Docker Sidecar
+    needs: [select-os]
+    runs-on: ubuntu-latest
+    if: needs.select-os.outputs.use-docker-sidecar == 'true'
+    steps:
+      - name: 🚀 Launch Linux Docker sidecar
+        uses: lexbritvin/docker-sidecar-action/run-sidecar@main
+        with:
+          ssh-server-authorized-keys: ${{ needs.select-os.outputs.public-key }}
+          use-bore: 'true'
+
+      - name: ⏳ Wait for debug session to complete
+        uses: lexbritvin/wait-action@v1
+        with:
+          condition-type: 'job'
+          job-name: '/How to connect/'
+          timeout-seconds: 3600
+          poll-interval-seconds: 30
+
+  debug-session:
+    name: 👉 How to connect 👈
+    needs: select-os
+    runs-on: ${{ needs.select-os.outputs.runner-os || 'ubuntu-latest' }}
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 💻 System Information
+        uses: lexbritvin/os-info-action@v1
+
+      - name: 🐹 Set up Go environment
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: 🛠️ Install debugging tools
+        shell: bash
+        run: |
+          echo "🔧 Setting up debugging environment..."
+
+          echo "📁 Configure Go temporary directory"
+          export GOTMPDIR="$(pwd)/.gotmp"
+          mkdir -p $GOTMPDIR
+          echo "📁 Using temp directory: $GOTMPDIR"
+          echo "GOTMPDIR=$GOTMPDIR" >> $GITHUB_ENV
+
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            echo "🍎 Configuring Go binary path for macOS..."
+            ln -s $(which go) /usr/local/bin/go
+            echo "✅ Go binary linked to user path"
+          fi
+          
+          # Check Windows ARM64 compatibility
+          if [[ "${{ runner.os }}" == "Windows" && "${{ runner.arch }}" == "ARM64" ]]; then
+            echo "⚠️ WARNING: Delve debugger is not available on Windows ARM64"
+            echo "🚫 Remote debugging features will be limited on this platform"
+          else
+            echo "📦 Installing Delve debugger..."
+            go install github.com/go-delve/delve/cmd/dlv@latest
+            echo "✅ Delve installed successfully!"
+          fi
+          
+          echo "📦 Downloading Go modules..."
+          go mod download
+          go install github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt@latest
+          echo "✅ Dependencies ready!"
+
+      - name: 💾 Save Go environment variables
+        shell: bash
+        run: |
+          echo "💾 Persisting Go environment configuration..."
+          echo "📋 Saving: GOTMPDIR=${GOTMPDIR}"
+          
+          case "$RUNNER_OS" in
+            "Linux"|"macOS")
+              echo "🐧🍎 Configuring Unix-like environment..."
+              # Add Go environment variables to system profile
+              echo "export GOTMPDIR=\"${GOTMPDIR}\"" | sudo tee -a /etc/profile
+              echo "✅ Environment saved to /etc/profile"
+              echo "💡 To use: source /etc/profile"
+              ;;
+          
+            "Windows")
+              echo "🪟 Configuring Windows environment..."
+              # 🔧 Set system environment variables
+              setx GOTMPDIR "${GOTMPDIR}" //M 2>/dev/null
+              echo "✅ Environment saved to Windows system variables"
+              echo "💡 To use: Open new terminal session"
+              ;;
+          
+            *)
+              echo "❌ Unsupported OS: $RUNNER_OS"
+              exit 1
+              ;;
+          esac
+
+      - name: 🐳 Install Local Docker
+        uses: lexbritvin/setup-docker-action@main
+        if: needs.select-os.outputs.use-docker-sidecar == 'false' && needs.select-os.outputs.os-type != 'linux'
+
+      - name: 🐳 Set up Remote Docker
+        id: docker-setup
+        uses: lexbritvin/docker-sidecar-action/setup-remote-docker@main
+        if: needs.select-os.outputs.use-docker-sidecar == 'true'
+        with:
+          private-key: ${{ needs.select-os.outputs.private-key }}
+          use-remote-share: 'true'
+
+      - name: 🔗 Establish SSH Debug Session
+        id: ssh-session
+        uses: lexbritvin/ssh-session-action@v1
+        with:
+          use-bore: 'true'
+          use-actor-ssh-keys: 'true'
+          detached: 'true'
+          wait-timeout: '3600'
+
+      - name: 👉 How to connect 👈
+        env:
+          HELP_MESSAGE: ${{ steps.ssh-session.outputs.help-message }}
+          EXTRA_HELP: |
+            ╔══════════════════════════════════════════════════════════════════════════════════════════╗
+                                        🐛 GO DEBUGGING WITH DELVE 🚀                            
+            ╚══════════════════════════════════════════════════════════════════════════════════════════╝
+            
+            \033[1;36m┌─ 🔄 PORT FORWARDING SETUP\033[0m
+            \033[1;36m│\033[0m   \033[1mFor Delve debugging, forward port 2345:\033[0m
+            \033[1;36m│\033[0m   \033[1;33mssh -L 2345:localhost:2345 [...]\033[0m
+            \033[1;36m└─\033[0m
+            
+            \033[1;32m┌─ 🧪 TESTING COMMANDS\033[0m
+            \033[1;32m│\033[0m   \033[1m• Run all tests:\033[0m
+            \033[1;32m│\033[0m     \033[1;96mgo test -v ./...\033[0m
+            \033[1;32m│\033[0m   \033[1m• Run specific test:\033[0m
+            \033[1;32m│\033[0m     \033[1;96mgo test -v -run TestFunctionName ./...\033[0m
+            \033[1;32m│\033[0m   \033[1m• Run with coverage:\033[0m
+            \033[1;32m│\033[0m     \033[1;96mgo test -v -cover ./...\033[0m
+            \033[1;32m└─\033[0m
+            
+            \033[1;33m┌─ 🐛 DEBUGGING COMMANDS\033[0m
+            \033[1;33m│\033[0m   \033[1m• Debug specific test:\033[0m
+            \033[1;33m│\033[0m     \033[1;95mdlv --listen=:2345 --headless --api-version=2 test ./... -- -test.run TestName\033[0m
+            \033[1;33m│\033[0m   \033[1m• Debug main application:\033[0m
+            \033[1;33m│\033[0m     \033[1;95mdlv debug --headless --listen=:2345 --api-version=2 ./cmd/main -- [args...]\033[0m
+            \033[1;33m│\033[0m   \033[1m• Attach to running process:\033[0m
+            \033[1;33m│\033[0m     \033[1;95mdlv attach --headless --listen=:2345 --api-version=2 [PID]\033[0m
+            \033[1;33m└─\033[0m
+            
+            \033[1;34m┌─ 🔗 IDE INTEGRATION\033[0m
+            \033[1;34m│\033[0m   \033[1m• GoLand/IntelliJ IDEA:\033[0m
+            \033[1;34m│\033[0m     \033[1m→ Run/Debug Configurations → Go Remote\033[0m
+            \033[1;34m│\033[0m     \033[1m→ Host: localhost, Port: 2345\033[0m
+            \033[1;34m│\033[0m   \033[1m• VS Code:\033[0m
+            \033[1;34m│\033[0m     \033[1m→ Use 'Go: Connect to server' command\033[0m
+            \033[1;34m│\033[0m     \033[1m→ Configure launch.json with 'connect' mode\033[0m
+            \033[1;34m└─\033[0m
+            
+            \033[1;35m┌─ 💡 HELPFUL TIPS\033[0m
+            \033[1;35m│\033[0m   \033[1m• Set breakpoints before starting debug session\033[0m
+            \033[1;35m│\033[0m   \033[1m• Use 'dlv help' for more commands\033[0m
+            \033[1;35m│\033[0m   \033[1m• Check firewall settings if connection fails\033[0m
+            \033[1;35m│\033[0m   \033[1m• Session will auto-terminate after 30 minutes\033[0m
+            \033[1;35m└─\033[0m
+            
+            \033[1;36m📚 Resources:\033[0m
+            \033[1m• Delve Documentation: https://github.com/go-delve/delve/tree/master/Documentation\033[0m
+            \033[1m• GoLand Remote Debug: https://www.jetbrains.com/help/go/attach-to-running-go-processes-with-debugger.html\033[0m
+            \033[1m• VS Code Go Debug: https://github.com/golang/vscode-go/blob/master/docs/debugging.md\033[0m
+        shell: bash
+        run: |
+          echo "🎉 SSH Debug Session Started Successfully!"
+          
+          # Display the SSH connection instructions with enhanced formatting
+          printf "%b\n" "$HELP_MESSAGE"
+          
+          # Display the debugging guide with colors
+          printf "%b\n" "$EXTRA_HELP"
+          
+          echo "🎯 Happy debugging! Your session is ready to use."
