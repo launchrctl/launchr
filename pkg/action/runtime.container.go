@@ -31,7 +31,24 @@ const (
 	containerFlagExec         = "exec"
 	containerRegistryURL      = "registry-url"
 	containerRegistryType     = "registry-type"
+	containerRegistryInsecure = "registry-insecure"
 )
+
+// RuntimeFlags stores container runtime opts.
+type runtimeContainerFlags struct {
+	IsSetRemote      bool
+	CopyBack         bool
+	RemoveImg        bool
+	NoCache          bool
+	RebuildImage     bool
+	Entrypoint       string
+	EntrypointSet    bool
+	Exec             bool
+	VolumeFlags      string
+	RegistryURL      string
+	RegistryInsecure bool
+	RegistryType     driver.KubernetesRegistry
+}
 
 type runtimeContainer struct {
 	WithLogger
@@ -52,20 +69,7 @@ type runtimeContainer struct {
 	nameprv  ContainerNameProvider
 
 	// Runtime flags
-	// @todo need to think about a better way to handle this.
-	runtimeFlags driver.RuntimeFlags
-
-	//isSetRemote   bool
-	//copyBack      bool
-	//removeImg     bool
-	//noCache       bool
-	//rebuildImage  bool
-	//entrypoint    string
-	//entrypointSet bool
-	//exec          bool
-	//volumeFlags   string
-	//registryURL   string
-	//registryType  string
+	rcf runtimeContainerFlags
 }
 
 // ContainerNameProvider provides an ability to generate a random container name
@@ -165,16 +169,23 @@ func (c *runtimeContainer) GetFlags() *FlagsGroup {
 			},
 			&DefParameter{
 				Name:    containerRegistryURL,
-				Title:   "k8s Images registry URL",
+				Title:   "Kubernetes Images registry URL",
 				Type:    jsonschema.String,
 				Default: "localhost:5000",
 			},
 			&DefParameter{
 				Name:    containerRegistryType,
-				Title:   "k8s Images registry type",
+				Title:   "Kubernetes Images registry type",
 				Type:    jsonschema.String,
-				Enum:    []any{driver.RegistryNone, driver.RegistryLocal, driver.RegistryRemote},
-				Default: driver.RegistryLocal,
+				Enum:    []any{driver.RegistryNone, driver.RegistryInternal, driver.RegistryRemote},
+				Default: driver.RegistryNone.String(),
+			},
+			&DefParameter{
+				Name:        containerRegistryInsecure,
+				Title:       "Insecure Registry",
+				Description: "Allow Kubernetes image builder push to insecure registry",
+				Type:        jsonschema.Boolean,
+				Default:     false,
 			},
 		}
 
@@ -204,40 +215,44 @@ func (c *runtimeContainer) SetFlags(input *Input) error {
 	flags := input.GroupFlags(c.flags.GetName())
 
 	if v, ok := flags[containerFlagRemote]; ok {
-		c.runtimeFlags.IsSetRemote = v.(bool)
+		c.rcf.IsSetRemote = v.(bool)
 	}
 
 	if v, ok := flags[containerFlagCopyBack]; ok {
-		c.runtimeFlags.CopyBack = v.(bool)
+		c.rcf.CopyBack = v.(bool)
 	}
 
 	if r, ok := flags[containerFlagRemoveImage]; ok {
-		c.runtimeFlags.RemoveImg = r.(bool)
+		c.rcf.RemoveImg = r.(bool)
 	}
 
 	if nc, ok := flags[containerFlagNoCache]; ok {
-		c.runtimeFlags.NoCache = nc.(bool)
+		c.rcf.NoCache = nc.(bool)
 	}
 
 	if rb, ok := flags[containerFlagRebuildImage]; ok {
-		c.runtimeFlags.RebuildImage = rb.(bool)
+		c.rcf.RebuildImage = rb.(bool)
 	}
 
 	if e, ok := flags[containerFlagEntrypoint]; ok && e != "" {
-		c.runtimeFlags.EntrypointSet = true
-		c.runtimeFlags.Entrypoint = e.(string)
+		c.rcf.EntrypointSet = true
+		c.rcf.Entrypoint = e.(string)
 	}
 
 	if ex, ok := flags[containerFlagExec]; ok {
-		c.runtimeFlags.Exec = ex.(bool)
+		c.rcf.Exec = ex.(bool)
 	}
 
 	if rt, ok := flags[containerRegistryType]; ok {
-		c.runtimeFlags.RegistryType = rt.(string)
+		c.rcf.RegistryType = driver.RegistryFromString(rt.(string))
 	}
 
 	if rurl, ok := flags[containerRegistryURL]; ok {
-		c.runtimeFlags.RegistryURL = rurl.(string)
+		c.rcf.RegistryURL = rurl.(string)
+	}
+
+	if rin, ok := flags[containerRegistryInsecure]; ok {
+		c.rcf.RegistryInsecure = rin.(bool)
 	}
 
 	return nil
@@ -269,16 +284,14 @@ func (c *runtimeContainer) Init(ctx context.Context, _ *Action) (err error) {
 	if !c.isRemote() && c.isSELinuxEnabled(ctx) {
 		// Check SELinux settings to allow reading the FS inside a container.
 		// Use the lowercase z flag to allow concurrent actions access to the FS.
-		c.runtimeFlags.VolumeFlags += ":z"
+		c.rcf.VolumeFlags += ":z"
 		launchr.Term().Warning().Printfln(
 			"SELinux is detected. The volumes will be mounted with the %q flags, which will relabel your files.\n"+
 				"This process may take time or potentially break existing permissions.",
-			c.runtimeFlags.VolumeFlags,
+			c.rcf.VolumeFlags,
 		)
-		c.Log().Warn("using selinux flags", "flags", c.runtimeFlags.VolumeFlags)
+		c.Log().Warn("using selinux flags", "flags", c.rcf.VolumeFlags)
 	}
-
-	c.crt.SetRuntimeFlags(c.runtimeFlags)
 
 	return nil
 }
@@ -315,39 +328,13 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 		return errors.New("error on creating a container")
 	}
 
-	// Remove the container after finish.
+	// Cleanup resources on finish.
 	defer func() {
-		log.Debug("remove container after run")
-		errRm := c.crt.ContainerRemove(ctx, cid)
-		if errRm != nil {
-			log.Error("error on cleaning the running environment", "error", errRm)
-		} else {
-			log.Debug("container was successfully removed")
-		}
-	}()
-
-	// Remove the used image if it was specified.
-	defer func() {
-		if !c.runtimeFlags.RemoveImg {
-			return
-		}
-		log.Debug("removing container image after run")
-		errImg := c.imageRemove(ctx, a)
-		if errImg != nil {
-			log.Error("failed to remove image", "error", errImg)
-		} else {
-			log.Debug("image was successfully removed")
-		}
+		c.cleanupRuntimeResources(ctx, cid, a, &runConfig)
 	}()
 
 	log = c.LogWith("container_id", cid)
 	log.Debug("successfully created a container for an action")
-
-	// Copy working dirs to the container.
-	err = c.copyAllToContainer(ctx, cid, a)
-	if err != nil {
-		return err
-	}
 
 	if !runConfig.Streams.TTY {
 		log.Debug("watching container signals")
@@ -422,10 +409,13 @@ func (c *runtimeContainer) Close() error {
 	return c.crt.Close()
 }
 
-func (c *runtimeContainer) imageRemove(ctx context.Context, a *Action) error {
+func (c *runtimeContainer) imageRemove(ctx context.Context, a *Action, opts driver.ImageOptions) error {
 	if crt, ok := c.crt.(driver.ContainerImageBuilder); ok {
 		_, err := crt.ImageRemove(ctx, a.RuntimeDef().Container.Image, driver.ImageRemoveOptions{
-			Force: true,
+			Force:            true,
+			RegistryType:     opts.RegistryType,
+			RegistryURL:      opts.RegistryURL,
+			BuildContainerID: opts.BuildContainerID,
 		})
 		return err
 	}
@@ -435,7 +425,7 @@ func (c *runtimeContainer) imageRemove(ctx context.Context, a *Action) error {
 
 func (c *runtimeContainer) isRebuildRequired(bi *driver.BuildDefinition) (bool, error) {
 	// @todo test image cache resolution somehow.
-	if c.imgccres == nil || bi == nil || !c.runtimeFlags.RebuildImage {
+	if c.imgccres == nil || bi == nil || !c.rcf.RebuildImage {
 		return false, nil
 	}
 
@@ -465,7 +455,7 @@ func (c *runtimeContainer) isRebuildRequired(bi *driver.BuildDefinition) (bool, 
 	return doRebuild, nil
 }
 
-func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
+func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action, createOpts *driver.ContainerDefinition) error {
 	crt, ok := c.crt.(driver.ContainerImageBuilder)
 	if !ok {
 		return nil
@@ -481,12 +471,10 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 		return err
 	}
 
-	status, err := crt.ImageEnsure(ctx, driver.ImageOptions{
-		Name:         image,
-		Build:        buildInfo,
-		NoCache:      c.runtimeFlags.NoCache,
-		ForceRebuild: forceRebuild,
-	})
+	createOpts.ImageOptions.Build = buildInfo
+	createOpts.ImageOptions.ForceRebuild = forceRebuild
+
+	status, err := crt.ImageEnsure(ctx, createOpts.ImageOptions)
 	if err != nil {
 		return err
 	}
@@ -531,17 +519,16 @@ func (c *runtimeContainer) imageEnsure(ctx context.Context, a *Action) error {
 }
 
 func (c *runtimeContainer) containerCreate(ctx context.Context, a *Action, createOpts *driver.ContainerDefinition) (string, error) {
-	var err error
-	if err = c.imageEnsure(ctx, a); err != nil {
-		return "", err
-	}
+	switch c.rtype {
+	case driver.Kubernetes:
+		return c.containerCreateKubernetes(ctx, a, createOpts)
 
-	cid, err := c.crt.ContainerCreate(ctx, *createOpts)
-	if err != nil {
-		return "", err
-	}
+	case driver.Docker:
+		fallthrough
 
-	return cid, nil
+	default:
+		return c.containerCreateDocker(ctx, a, createOpts)
+	}
 }
 
 func (c *runtimeContainer) createContainerDef(a *Action, cname string) driver.ContainerDefinition {
@@ -551,25 +538,32 @@ func (c *runtimeContainer) createContainerDef(a *Action, cname string) driver.Co
 
 	// Override an entrypoint if it was set in flags.
 	var entrypoint []string
-	if c.runtimeFlags.EntrypointSet {
-		entrypoint = []string{c.runtimeFlags.Entrypoint}
+	if c.rcf.EntrypointSet {
+		entrypoint = []string{c.rcf.Entrypoint}
 	}
 
 	// Override Command with exec command.
 	cmd := runDef.Container.Command
-	if c.runtimeFlags.Exec {
+	if c.rcf.Exec {
 		cmd = a.Input().ArgsPositional()
 	}
 
 	createOpts := driver.ContainerDefinition{
 		ContainerName: cname,
 		Image:         runDef.Container.Image,
-		Command:       cmd,
-		WorkingDir:    containerHostMount,
-		ExtraHosts:    runDef.Container.ExtraHosts,
-		Env:           runDef.Container.Env,
-		User:          getCurrentUser(),
-		Entrypoint:    entrypoint,
+		ImageOptions: driver.ImageOptions{
+			Name:             runDef.Container.Image,
+			NoCache:          c.rcf.NoCache,
+			RegistryURL:      c.rcf.RegistryURL,
+			RegistryType:     c.rcf.RegistryType,
+			RegistryInsecure: c.rcf.RegistryInsecure,
+		},
+		Command:    cmd,
+		WorkingDir: containerHostMount,
+		ExtraHosts: runDef.Container.ExtraHosts,
+		Env:        runDef.Container.Env,
+		User:       getCurrentUser(),
+		Entrypoint: entrypoint,
 		Streams: driver.ContainerStreamsOptions{
 			Stdin:  !streams.In().IsDiscard(),
 			Stdout: !streams.Out().IsDiscard(),
@@ -586,8 +580,8 @@ func (c *runtimeContainer) createContainerDef(a *Action, cname string) driver.Co
 		)
 	} else {
 		createOpts.Binds = []string{
-			launchr.MustAbs(a.WorkDir()) + ":" + containerHostMount + c.runtimeFlags.VolumeFlags,
-			launchr.MustAbs(a.Dir()) + ":" + containerActionMount + c.runtimeFlags.VolumeFlags,
+			launchr.MustAbs(a.WorkDir()) + ":" + containerHostMount + c.rcf.VolumeFlags,
+			launchr.MustAbs(a.Dir()) + ":" + containerActionMount + c.rcf.VolumeFlags,
 		}
 	}
 	return createOpts
@@ -621,7 +615,7 @@ func (c *runtimeContainer) copyAllToContainer(ctx context.Context, cid string, a
 }
 
 func (c *runtimeContainer) copyAllFromContainer(ctx context.Context, cid string, a *Action) (err error) {
-	if !c.isRemote() || !c.runtimeFlags.CopyBack {
+	if !c.isRemote() || !c.rcf.CopyBack {
 		return nil
 	}
 	// @todo it's a bad implementation considering consequential runs, need to find a better way to sync with remote.
@@ -700,5 +694,103 @@ func (c *runtimeContainer) isSELinuxEnabled(ctx context.Context) bool {
 }
 
 func (c *runtimeContainer) isRemote() bool {
-	return c.isRemoteRuntime || c.runtimeFlags.IsSetRemote
+	return c.isRemoteRuntime || c.rcf.IsSetRemote
+}
+
+func (c *runtimeContainer) containerCreateDocker(ctx context.Context, a *Action, createOpts *driver.ContainerDefinition) (string, error) {
+	var err error
+	if err = c.imageEnsure(ctx, a, createOpts); err != nil {
+		return "", err
+	}
+
+	cid, err := c.crt.ContainerCreate(ctx, *createOpts)
+	if err != nil {
+		return "", err
+	}
+
+	// Copy working dirs to the container.
+	err = c.copyAllToContainer(ctx, cid, a)
+	if err != nil {
+		return "", err
+	}
+
+	return cid, nil
+}
+
+func (c *runtimeContainer) containerCreateKubernetes(ctx context.Context, a *Action, createOpts *driver.ContainerDefinition) (string, error) {
+	var err error
+	cid, err := c.crt.ContainerCreate(ctx, *createOpts)
+	if err != nil {
+		return "", err
+	}
+
+	// Set the build container ID to the image options.
+	createOpts.ImageOptions.BuildContainerID = driver.K8SPodBuildContainerID(cid)
+
+	// Copy working dirs to the container.
+	err = c.copyAllToContainer(ctx, cid, a)
+	if err != nil {
+		return "", err
+	}
+
+	if err = c.imageEnsure(ctx, a, createOpts); err != nil {
+		return "", err
+	}
+
+	return cid, nil
+}
+
+// cleanupRuntimeResources handles cleanup in the correct order for each runtime type
+func (c *runtimeContainer) cleanupRuntimeResources(ctx context.Context, cid string, a *Action, createOpts *driver.ContainerDefinition) {
+	switch c.rtype {
+	case driver.Kubernetes:
+		c.cleanupKubernetesResources(ctx, cid, a, createOpts.ImageOptions)
+	case driver.Docker:
+		fallthrough
+	default:
+		//panic(fmt.Errorf("unsupported runtime type for cleanup: %s", c.rtype))
+		c.cleanupDockerResources(ctx, cid, a, createOpts.ImageOptions)
+	}
+}
+
+// cleanupDockerResources handles Docker-specific cleanup order
+func (c *runtimeContainer) cleanupDockerResources(ctx context.Context, cid string, a *Action, options driver.ImageOptions) {
+	// Remove the container first
+	c.Log().Debug("remove container after run")
+	if err := c.crt.ContainerRemove(ctx, cid); err != nil {
+		c.Log().Error("failed to remove container", "error", err)
+	} else {
+		c.Log().Debug("container was successfully removed")
+	}
+
+	// Then remove the image if requested
+	if c.rcf.RemoveImg {
+		c.Log().Debug("removing container image after run")
+		if err := c.imageRemove(ctx, a, options); err != nil {
+			c.Log().Error("failed to remove image", "error", err)
+		} else {
+			c.Log().Debug("image was successfully removed")
+		}
+	}
+}
+
+// cleanupKubernetesResources handles Kubernetes-specific cleanup order
+func (c *runtimeContainer) cleanupKubernetesResources(ctx context.Context, cid string, a *Action, options driver.ImageOptions) {
+	// Remove image first if requested
+	if c.rcf.RemoveImg {
+		c.Log().Debug("removing container image after run")
+		if err := c.imageRemove(ctx, a, options); err != nil {
+			c.Log().Error("failed to remove image", "error", err)
+		} else {
+			c.Log().Debug("image was successfully removed")
+		}
+	}
+
+	// Then remove the pod / container
+	c.Log().Debug("remove container after run")
+	if err := c.crt.ContainerRemove(ctx, cid); err != nil {
+		c.Log().Error("failed to remove container", "error", err)
+	} else {
+		c.Log().Debug("Container was successfully removed")
+	}
 }

@@ -3,17 +3,18 @@ package driver
 import (
 	"fmt"
 	"strings"
-	"text/template"
+
+	"github.com/launchrctl/launchr/internal/launchr"
 )
 
 func executeTemplate(templateStr string, data any) (string, error) {
-	tmpl, err := template.New("script").Parse(templateStr)
-	if err != nil {
-		return "", err
+	tpl := launchr.Template{
+		Tmpl: templateStr,
+		Data: data,
 	}
-
 	var buf strings.Builder
-	err = tmpl.Execute(&buf, data)
+
+	err := tpl.Generate(&buf)
 	if err != nil {
 		return "", err
 	}
@@ -21,21 +22,47 @@ func executeTemplate(templateStr string, data any) (string, error) {
 	return buf.String(), nil
 }
 
+// Registry removal template
+const registryImageRemovalTemplate = `
+set -e
+cd /action
+
+echo "Removing image {{.ImageName}}:{{.Tag}} from registry"
+
+# Get the digest of the image
+DIGEST=$(curl -s -I -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+-H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+-H "Accept: application/vnd.oci.image.manifest.v1+json" \
+-H "Accept: application/vnd.oci.image.index.v1+json" \
+{{.RegistryURL}}/v2/{{.ImageName}}/manifests/{{.Tag}} | \
+grep -i 'docker-content-digest' | \
+awk -F': ' '{print $2}' | \
+sed 's/[\r\n]//g')
+
+if [ -n "$DIGEST" ] && [ "$DIGEST" != "null" ]; then
+    echo "Found digest: $DIGEST"
+    # Delete the manifest
+    curl -X DELETE "{{.RegistryURL}}/v2/{{.ImageName}}/manifests/$DIGEST" || true
+    echo "Image removed from registry"
+else
+    echo "Image not found in registry or already removed"
+fi
+`
+
 // ensure image exists in local registry
 const buildahImageEnsureTemplate = `
 set -e
 cd /action
-if [ ! -f "./%s" ]; then
-    echo "%s does not exist"
-    exit 1
-fi
+
 image_status=$(curl -s -I -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
 -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
 -H "Accept: application/vnd.oci.image.manifest.v1+json" \
 -H "Accept: application/vnd.oci.image.index.v1+json" \
 -o /dev/null -w "%%{http_code}" %s)
 if [ "$image_status" = "200" ]; then
-    echo "image exists"
+    exit 0
+else
+    exit 2
 fi
 `
 
@@ -76,47 +103,38 @@ done
 const buildahBuildTemplate = `
 set -e
 cd /action
+
 echo "Starting image build process..."
-
-{{if .BuildArgs}}
-# Build arguments:
-{{range $key, $value := .BuildArgs}}echo "  --build-arg {{$key}}={{$value}}"
-{{end}}
-{{end}}
-
 # Build the image
-echo "Building image: {{.RegistryURL}}/{{.ImageName}}"
 buildah build --layers \
     -t {{.RegistryURL}}/{{.ImageName}} \
     -f {{.Buildfile}} \
-{{range $key, $value := .BuildArgs}}    --build-arg {{$key}}="{{$value}}" \
-{{end}} . 2>&1 || {
+{{- range $key, $value := .BuildArgs}}
+    --build-arg {{$key}}="{{$value}}" \
+{{- end}}
+    . 2>&1
+
+if [ $? -ne 0 ]; then
     echo "ERROR: Build failed with exit code $?"
     exit 1
-}
+fi
 
 echo "Build completed successfully"
 
 # Push to registry
 echo "Pushing image to registry..."
-{{if .Insecure}}
-buildah push --tls-verify=false {{.RegistryURL}}/{{.ImageName}} 2>&1 || {
-{{else}}
-buildah push {{.RegistryURL}}/{{.ImageName}} 2>&1 || {
-{{end}}
+buildah push {{.RegistryURL}}/{{.ImageName}} 2>&1
+
+if [ $? -ne 0 ]; then
     echo "ERROR: Push failed with exit code $?"
     exit 1
-}
+fi
 
 echo "Build and push completed successfully!"
-echo "Image available at:{{.RegistryURL}}/{{.ImageName}}"
-
-# Verify the push
-echo "Verifying image was pushed..."
-curl -f {{.RegistryURL}}/v2/_catalog || echo "Warning: Could not verify catalog"
+echo "Image available at: {{.RegistryURL}}/{{.ImageName}}"
 `
 
-func (k *k8sRuntime) prepareBuildahInitScript() (string, error) {
+func (k *k8sRuntime) prepareBuildahInitScript(opts ImageOptions) string {
 	type buildData struct {
 		ImageName   string
 		RegistryURL string
@@ -124,19 +142,19 @@ func (k *k8sRuntime) prepareBuildahInitScript() (string, error) {
 	}
 
 	data := &buildData{
-		RegistryURL: k.crtflags.RegistryURL,
-		Insecure:    k.crtflags.RegistryType == RegistryLocal,
+		RegistryURL: opts.RegistryURL,
+		Insecure:    opts.RegistryInsecure,
 	}
 
 	script, err := executeTemplate(buildahInitTemplate, data)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate init build script: %w", err)
+		panic(fmt.Sprintf("failed to generate init build script: %s", err.Error()))
 	}
 
-	return script, nil
+	return script
 }
 
-func (k *k8sRuntime) prepareBuildahWorkScript(imageName string) (string, error) {
+func (k *k8sRuntime) prepareBuildahWorkScript(imageName string, opts ImageOptions) string {
 	// Add build args to template data
 	type BuildData struct {
 		ImageName   string
@@ -146,18 +164,23 @@ func (k *k8sRuntime) prepareBuildahWorkScript(imageName string) (string, error) 
 		Insecure    bool
 	}
 
+	buildFile := "Dockerfile"
+	if opts.Build.Buildfile != "" {
+		buildFile = opts.Build.Buildfile
+	}
+
 	buildData := &BuildData{
+		BuildArgs:   opts.Build.Args,
+		Buildfile:   buildFile,
 		ImageName:   imageName,
-		RegistryURL: k.crtflags.RegistryURL,
-		BuildArgs:   k.imageOptions.Build.Args,
-		Buildfile:   ensureBuildFile(k.imageOptions.Build.Buildfile),
-		Insecure:    k.crtflags.RegistryType == RegistryLocal,
+		Insecure:    opts.RegistryInsecure,
+		RegistryURL: opts.RegistryURL,
 	}
 
 	script, err := executeTemplate(buildahBuildTemplate, buildData)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate image build script: %w", err)
+		panic(fmt.Sprintf("failed to generate init build script: %s", err.Error()))
 	}
 
-	return script, nil
+	return script
 }

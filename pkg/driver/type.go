@@ -26,7 +26,6 @@ type ContainerRunner interface {
 	ContainerKill(ctx context.Context, cid, signal string) error
 	ContainerRemove(ctx context.Context, cid string) error
 	Close() error
-	SetRuntimeFlags(flags RuntimeFlags)
 }
 
 // ContainerImageBuilder is an interface for container runtime to build images.
@@ -89,11 +88,19 @@ type ImageOptions struct {
 	Build        *BuildDefinition
 	NoCache      bool
 	ForceRebuild bool
+
+	RegistryType     KubernetesRegistry
+	RegistryURL      string
+	RegistryInsecure bool
+	BuildContainerID string
 }
 
 // ImageRemoveOptions stores options for removing an image.
 type ImageRemoveOptions struct {
-	Force bool
+	Force            bool
+	RegistryType     KubernetesRegistry
+	RegistryURL      string
+	BuildContainerID string
 }
 
 // ImageStatus defines image status on local machine.
@@ -106,7 +113,7 @@ const (
 	ImagePull                               // ImagePull - image is being pulled from the registry.
 	ImageBuild                              // ImageBuild - image is being built.
 	ImageRemoved                            // ImageRemoved - image was removed
-	ImagePostpone                           // ImagePostpone - image was removed
+	ImagePostpone                           // ImagePostpone - image action was postponed
 )
 
 // SystemInfo holds information about the container runner environment.
@@ -168,21 +175,6 @@ type ImageRemoveResponse struct {
 	Status ImageStatus
 }
 
-// RuntimeFlags stores container runtime opts.
-type RuntimeFlags struct {
-	IsSetRemote   bool
-	CopyBack      bool
-	RemoveImg     bool
-	NoCache       bool
-	RebuildImage  bool
-	Entrypoint    string
-	EntrypointSet bool
-	Exec          bool
-	VolumeFlags   string
-	RegistryURL   string
-	RegistryType  string
-}
-
 // ContainerPathStat is a type alias for container path stat result.
 type ContainerPathStat struct {
 	Name       string
@@ -203,6 +195,7 @@ type ContainerDefinition struct {
 	Hostname      string
 	ContainerName string
 	Image         string
+	ImageOptions  ImageOptions
 
 	Entrypoint []string
 	Command    []string

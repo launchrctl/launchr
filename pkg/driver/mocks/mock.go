@@ -246,15 +246,3 @@ func (mr *MockContainerRuntimeMockRecorder) IsSELinuxSupported(ctx any) *gomock.
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsSELinuxSupported", reflect.TypeOf((*MockContainerRuntime)(nil).IsSELinuxSupported), ctx)
 }
-
-// SetRuntimeFlags mocks base method.
-func (m *MockContainerRuntime) SetRuntimeFlags(flags driver.RuntimeFlags) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetRuntimeFlags", flags)
-}
-
-// SetRuntimeFlags indicates an expected call of SetRuntimeFlags.
-func (mr *MockContainerRuntimeMockRecorder) SetRuntimeFlags(flags any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRuntimeFlags", reflect.TypeOf((*MockContainerRuntime)(nil).SetRuntimeFlags), flags)
-}

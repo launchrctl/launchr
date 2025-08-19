@@ -62,7 +62,8 @@ func k8sCreateContainerID(namespace, podName, containerName string) string {
 	return namespace + "/" + podName + "/" + containerName
 }
 
-func k8sPodBuildContainerID(cid string) string {
+// K8SPodBuildContainerID returns the image build container ID from the given container ID.
+func K8SPodBuildContainerID(cid string) string {
 	namespace, podName, _ := k8sParseContainerID(cid)
 	return k8sCreateContainerID(namespace, podName, k8sBuildPodContainer)
 }
@@ -263,10 +264,19 @@ func fillFileStatFromSys(modeHex uint32) os.FileMode {
 	return mode
 }
 
-func ensureBuildFile(file string) string {
-	if file != "" {
-		return file
+func parseImageName(image string) (string, string) {
+	var name string
+	tag := "latest"
+
+	nameParts := strings.Split(image, ":")
+	if len(nameParts) == 1 {
+		// Only image name, no tag or port
+		name = image
+	} else if len(nameParts) > 1 {
+		// Image name and tag
+		name = nameParts[0]
+		tag = nameParts[1]
 	}
 
-	return "Dockerfile"
+	return name, tag
 }

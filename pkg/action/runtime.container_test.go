@@ -192,7 +192,10 @@ func Test_ContainerExec_imageEnsure(t *testing.T) {
 			d.EXPECT().
 				ImageEnsure(ctx, eqImageOpts{imgOpts}).
 				Return(tt.ret...)
-			err := r.imageEnsure(ctx, act)
+
+			cname := launchr.GetRandomString(4)
+			runCfg := r.createContainerDef(act, cname)
+			err := r.imageEnsure(ctx, act, &runCfg)
 			assert.Equal(t, tt.ret[1], err)
 		})
 	}
@@ -248,7 +251,7 @@ func Test_ContainerExec_imageRemove(t *testing.T) {
 			d.EXPECT().
 				ImageRemove(ctx, run.Image, gomock.Eq(imgOpts)).
 				Return(tt.ret...)
-			err := r.imageRemove(ctx, act)
+			err := r.imageRemove(ctx, act, driver.ImageOptions{Name: run.Image})
 
 			assert.Equal(t, err, tt.ret[1])
 		})
@@ -265,7 +268,10 @@ func Test_ContainerExec_createContainerDef(t *testing.T) {
 	}
 
 	baseRes := driver.ContainerDefinition{
-		Image:      "myimage",
+		Image: "myimage",
+		ImageOptions: driver.ImageOptions{
+			Name: "myimage",
+		},
 		WorkingDir: containerHostMount,
 		ExtraHosts: []string{
 			"my:host1",
@@ -342,7 +348,7 @@ func Test_ContainerExec_createContainerDef(t *testing.T) {
 				input.SetValidated(true)
 				_ = a.SetInput(input)
 				r.isRemoteRuntime = true
-				r.runtimeFlags = driver.RuntimeFlags{
+				r.rcf = runtimeContainerFlags{
 					EntrypointSet: true,
 					Entrypoint:    "/my/entrypoint",
 					Exec:          true,
@@ -373,6 +379,7 @@ func Test_ContainerExec_createContainerDef(t *testing.T) {
 			a.SetRuntime(r)
 			cname := tt.exp.ContainerName
 			tt.exp.Image = baseRes.Image
+			tt.exp.ImageOptions = baseRes.ImageOptions
 			tt.exp.WorkingDir = baseRes.WorkingDir
 			tt.exp.ExtraHosts = baseRes.ExtraHosts
 			tt.exp.Env = baseRes.Env
@@ -411,6 +418,7 @@ func Test_ContainerExec(t *testing.T) {
 		ContainerName: nprv.Get(act.ID),
 		Command:       runConf.Command,
 		Image:         runConf.Image,
+		ImageOptions:  driver.ImageOptions{Name: runConf.Image},
 		ExtraHosts:    runConf.ExtraHosts,
 		Binds: []string{
 			launchr.MustAbs(act.WorkDir()) + ":" + containerHostMount,
