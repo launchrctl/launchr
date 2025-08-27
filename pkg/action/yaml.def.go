@@ -187,7 +187,7 @@ func (r *DefRuntimeType) UnmarshalYAML(n *yaml.Node) (err error) {
 
 // DefRuntimeContainer has container-specific runtime configuration.
 type DefRuntimeContainer struct {
-	Command    StrSliceOrStr           `yaml:"command"`
+	Command    StrSlice                `yaml:"command"`
 	Image      string                  `yaml:"image"`
 	Build      *driver.BuildDefinition `yaml:"build"`
 	ExtraHosts StrSlice                `yaml:"extra_hosts"`
@@ -281,7 +281,7 @@ func (r *DefRuntime) UnmarshalYAML(n *yaml.Node) (err error) {
 	}
 }
 
-// StrSlice is an array of strings for command execution.
+// StrSlice is an array of strings.
 type StrSlice []string
 
 // UnmarshalYAML implements [yaml.Unmarshaler] to parse a string or a list of strings.
@@ -289,33 +289,13 @@ func (l *StrSlice) UnmarshalYAML(n *yaml.Node) (err error) {
 	if n.Kind == yaml.ScalarNode {
 		return yamlTypeErrorLine(sErrArrEl, n.Line, n.Column)
 	}
-	var s StrSliceOrStr
-	err = n.Decode(&s)
-	if err != nil {
-		return err
-	}
-	*l = StrSlice(s)
-	return err
-}
-
-// StrSliceOrStr is an array of strings for command execution.
-type StrSliceOrStr []string
-
-// UnmarshalYAML implements [yaml.Unmarshaler] to parse a string or a list of strings.
-func (l *StrSliceOrStr) UnmarshalYAML(n *yaml.Node) (err error) {
-	type yamlT StrSliceOrStr
-	if n.Kind == yaml.ScalarNode {
-		var s string
-		err = n.Decode(&s)
-		*l = StrSliceOrStr{s}
-		return err
-	}
+	type yamlT StrSlice
 	var s yamlT
 	err = n.Decode(&s)
 	if err != nil {
-		return yamlTypeErrorLine(sErrArrOrStrEl, n.Line, n.Column)
+		return yamlTypeErrorLine(sErrArrEl, n.Line, n.Column)
 	}
-	*l = StrSliceOrStr(s)
+	*l = StrSlice(s)
 	return err
 }
 

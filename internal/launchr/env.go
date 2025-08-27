@@ -56,11 +56,55 @@ func Getenv(key string) string {
 	if key == "$" {
 		return "$"
 	}
-	// Replace all subexpressions.
-	if strings.Contains(key, "$") {
-		key = os.Expand(key, Getenv)
+
+	// Condition functions for expansion patterns
+	var (
+		varExists         = func(v string, exists bool) bool { return exists }
+		varExistsNotEmpty = func(v string, exists bool) bool { return exists && v != "" }
+	)
+
+	// Handle shell parameter expansion patterns
+	if idx := strings.Index(key, ":-"); idx != -1 {
+		// ${var:-default} - use default if variable doesn't exist or is empty
+		return envHandleExpansion(key[:idx], key[idx+2:], varExistsNotEmpty, true)
 	}
-	// @todo implement ${var-$DEFAULT}, ${var:-$DEFAULT}, ${var+$DEFAULT}, ${var:+$DEFAULT},
+	if idx := strings.Index(key, "-"); idx != -1 {
+		// ${var-default} - use default if variable doesn't exist
+		return envHandleExpansion(key[:idx], key[idx+1:], varExists, true)
+	}
+	if idx := strings.Index(key, ":+"); idx != -1 {
+		// ${var:+alternative} - use alternative if variable exists and is not empty
+		return envHandleExpansion(key[:idx], key[idx+2:], varExistsNotEmpty, false)
+	}
+	if idx := strings.Index(key, "+"); idx != -1 {
+		// ${var+alternative} - use alternative if variable exists
+		return envHandleExpansion(key[:idx], key[idx+1:], varExists, false)
+	}
+
+	// Regular environment variable lookup
 	v, _ := syscall.Getenv(key)
 	return v
+}
+
+// envHandleExpansion handles all expansion patterns
+func envHandleExpansion(varName, value string, condition func(string, bool) bool, useVarValue bool) string {
+	envValue, exists := syscall.Getenv(varName)
+	if condition(envValue, exists) {
+		if useVarValue {
+			return envValue
+		}
+		return envExpandValue(value)
+	}
+	if useVarValue {
+		return envExpandValue(value)
+	}
+	return ""
+}
+
+// envExpandValue expands variables and nested expressions in the value
+func envExpandValue(value string) string {
+	if strings.Contains(value, "$") {
+		return os.Expand(value, Getenv)
+	}
+	return value
 }

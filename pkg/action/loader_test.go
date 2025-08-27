@@ -45,10 +45,10 @@ func Test_EnvProcessor(t *testing.T) {
 	}()
 	_ = os.Setenv("TEST_ENV1", "VAL1")
 	_ = os.Setenv("TEST_ENV2", "VAL2")
-	s := "$TEST_ENV1$TEST_ENV1,${TEST_ENV2},$$TEST_ENV1,${TEST_ENV_UNDEF},${TODO-$TEST_ENV1},${TODO:-$TEST_ENV1},${TODO+$TEST_ENV1},${TODO:+$TEST_ENV1}"
+	s := "$TEST_ENV1$TEST_ENV1,${TEST_ENV2},$$TEST_ENV1,${TEST_ENV_UNDEF},${TEST_ENV_UNDEF-$TEST_ENV1},${TEST_ENV_UNDEF:-$TEST_ENV2},${TEST_ENV2+$TEST_ENV1},${TEST_ENV1:+$TEST_ENV2}"
 	res, err := proc.Process(LoadContext{Action: act}, []byte(s))
 	assert.NoError(t, err)
-	assert.Equal(t, "VAL1VAL1,VAL2,$TEST_ENV1,,,,,", string(res))
+	assert.Equal(t, "VAL1VAL1,VAL2,$TEST_ENV1,,VAL1,VAL2,VAL1,VAL2", string(res))
 	// Test action predefined env variables.
 	s = "$CBIN,$ACTION_ID,$ACTION_WD,$ACTION_DIR,$DISCOVERY_DIR"
 	res, err = proc.Process(LoadContext{Action: act}, []byte(s))

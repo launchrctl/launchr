@@ -58,8 +58,9 @@ func Test_CreateFromYaml(t *testing.T) {
 
 		// Command declaration as array of strings.
 		{"valid command - strings array", validCmdArrYaml, nil},
-		{"invalid command - object", invalidCmdObjYaml, yamlTypeErrorLine(sErrArrOrStrEl, 8, 5)},
-		{"invalid command - various array", invalidCmdArrVarYaml, yamlTypeErrorLine(sErrArrOrStrEl, 8, 5)},
+		{"invalid command - string", invalidCmdStringYaml, yamlTypeErrorLine(sErrArrEl, 7, 12)},
+		{"invalid command - object", invalidCmdObjYaml, yamlTypeErrorLine(sErrArrEl, 8, 5)},
+		{"invalid command - various array", invalidCmdArrVarYaml, yamlTypeErrorLine(sErrArrEl, 8, 5)},
 
 		// Build image.
 		{"build image - short", validBuildImgShortYaml, nil},
