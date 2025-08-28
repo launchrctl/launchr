@@ -59,7 +59,7 @@ func Getenv(key string) string {
 
 	// Condition functions for expansion patterns
 	var (
-		varExists         = func(v string, exists bool) bool { return exists }
+		varExists         = func(_ string, exists bool) bool { return exists }
 		varExistsNotEmpty = func(v string, exists bool) bool { return exists && v != "" }
 	)
 
