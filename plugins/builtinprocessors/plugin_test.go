@@ -4,6 +4,9 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/action"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
@@ -62,12 +65,49 @@ action:
         - processor: config.GetValue
 `
 
+const testTplConfigGet = `
+action:
+  title: test config
+runtime:
+  type: container
+  image: alpine
+  command:
+    - '{{ config.Get "my.string" }}'
+    - '{{ config.Get "my.int" }}'
+    - '{{ config.Get "my.bool" }}'
+    - '{{ config.Get "my.array" }}'
+    - '{{ index (config.Get "my.array") 1 }}'
+    - '{{ config.Get "my.null" | default "foo" }}'
+    - '{{ config.Get "my.missing" | default "bar" }}'
+`
+
+const testTplConfigGetMissing = `
+action:
+  title: test config
+runtime:
+  type: container
+  image: alpine
+  command:
+    - '{{ config.Get "my.missing" }}'
+`
+
+const testTplConfigGetWrongCall = `
+action:
+  title: test config
+runtime:
+  type: container
+  image: alpine
+  command:
+    - '{{ config.Get }}'
+`
+
 const testConfig = `
 my:
   string: my_str
   int: 42
   bool: true
   array: ["1", "2", "3"]
+  null: null
 `
 
 func testConfigFS(s string) launchr.Config {
@@ -81,7 +121,8 @@ func Test_ConfigProcessor(t *testing.T) {
 	// Prepare services.
 	cfg := testConfigFS(testConfig)
 	am := action.NewManager()
-	addValueProcessors(am, cfg)
+	tp := action.NewTemplateProcessors()
+	addValueProcessors(tp, cfg)
 
 	expConfig := action.InputParams{
 		"string": "my_str",
@@ -105,7 +146,45 @@ func Test_ConfigProcessor(t *testing.T) {
 		tt := tt
 		t.Run(tt.Name, func(t *testing.T) {
 			t.Parallel()
-			tt.Test(t, am)
+			tt.Test(t, am, tp)
+		})
+	}
+}
+
+func Test_ConfigTemplateFunc(t *testing.T) {
+	// Prepare services.
+	cfg := testConfigFS(testConfig)
+	tp := action.NewTemplateProcessors()
+	addValueProcessors(tp, cfg)
+	svc := launchr.NewServiceManager()
+	svc.Add(tp)
+
+	type testCase struct {
+		Name string
+		Yaml string
+		Exp  []string
+		Err  string
+	}
+
+	tt := []testCase{
+		{Name: "valid", Yaml: testTplConfigGet, Exp: []string{"my_str", "42", "true", "[1 2 3]", "2", "foo", "bar"}},
+		{Name: "key not found", Yaml: testTplConfigGetMissing, Exp: []string{"<config key not found \"my.missing\">"}},
+		{Name: "incorrect call", Yaml: testTplConfigGetWrongCall, Err: "wrong number of args for Get: want 1 got 0"},
+	}
+	for _, tt := range tt {
+		tt := tt
+		t.Run(tt.Name, func(t *testing.T) {
+			t.Parallel()
+			a := action.NewFromYAML(tt.Name, []byte(tt.Yaml))
+			a.SetServices(svc)
+			err := a.EnsureLoaded()
+			if tt.Err != "" {
+				require.ErrorContains(t, err, tt.Err)
+				return
+			}
+			require.NoError(t, err)
+			rdef := a.RuntimeDef()
+			assert.Equal(t, tt.Exp, []string(rdef.Container.Command))
 		})
 	}
 }

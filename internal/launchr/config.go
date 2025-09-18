@@ -76,8 +76,17 @@ func (cfg *config) DirPath() string {
 	return cfg.rootPath
 }
 
-func (cfg *config) Exists(path string) bool {
+func (cfg *config) exists(path string) bool {
 	return cfg.koanf != nil && cfg.koanf.Exists(path)
+}
+
+func (cfg *config) Exists(path string) bool {
+	var v any
+	err := cfg.Get(path, &v)
+	if err != nil {
+		return false
+	}
+	return cfg.exists(path)
 }
 
 func (cfg *config) Get(key string, v any) error {
@@ -100,7 +109,7 @@ func (cfg *config) Get(key string, v any) error {
 		}
 	}
 
-	ok = cfg.Exists(key)
+	ok = cfg.exists(key)
 	if !ok {
 		// Return default value.
 		return nil

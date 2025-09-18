@@ -25,7 +25,7 @@ import (
 // Get a service from the App.
 func (p *Plugin) OnAppInit(app launchr.App) error {
 	var cfg launchr.Config
-	app.GetService(&cfg) // Pass a pointer to init the value.
+	app.Services().Get(&cfg) // Pass a pointer to init the value.
 	return nil
 }
 ```
@@ -41,7 +41,7 @@ import (
 )
 
 // Define a service and implement service interface.
-// It is important to have a unique interface, the service is identified by it in launchr.GetService().
+// It is important to have a unique interface, the service is identified by it in [launchr.ServiceManager].Get().
 type ExampleService interface {
 	launchr.Service // Inherit launchr.Service
 	// Provide other methods if needed.
@@ -58,7 +58,7 @@ func (ex *exampleSrvImpl) ServiceInfo() launchr.ServiceInfo {
 // Register a service inside launchr.
 func (p *Plugin) OnAppInit(app launchr.App) error {
 	srv := &exampleSrvImpl{}
-	app.AddService(srv)
+	app.Services().Add(srv)
 	return nil
 }
 ```

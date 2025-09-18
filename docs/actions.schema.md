@@ -189,6 +189,8 @@ The action provides basic templating for all file based on arguments, options an
 For templating, the standard Go templating engine is used.
 Refer to [the library documentation](https://pkg.go.dev/text/template) for usage examples.
 
+Since `action.yaml` must be valid YAML, wrap template strings in quotes to ensure proper parsing.
+
 Arguments and Options are available by their machine names - `{{ .myArg1 }}`, `{{ .optStr }}`, `{{ .optArr }}`, etc.
 
 ### Predefined variables:
@@ -227,19 +229,10 @@ runtime:
   image: {{ .optStr }}:latest
   command:
     - {{ .myArg1 }} {{ .MyArg2 }}
-    - {{ .optBool }}
+    - '{{ .optBool }}'
 ```
 
 ### Available Command Template Functions
-
-### `removeLine`
-**Description:** A special template directive that removes the entire line from the final output.
-
-**Usage:**
-
-``` yaml
-- "{{ if condition }}value{{ else }}{{ removeLine }}{{ end }}"
-```
 
 ### `isNil`
 
@@ -247,65 +240,50 @@ runtime:
 
 **Usage:**
 
-```yaml
-- "{{ if not (isNil .param_name) }}--param={{ .param_name }}{{ else }}{{ removeLine }}{{ end }}"
+```gotemplate
+{{ if not (isNil .param_name) }}--param={{ .param_name }}{{ end }}
 ```
 
 ### `isSet`
 
 **Description:** Checks if a value has been set (opposite of `isNil`).
 
-```yaml
-- "{{ if isSet .param_name }}--param={{ .param_name }}{{else}}{{ removeLine }}{{ end }}"
+```gotemplate
+{{ if isSet .param_name }}--param={{ .param_name }}{{ end }}
 ```
 
 ### `isChanged`
 
-**Description:** Checks if an option or argument value has been changed (dirty).
+**Description:** Checks if an option or argument value has been changed (input by user).
 
 **Usage:**
 
-```yaml
-- '{{ if isChanged "param_name"}}--param={{.param_name}}{{else}}{{ removeLine }}{{ end }}'
+```gotemplate
+{{ if isChanged "param_name"}}--param={{.param_name}}{{ end }}
 ```
 
-### `removeLineIfNil`
-**Description:** Removes the entire command line if the value is nil.
+### `default`
+
+**Description:** Returns a default value when the first parameter is `nil` or empty. 
+Emptiness is determined by its zero value - empty string `""`, integer `0`, structs with all zero-value fields, etc. 
+Or type implements `interface { IsEmpty() bool }`.
 
 **Usage:**
-
-```yaml
-- "{{ removeLineIfNil .param_name }}"
+```gotemplate
+{{ .nil_value | default "foo" }}
+{{ default .nil_value "bar" }}
 ```
 
-### `removeLineIfSet`
-**Description:** Removes the entire command line if the value is set (has no nil value).
+### `config.Get`
+
+**Description:** Returns a [config](config.md) value by a path.
 
 **Usage:**
-
-```yaml
-- "{{ removeLineIfSet .param_name }}"
-```
-
-### `removeLineIfChanged`
-
-**Description:** Removes the command line entry if the option/argument value has changed.
-
-**Usage:**
-
-``` yaml
-- '{{ removeLineIfChanged "param_name" }}'
-```
-
-### `removeLineIfNotChanged`
-
-**Description:** Removes the command line entry if the option/argument value has not changed by the user.
-Opposite of `removeLineIfChanged`
-
-**Usage:**
-
-``` yaml
-- '{{ removeLineIfNotChanged "param_name" }}'
+```gotemplate
+{{ config.Get "foo.bar" }}                          # retrieves value of any type
+{{ index (config.Get "foo.array-elem") 1 }}         # retrieves specific array element
+{{ config.Get "foo.null-elem" | default "foo" }}    # uses default if value is nil
+{{ config.Get "foo.missing-elem" | default "bar" }} # uses default if key doesn't exist
 ```
 
 

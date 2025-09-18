@@ -34,8 +34,8 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	// Get services.
 	var cfg launchr.Config
 	var am action.Manager
-	app.GetService(&cfg)
-	app.GetService(&am)
+	app.Services().Get(&cfg)
+	app.Services().Get(&am)
 
 	// Load naming configuration.
 	var launchrConfig launchrCfg

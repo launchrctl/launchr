@@ -20,6 +20,8 @@ type Action struct {
 	// loader is a function to load action definition.
 	// Helpful to reload with replaced variables.
 	loader Loader
+	// services is a service manager to help with Dependency Injection.
+	services launchr.ServiceManager
 	// wd is a working directory set from app level.
 	// Usually current working directory, but may be overridden by a plugin.
 	wd     string
@@ -52,7 +54,18 @@ func New(idp IDProvider, l Loader, fsys DiscoveryFS, fpath string) *Action {
 
 // NewFromYAML creates a new action from yaml content.
 func NewFromYAML(id string, b []byte) *Action {
-	return New(StringID(id), &YamlLoader{Bytes: b}, NewDiscoveryFS(nil, ""), "")
+	return New(
+		StringID(id),
+		&YamlLoader{
+			Bytes: b,
+			Processor: NewPipeProcessor(
+				envProcessor{},
+				inputProcessor{},
+			),
+		},
+		NewDiscoveryFS(nil, ""),
+		"",
+	)
 }
 
 // NewYAMLFromFS creates an action from the given filesystem.
@@ -93,8 +106,13 @@ func (a *Action) Clone() *Action {
 	return c
 }
 
-// SetProcessors sets the value processors for an [Action].
-func (a *Action) SetProcessors(list map[string]ValueProcessor) error {
+// SetServices sets a [launchr.ServiceManager] for Dependency Injection.
+func (a *Action) SetServices(s launchr.ServiceManager) {
+	a.services = s
+}
+
+// setProcessors sets the value processors for an [Action].
+func (a *Action) setProcessors(list map[string]ValueProcessor) error {
 	def := a.ActionDef()
 	for _, params := range []ParametersList{def.Arguments, def.Options} {
 		for _, p := range params {
@@ -195,7 +213,7 @@ func (a *Action) DefinitionEncoded() ([]byte, error) { return a.loader.Content()
 func (a *Action) Raw() (*Definition, error) {
 	var err error
 	if a.defRaw == nil {
-		a.defRaw, err = a.loader.LoadRaw()
+		a.defRaw, err = a.loader.Load(nil)
 	}
 	return a.defRaw, err
 }
@@ -211,7 +229,7 @@ func (a *Action) EnsureLoaded() (err error) {
 		return err
 	}
 	// Load with replacements.
-	a.def, err = a.loader.Load(LoadContext{Action: a})
+	a.def, err = a.loader.Load(&LoadContext{Action: a, Services: a.services})
 	return err
 }
 

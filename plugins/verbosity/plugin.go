@@ -171,7 +171,7 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	cmd.SetErr(streams.Err())
 
 	var am action.Manager
-	app.GetService(&am)
+	app.Services().Get(&am)
 
 	// Retrieve and expand application persistent flags with new log and term-related options.
 	persistentFlags := am.GetPersistentFlags()

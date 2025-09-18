@@ -5,9 +5,126 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"text/template"
 
+	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
+
+// TemplateProcessors handles template processors used on an action load.
+type TemplateProcessors interface {
+	launchr.Service
+	// AddValueProcessor adds processor to list of available processors
+	AddValueProcessor(name string, vp ValueProcessor)
+	// GetValueProcessors returns list of available processors
+	GetValueProcessors() map[string]ValueProcessor
+	AddTemplateFunc(name string, fn any)
+	GetTemplateFuncMap(ctx TemplateFuncContext) template.FuncMap
+}
+
+// TemplateFuncContext stores context used for processing.
+type TemplateFuncContext struct {
+	Action *Action
+}
+
+type processManager struct {
+	vproc  map[string]ValueProcessor
+	tplFns map[string]any
+}
+
+// NewTemplateProcessors initializes TemplateProcessors with default functions.
+func NewTemplateProcessors() TemplateProcessors {
+	p := &processManager{
+		vproc:  make(map[string]ValueProcessor),
+		tplFns: make(map[string]any),
+	}
+	defaultTemplateFunc(p)
+	return p
+}
+
+// defaultTemplateFunc defines template functions available during parsing of an action yaml.
+func defaultTemplateFunc(p *processManager) {
+	// Returns a default value if v is nil or zero.
+	p.AddTemplateFunc("default", func(v, d any) any {
+		// Check IsEmpty method.
+		if v, ok := v.(interface{ IsEmpty() bool }); ok && v.IsEmpty() {
+			return d
+		}
+
+		// Check zero value, for example, empty string, 0, false,
+		// or in the case of structs that all fields are zero values.
+		if reflect.ValueOf(v).IsZero() {
+			return d
+		}
+
+		// Checks if value is nil.
+		if v == nil {
+			return d
+		}
+
+		return v
+	})
+
+	// Checks if a value is nil. Used in conditions.
+	p.AddTemplateFunc("isNil", func(v any) bool {
+		return v == nil
+	})
+
+	// Checks if a value is not nil. Used in conditions.
+	p.AddTemplateFunc("isSet", func(v any) bool {
+		return v != nil
+	})
+
+	// Checks if a value is changed. Used in conditions.
+	p.AddTemplateFunc("isChanged", func(ctx TemplateFuncContext) any {
+		return func(v any) bool {
+			name, ok := v.(string)
+			if !ok {
+				return false
+			}
+			input := ctx.Action.Input()
+			return input.IsOptChanged(name) || input.IsArgChanged(name)
+		}
+	})
+}
+
+func (m *processManager) ServiceInfo() launchr.ServiceInfo {
+	return launchr.ServiceInfo{}
+}
+
+func (m *processManager) AddValueProcessor(name string, vp ValueProcessor) {
+	if _, ok := m.vproc[name]; ok {
+		panic(fmt.Sprintf("value processor %q with the same name already exists", name))
+	}
+	m.vproc[name] = vp
+}
+
+func (m *processManager) GetValueProcessors() map[string]ValueProcessor {
+	return m.vproc
+}
+
+func (m *processManager) AddTemplateFunc(name string, fn any) {
+	if _, ok := m.tplFns[name]; ok {
+		panic(fmt.Sprintf("template function %q with the same name already exists", name))
+	}
+	m.tplFns[name] = fn
+}
+
+func (m *processManager) GetTemplateFuncMap(ctx TemplateFuncContext) template.FuncMap {
+	tplFuncMap := template.FuncMap{}
+	for k, v := range m.tplFns {
+		switch v := v.(type) {
+		case func(ctx TemplateFuncContext) any:
+			// Template function with action context.
+			tplFuncMap[k] = v(ctx)
+
+		default:
+			// Usual template function processor.
+			tplFuncMap[k] = v
+		}
+	}
+	return tplFuncMap
+}
 
 // ValueProcessor defines an interface for processing a value based on its type and some options.
 type ValueProcessor interface {

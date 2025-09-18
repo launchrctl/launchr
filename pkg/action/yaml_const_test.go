@@ -82,6 +82,20 @@ runtime:
     - "${TEST_ENV_1} ${TEST_ENV_UND}"
 `
 
+const validMultilineYaml = `
+action:
+  title: Title
+runtime:
+  type: container
+  image: python:3.7-slim
+  env:
+    MY_MULTILINE_ENV1: "${TEST_MULTILINE_ENV1}"
+    MY_MULTILINE_ENV2: ${TEST_MULTILINE_ENV1}
+    MY_MULTILINE_ENV3: |
+      ${TEST_MULTILINE_ENV1}
+  command: [pwd]
+`
+
 const validCmdArrYaml = `
 action:
   title: Title
@@ -414,7 +428,7 @@ runtime:
 `
 
 // Unescaped template strings.
-const validUnescTplStr = `
+const invalidUnescTplStr = `
 action:
   title: Title
 runtime:
@@ -424,24 +438,6 @@ runtime:
   env:
     - {{ .A2 }} {{ .A3 }}
     - {{ .A2 }} {{ .A3 }} asafs
-`
-
-const invalidUnescUnsupKeyTplStr = `
-action:
-  title: Title
-runtime:
-  type: container
-  image: {{ .A1 }}:latest
-  {{ .A1 }}: ls
-`
-
-const invalidUnescUnsupArrTplStr = `
-action:
-  title: Title
-runtime:
-  type: container
-  image: {{ .A1 }}
-  command: [{{ .A1 }}, {{ .A1 }}]
 `
 
 const validArgString = `

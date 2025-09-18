@@ -26,7 +26,7 @@ func (p *Plugin) PluginInfo() launchr.PluginInfo {
 func (p *Plugin) OnAppInit(app launchr.App) error {
 	p.app = app
 	var am action.Manager
-	app.GetService(&am)
+	app.Services().Get(&am)
 	// Add custom fs to default discovery.
 	app.RegisterFS(action.NewDiscoveryFS(registeredEmbedFS, app.GetWD()))
 	// Create a special decorator to output given input.

@@ -153,7 +153,7 @@ type procTestReplaceOptions = *GenericValueProcessorOptions[struct {
 	N string `yaml:"new"`
 }]
 
-func addTestValueProcessors(am Manager) {
+func addTestValueProcessors(tp TemplateProcessors) {
 	procDefVal := GenericValueProcessor[ValueProcessorOptionsEmpty]{
 		Fn: func(v any, _ ValueProcessorOptionsEmpty, ctx ValueProcessorContext) (any, error) {
 			if ctx.IsChanged {
@@ -182,15 +182,16 @@ func addTestValueProcessors(am Manager) {
 			return v, fmt.Errorf("my_error %q", ctx.DefParam.Name)
 		},
 	}
-	am.AddValueProcessor("test.defaultVal", procDefVal)
-	am.AddValueProcessor("test.replace", procReplace)
-	am.AddValueProcessor("test.error", procErr)
+	tp.AddValueProcessor("test.defaultVal", procDefVal)
+	tp.AddValueProcessor("test.replace", procReplace)
+	tp.AddValueProcessor("test.error", procErr)
 }
 
 func Test_ActionsValueProcessor(t *testing.T) {
 	t.Parallel()
 	am := NewManager()
-	addTestValueProcessors(am)
+	p := NewTemplateProcessors()
+	addTestValueProcessors(p)
 
 	tt := []TestCaseValueProcessor{
 		{"valid processor chain - with defaults, input given", actionProcessWithDefault, nil, nil,
@@ -213,7 +214,7 @@ func Test_ActionsValueProcessor(t *testing.T) {
 		tt := tt
 		t.Run(tt.Name, func(t *testing.T) {
 			t.Parallel()
-			tt.Test(t, am)
+			tt.Test(t, am, p)
 		})
 	}
 }

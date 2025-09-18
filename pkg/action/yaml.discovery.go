@@ -1,8 +1,6 @@
 package action
 
 import (
-	"bufio"
-	"bytes"
 	"io"
 	"path/filepath"
 	"regexp"
@@ -36,9 +34,7 @@ func (y YamlDiscoveryStrategy) IsValid(path string) bool {
 func (y YamlDiscoveryStrategy) Loader(l FileLoadFn, p ...LoadProcessor) Loader {
 	return &YamlFileLoader{
 		YamlLoader: YamlLoader{
-			Processor: NewPipeProcessor(
-				append([]LoadProcessor{escapeYamlTplCommentsProcessor{}}, p...)...,
-			),
+			Processor: NewPipeProcessor(p...),
 		},
 		FileOpen: l,
 	}
@@ -58,8 +54,7 @@ func (l *YamlLoader) Content() ([]byte, error) {
 	return l.Bytes, nil
 }
 
-// LoadRaw implements [Loader] interface.
-func (l *YamlLoader) LoadRaw() (*Definition, error) {
+func (l *YamlLoader) loadRaw() (*Definition, error) {
 	var err error
 	buf, err := l.Content()
 	if err != nil {
@@ -68,7 +63,7 @@ func (l *YamlLoader) LoadRaw() (*Definition, error) {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 	if l.raw == nil {
-		l.raw, err = NewDefFromYamlTpl(buf)
+		l.raw, err = NewDefFromYaml(buf)
 		if err != nil {
 			return nil, err
 		}
@@ -77,23 +72,23 @@ func (l *YamlLoader) LoadRaw() (*Definition, error) {
 }
 
 // Load implements [Loader] interface.
-func (l *YamlLoader) Load(ctx LoadContext) (res *Definition, err error) {
+func (l *YamlLoader) Load(ctx *LoadContext) (res *Definition, err error) {
 	// Open a file and cache content for future reads.
 	c, err := l.Content()
 	if err != nil {
 		return nil, err
 	}
-	buf := make([]byte, len(c))
-	copy(buf, c)
+	if ctx == nil {
+		return l.loadRaw()
+	}
+	res, err = NewDefFromYaml(c)
 	if l.Processor != nil {
-		buf, err = l.Processor.Process(ctx, buf)
+		err = processStructStringsInPlace(res, func(s string) (string, error) {
+			return l.Processor.Process(ctx, s)
+		})
 		if err != nil {
 			return nil, err
 		}
-	}
-	res, err = NewDefFromYaml(buf)
-	if err != nil {
-		return nil, err
 	}
 	return res, err
 }
@@ -104,17 +99,8 @@ type YamlFileLoader struct {
 	FileOpen FileLoadFn // FileOpen lazy loads the content of the file.
 }
 
-// LoadRaw implements [Loader] interface.
-func (l *YamlFileLoader) LoadRaw() (*Definition, error) {
-	_, err := l.Content()
-	if err != nil {
-		return nil, err
-	}
-	return l.YamlLoader.LoadRaw()
-}
-
 // Load implements [Loader] interface.
-func (l *YamlFileLoader) Load(ctx LoadContext) (res *Definition, err error) {
+func (l *YamlFileLoader) Load(ctx *LoadContext) (res *Definition, err error) {
 	// Open a file and cache content for future reads.
 	_, err = l.Content()
 	if err != nil {
@@ -142,28 +128,4 @@ func (l *YamlFileLoader) Content() ([]byte, error) {
 		return nil, err
 	}
 	return l.Bytes, nil
-}
-
-type escapeYamlTplCommentsProcessor struct{}
-
-func (p escapeYamlTplCommentsProcessor) Process(_ LoadContext, b []byte) ([]byte, error) {
-	// Read by line.
-	scanner := bufio.NewScanner(bytes.NewBuffer(b))
-	res := make([]byte, 0, len(b))
-	for scanner.Scan() {
-		l := scanner.Bytes()
-		if i := bytes.IndexByte(l, '#'); i != -1 {
-			// Check the comment symbol is not inside a string.
-			// Multiline strings are not supported for now.
-			if (bytes.LastIndexByte(l[:i], '"') == -1 || bytes.IndexByte(l[i:], '"') == -1) &&
-				(bytes.LastIndexByte(l[:i], '\'') == -1 || bytes.IndexByte(l[i:], '\'') == -1) {
-				// Strip data after comment symbol.
-				l = l[:i]
-			}
-		}
-		// Collect the modified lines.
-		res = append(res, l...)
-		res = append(res, '\n')
-	}
-	return res, nil
 }

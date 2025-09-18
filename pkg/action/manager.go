@@ -11,7 +11,6 @@ import (
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/driver"
-	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
 // DiscoverActionsFn defines a function to discover actions.
@@ -48,10 +47,12 @@ type Manager interface {
 	// current state.
 	GetPersistentFlags() *FlagsGroup
 
-	// AddValueProcessor adds processor to list of available processors
-	AddValueProcessor(name string, vp ValueProcessor)
-	// GetValueProcessors returns list of available processors
-	GetValueProcessors() map[string]ValueProcessor
+	// TemplateProcessors for backward-compatibility.
+	// Deprecated: Use [TemplateProcessors] service directly.
+	TemplateProcessors
+	// SetTemplateProcessors sets [TemplateProcessors] for backward-compatibility.
+	// Deprecated: no replacement.
+	SetTemplateProcessors(TemplateProcessors)
 
 	// AddDiscovery registers a discovery callback to find actions.
 	AddDiscovery(DiscoverActionsFn)
@@ -100,7 +101,6 @@ type actionManagerMap struct {
 	actionAliases map[string]string
 	mx            sync.Mutex
 	dwFns         []DecorateWithFn
-	processors    map[string]ValueProcessor
 	idProvider    IDProvider
 
 	// Actions discovery.
@@ -111,6 +111,7 @@ type actionManagerMap struct {
 	persistentFlags *FlagsGroup
 
 	runManagerMap
+	TemplateProcessors // TODO: It's here to support the interface. Refactor when the interface is updated.
 }
 
 // NewManager constructs a new action manager.
@@ -119,7 +120,6 @@ func NewManager(withFns ...DecorateWithFn) Manager {
 		actionStore:   make(map[string]*Action),
 		actionAliases: make(map[string]string),
 		dwFns:         withFns,
-		processors:    make(map[string]ValueProcessor),
 
 		persistentFlags: NewFlagsGroup(jsonschemaPropPersistent),
 
@@ -156,7 +156,7 @@ func (m *actionManagerMap) add(a *Action) error {
 		m.actionAliases[alias] = a.ID
 	}
 	// Set action related processors.
-	err = a.SetProcessors(m.GetValueProcessors())
+	err = a.setProcessors(m.GetValueProcessors())
 	if err != nil {
 		// Skip action because the definition is not correct.
 		return err
@@ -292,15 +292,8 @@ func (m *actionManagerMap) callDiscoveryFn(ctx context.Context, fn DiscoverActio
 	return nil
 }
 
-func (m *actionManagerMap) AddValueProcessor(name string, vp ValueProcessor) {
-	if _, ok := m.processors[name]; ok {
-		panic(fmt.Sprintf("processor `%q` with the same name already exists", name))
-	}
-	m.processors[name] = vp
-}
-
-func (m *actionManagerMap) GetValueProcessors() map[string]ValueProcessor {
-	return m.processors
+func (m *actionManagerMap) SetTemplateProcessors(tp TemplateProcessors) {
+	m.TemplateProcessors = tp
 }
 
 func (m *actionManagerMap) AddDecorators(withFns ...DecorateWithFn) {
@@ -381,16 +374,7 @@ func (m *actionManagerMap) ValidateInput(a *Action, input *Input) error {
 		return err
 	}
 
-	def := a.ActionDef()
-
-	// Process arguments.
-	err = m.processInputParams(def.Arguments, input.Args(), input.ArgsChanged(), input)
-	if err != nil {
-		return err
-	}
-
-	// Process options.
-	err = m.processInputParams(def.Options, input.Opts(), input.OptsChanged(), input)
+	err = input.execValueProcessors()
 	if err != nil {
 		return err
 	}
@@ -405,44 +389,6 @@ func (m *actionManagerMap) ValidateInput(a *Action, input *Input) error {
 		return err
 	}
 	input.SetValidated(true)
-
-	return nil
-}
-
-// processInputParams applies value processors to input parameters.
-func (m *actionManagerMap) processInputParams(def ParametersList, inp InputParams, changed InputParams, input *Input) error {
-	// @todo move to a separate service with full input validation. See notes in actionManagerMap.ValidateFlags.
-	var err error
-	for _, p := range def {
-		_, isChanged := changed[p.Name]
-		res := inp[p.Name]
-		for i, procDef := range p.Process {
-			handler := p.processors[i]
-			res, err = handler(res, ValueProcessorContext{
-				ValOrig:   inp[p.Name],
-				IsChanged: isChanged,
-				Input:     input,
-				DefParam:  p,
-				Action:    input.action,
-			})
-			if err != nil {
-				return ErrValueProcessorHandler{
-					Processor: procDef.ID,
-					Param:     p.Name,
-					Err:       err,
-				}
-			}
-		}
-		// Cast to []any slice because jsonschema validator supports only this type.
-		if p.Type == jsonschema.Array {
-			res = CastSliceTypedToAny(res)
-		}
-		// If the value was changed, we can safely override the value.
-		// If the value was not changed and processed is nil, do not add it.
-		if isChanged || res != nil {
-			inp[p.Name] = res
-		}
-	}
 
 	return nil
 }
@@ -576,5 +522,12 @@ func WithContainerRuntimeConfig(cfg launchr.Config, prefix string) DecorateWithF
 			env.SetImageBuildCacheResolver(ccr)
 			env.SetContainerNameProvider(ContainerNameProvider{Prefix: prefix, RandomSuffix: true})
 		}
+	}
+}
+
+// WithServices add global app to action. Helps with DI in actions.
+func WithServices(services launchr.ServiceManager) DecorateWithFn {
+	return func(_ Manager, a *Action) {
+		a.SetServices(services)
 	}
 }

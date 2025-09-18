@@ -2,10 +2,8 @@ package launchr
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"os"
-	"reflect"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/action"
@@ -24,7 +22,7 @@ type appImpl struct {
 
 	// Services.
 	streams    Streams
-	services   map[ServiceInfo]Service
+	services   ServiceManager
 	pluginMngr PluginManager
 }
 
@@ -48,38 +46,14 @@ func (app *appImpl) SensitiveMask() *SensitiveMask { return launchr.GlobalSensit
 func (app *appImpl) RootCmd() *Command                      { return app.cmd }
 func (app *appImpl) CmdEarlyParsed() launchr.CmdEarlyParsed { return app.earlyCmd }
 
+func (app *appImpl) Services() ServiceManager { return app.services }
+
 func (app *appImpl) AddService(s Service) {
-	info := s.ServiceInfo()
-	launchr.InitServiceInfo(&info, s)
-	if _, ok := app.services[info]; ok {
-		panic(fmt.Errorf("service %s already exists, review your code", info))
-	}
-	app.services[info] = s
+	app.services.Add(s)
 }
 
 func (app *appImpl) GetService(v any) {
-	// Check v is a pointer and implements [Service] to set a value later.
-	t := reflect.TypeOf(v)
-	isPtr := t != nil && t.Kind() == reflect.Pointer
-	var stype reflect.Type
-	if isPtr {
-		stype = t.Elem()
-	}
-
-	// v must be [Service] but can't equal it because all elements implement it
-	// and the first value will always be returned.
-	intService := reflect.TypeOf((*Service)(nil)).Elem()
-	if !isPtr || !stype.Implements(intService) || stype == intService {
-		panic(fmt.Errorf("argument must be a pointer to a type (interface) implementing Service, %q given", t))
-	}
-	for _, srv := range app.services {
-		st := reflect.TypeOf(srv)
-		if st.AssignableTo(stype) {
-			reflect.ValueOf(v).Elem().Set(reflect.ValueOf(srv))
-			return
-		}
-	}
-	panic(fmt.Sprintf("service %q does not exist", stype))
+	app.services.Get(v)
 }
 
 // init initializes application and plugins.
@@ -123,19 +97,23 @@ func (app *appImpl) init() error {
 	app.RegisterFS(action.NewDiscoveryFS(os.DirFS(actionsPath), app.GetWD()))
 
 	// Prepare dependencies.
-	app.services = make(map[ServiceInfo]Service)
+	app.services = launchr.NewServiceManager()
 	app.pluginMngr = launchr.NewPluginManagerWithRegistered()
 	// @todo consider home dir for global config.
 	config := launchr.ConfigFromFS(os.DirFS(app.cfgDir))
+	actionProcs := action.NewTemplateProcessors()
 	actionMngr := action.NewManager(
 		action.WithDefaultRuntime(config),
 		action.WithContainerRuntimeConfig(config, name+"_"),
+		action.WithServices(app.services),
 	)
+	actionMngr.SetTemplateProcessors(actionProcs)
 
-	// Register services for other modules.
-	app.AddService(actionMngr)
-	app.AddService(app.pluginMngr)
-	app.AddService(config)
+	// Register svcMngr for other modules.
+	app.services.Add(actionProcs)
+	app.services.Add(actionMngr)
+	app.services.Add(app.pluginMngr)
+	app.services.Add(config)
 
 	Log().Debug("initialising application")
 

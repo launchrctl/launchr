@@ -42,10 +42,14 @@ type App interface {
 	SetStreams(s Streams)
 	// AddService registers a service in the app.
 	// Panics if a service is not unique.
+	// Deprecated: use app.Services().Add(s)
 	AddService(s Service)
 	// GetService retrieves a service of type [v] and assigns it to [v].
 	// Panics if a service is not found.
+	// Deprecated: use app.Services().Get(&v)
 	GetService(v any)
+	// Services returns a service manager.
+	Services() ServiceManager
 	// SensitiveWriter wraps given writer with a sensitive mask.
 	SensitiveWriter(w io.Writer) io.Writer
 	// SensitiveMask returns current sensitive mask to add values to mask.
@@ -202,26 +206,6 @@ type pluginManagerMap PluginsMap
 
 func (m pluginManagerMap) ServiceInfo() ServiceInfo { return ServiceInfo{} }
 func (m pluginManagerMap) All() PluginsMap          { return m }
-
-// ServiceInfo provides service info for its initialization.
-type ServiceInfo struct {
-	pkgPath  string
-	typeName string
-}
-
-func (s ServiceInfo) String() string {
-	return s.pkgPath + "." + s.typeName
-}
-
-// Service is a common interface for a service to register.
-type Service interface {
-	ServiceInfo() ServiceInfo
-}
-
-// InitServiceInfo sets private fields for internal usage only.
-func InitServiceInfo(si *ServiceInfo, s Service) {
-	si.pkgPath, si.typeName = GetTypePkgPathName(s)
-}
 
 // ManagedFS is a common interface for FS registered in launchr.
 type ManagedFS interface {
