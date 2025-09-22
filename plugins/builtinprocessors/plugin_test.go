@@ -91,14 +91,14 @@ runtime:
     - '{{ config.Get "my.missing" }}'
 `
 
-const testTplConfigGetWrongCall = `
+const testTplConfigGetBadArgs = `
 action:
   title: test config
 runtime:
   type: container
   image: alpine
   command:
-    - '{{ config.Get }}'
+    - '{{ config.Get "my.string" "my.string" }}'
 `
 
 const testConfig = `
@@ -169,7 +169,7 @@ func Test_ConfigTemplateFunc(t *testing.T) {
 	tt := []testCase{
 		{Name: "valid", Yaml: testTplConfigGet, Exp: []string{"my_str", "42", "true", "[1 2 3]", "2", "foo", "bar"}},
 		{Name: "key not found", Yaml: testTplConfigGetMissing, Exp: []string{"<config key not found \"my.missing\">"}},
-		{Name: "incorrect call", Yaml: testTplConfigGetWrongCall, Err: "wrong number of args for Get: want 1 got 0"},
+		{Name: "incorrect call", Yaml: testTplConfigGetBadArgs, Err: "wrong number of args for Get: want 1 got 2"},
 	}
 	for _, tt := range tt {
 		tt := tt
