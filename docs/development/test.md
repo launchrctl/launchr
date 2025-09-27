@@ -198,7 +198,7 @@ concurrency:
 jobs:
   tests:
     name: 🛡️ Multi-Platform Testing Suite
-    uses: launchr/launchr/.github/workflows/test-suite.yaml@main
+    uses: launchrctl/launchr/.github/workflows/test-suite.yaml@main
 ```
 
 ### Benefits of Reusable Workflows

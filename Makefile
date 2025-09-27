@@ -23,7 +23,7 @@ LOCAL_BIN:=$(CURDIR)/bin
 
 # Linter config.
 GOLANGCI_BIN:=$(LOCAL_BIN)/golangci-lint
-GOLANGCI_TAG:=2.3.0
+GOLANGCI_TAG:=2.5.0
 
 GOTESTFMT_BIN:=$(GOBIN)/gotestfmt
 
