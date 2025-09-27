@@ -40,7 +40,7 @@ func CobraImpl(a *action.Action, streams launchr.Streams, manager action.Manager
 					if runOpts[flag] != nil {
 						value = runOpts[flag]
 					}
-					input.SetFlagInGroup(runtimeFlagsGroup.GetName(), flag, value)
+					input.SetFlagInGroup(runtimeFlagsGroup.Name(), flag, value)
 				}
 			}
 
@@ -49,7 +49,7 @@ func CobraImpl(a *action.Action, streams launchr.Streams, manager action.Manager
 			// Flags are immutable in action.
 			persistentFlagsGroup := manager.GetPersistentFlags()
 			for k, v := range persistentFlagsGroup.GetAll() {
-				input.SetFlagInGroup(persistentFlagsGroup.GetName(), k, v)
+				input.SetFlagInGroup(persistentFlagsGroup.Name(), k, v)
 			}
 
 			// Validate input before setting to action.

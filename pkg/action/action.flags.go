@@ -25,8 +25,8 @@ func NewFlagsGroup(name string) *FlagsGroup {
 	}
 }
 
-// GetName returns the name of the flags group.
-func (p *FlagsGroup) GetName() string {
+// Name returns the name of the flags group.
+func (p *FlagsGroup) Name() string {
 	return p.name
 }
 

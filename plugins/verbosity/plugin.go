@@ -103,8 +103,8 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 	cmd := appInternal.RootCmd()
 	pflags := cmd.PersistentFlags()
 	// Make sure not to fail on unknown flags because we are parsing early.
-	unkFlagsBkp := pflags.ParseErrorsWhitelist.UnknownFlags
-	pflags.ParseErrorsWhitelist.UnknownFlags = true
+	unkFlagsBkp := pflags.ParseErrorsAllowlist.UnknownFlags
+	pflags.ParseErrorsAllowlist.UnknownFlags = true
 	pflags.CountVarP(&verbosity, "verbose", "v", "log verbosity level, use -vvvv DEBUG, -vvv INFO, -vv WARN, -v ERROR")
 	pflags.VarP(&logLvlStr, "log-level", "", "log level, same as -v, can be: DEBUG, INFO, WARN, ERROR or NONE (default NONE)")
 	pflags.VarP(&logFormatStr, "log-format", "", "log format, can be: pretty, plain or json (default pretty)")
@@ -119,7 +119,7 @@ func (p Plugin) OnAppInit(app launchr.App) error {
 		// It shouldn't happen here.
 		panic(err)
 	}
-	pflags.ParseErrorsWhitelist.UnknownFlags = unkFlagsBkp
+	pflags.ParseErrorsAllowlist.UnknownFlags = unkFlagsBkp
 
 	// Set quiet mode.
 	launchr.Term().EnableOutput()
@@ -239,12 +239,12 @@ func withCustomLogger(m action.Manager, a *action.Action) {
 	persistentFlags := m.GetPersistentFlags()
 	if rt, ok := a.Runtime().(action.RuntimeLoggerAware); ok {
 		var logFormat LogFormat
-		if lfStr, ok := a.Input().GetFlagInGroup(persistentFlags.GetName(), "log-format").(string); ok {
+		if lfStr, ok := a.Input().GetFlagInGroup(persistentFlags.Name(), "log-format").(string); ok {
 			logFormat = LogFormat(lfStr)
 		}
 
 		var logLevel launchr.LogLevel
-		if llStr, ok := a.Input().GetFlagInGroup(persistentFlags.GetName(), "log-level").(string); ok {
+		if llStr, ok := a.Input().GetFlagInGroup(persistentFlags.Name(), "log-level").(string); ok {
 			logLevel = launchr.LogLevelFromString(llStr)
 		}
 
@@ -267,7 +267,7 @@ func withCustomTerm(m action.Manager, a *action.Action) {
 	if rt, ok := a.Runtime().(action.RuntimeTermAware); ok {
 		term := launchr.NewTerminal()
 		term.SetOutput(a.Input().Streams().Out())
-		if quiet, ok := a.Input().GetFlagInGroup(persistentFlags.GetName(), "log-level").(bool); ok && quiet {
+		if quiet, ok := a.Input().GetFlagInGroup(persistentFlags.Name(), "log-level").(bool); ok && quiet {
 			term.DisableOutput()
 		}
 
