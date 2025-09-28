@@ -21,7 +21,7 @@ type Action struct {
 	// Helpful to reload with replaced variables.
 	loader Loader
 	// services is a service manager to help with Dependency Injection.
-	services launchr.ServiceManager
+	services *launchr.ServiceManager
 	// wd is a working directory set from app level.
 	// Usually current working directory, but may be overridden by a plugin.
 	wd     string
@@ -107,7 +107,7 @@ func (a *Action) Clone() *Action {
 }
 
 // SetServices sets a [launchr.ServiceManager] for Dependency Injection.
-func (a *Action) SetServices(s launchr.ServiceManager) {
+func (a *Action) SetServices(s *launchr.ServiceManager) {
 	a.services = s
 }
 
@@ -229,7 +229,7 @@ func (a *Action) EnsureLoaded() (err error) {
 		return err
 	}
 	// Load with replacements.
-	a.def, err = a.loader.Load(&LoadContext{Action: a, Services: a.services})
+	a.def, err = a.loader.Load(&LoadContext{a: a, svc: a.services})
 	return err
 }
 

@@ -11,30 +11,27 @@ import (
 	"github.com/launchrctl/launchr/pkg/jsonschema"
 )
 
-// TemplateProcessors handles template processors used on an action load.
-type TemplateProcessors interface {
-	launchr.Service
-	// AddValueProcessor adds processor to list of available processors
-	AddValueProcessor(name string, vp ValueProcessor)
-	// GetValueProcessors returns list of available processors
-	GetValueProcessors() map[string]ValueProcessor
-	AddTemplateFunc(name string, fn any)
-	GetTemplateFuncMap(ctx TemplateFuncContext) template.FuncMap
-}
-
 // TemplateFuncContext stores context used for processing.
 type TemplateFuncContext struct {
-	Action *Action
+	a   *Action
+	svc *launchr.ServiceManager
 }
 
-type processManager struct {
+// Action returns an [Action] related to the template.
+func (ctx TemplateFuncContext) Action() *Action { return ctx.a }
+
+// Services returns a [launchr.ServiceManager] for DI.
+func (ctx TemplateFuncContext) Services() *launchr.ServiceManager { return ctx.svc }
+
+// TemplateProcessors handles template processors used on an action load.
+type TemplateProcessors struct {
 	vproc  map[string]ValueProcessor
 	tplFns map[string]any
 }
 
 // NewTemplateProcessors initializes TemplateProcessors with default functions.
-func NewTemplateProcessors() TemplateProcessors {
-	p := &processManager{
+func NewTemplateProcessors() *TemplateProcessors {
+	p := &TemplateProcessors{
 		vproc:  make(map[string]ValueProcessor),
 		tplFns: make(map[string]any),
 	}
@@ -43,7 +40,7 @@ func NewTemplateProcessors() TemplateProcessors {
 }
 
 // defaultTemplateFunc defines template functions available during parsing of an action yaml.
-func defaultTemplateFunc(p *processManager) {
+func defaultTemplateFunc(p *TemplateProcessors) {
 	// Returns a default value if v is nil or zero.
 	p.AddTemplateFunc("default", func(v, d any) any {
 		// Check IsEmpty method.
@@ -82,35 +79,63 @@ func defaultTemplateFunc(p *processManager) {
 			if !ok {
 				return false
 			}
-			input := ctx.Action.Input()
+			input := ctx.Action().Input()
 			return input.IsOptChanged(name) || input.IsArgChanged(name)
+		}
+	})
+
+	// Mask a value in the output in case it's sensitive.
+	p.AddTemplateFunc("mask", func(ctx TemplateFuncContext) any {
+		var mask *launchr.SensitiveMask
+		return func(v string) string {
+			// Initialize a masking service per action.
+			if mask == nil {
+				ctx.Services().Get(&mask)
+				mask = mask.Clone()
+				input := ctx.Action().Input()
+				// TODO: Review. This may not work as expected with Term and Log.
+				io := input.Streams()
+				input.SetStreams(launchr.NewBasicStreams(io.In(), io.Out(), io.Err(), launchr.WithSensitiveMask(mask)))
+			}
+			mask.AddString(v)
+			return v
 		}
 	})
 }
 
-func (m *processManager) ServiceInfo() launchr.ServiceInfo {
+// ServiceInfo implements [launchr.Service] interface.
+func (m *TemplateProcessors) ServiceInfo() launchr.ServiceInfo {
 	return launchr.ServiceInfo{}
 }
 
-func (m *processManager) AddValueProcessor(name string, vp ValueProcessor) {
+// ServiceCreate implements [launchr.ServiceCreate] interface.
+func (m *TemplateProcessors) ServiceCreate(_ *launchr.ServiceManager) launchr.Service {
+	return NewTemplateProcessors()
+}
+
+// AddValueProcessor adds processor to list of available processors
+func (m *TemplateProcessors) AddValueProcessor(name string, vp ValueProcessor) {
 	if _, ok := m.vproc[name]; ok {
 		panic(fmt.Sprintf("value processor %q with the same name already exists", name))
 	}
 	m.vproc[name] = vp
 }
 
-func (m *processManager) GetValueProcessors() map[string]ValueProcessor {
+// GetValueProcessors returns list of available processors
+func (m *TemplateProcessors) GetValueProcessors() map[string]ValueProcessor {
 	return m.vproc
 }
 
-func (m *processManager) AddTemplateFunc(name string, fn any) {
+// AddTemplateFunc registers a template function used on [inputProcessor].
+func (m *TemplateProcessors) AddTemplateFunc(name string, fn any) {
 	if _, ok := m.tplFns[name]; ok {
 		panic(fmt.Sprintf("template function %q with the same name already exists", name))
 	}
 	m.tplFns[name] = fn
 }
 
-func (m *processManager) GetTemplateFuncMap(ctx TemplateFuncContext) template.FuncMap {
+// GetTemplateFuncMap returns list of template functions used on [inputProcessor].
+func (m *TemplateProcessors) GetTemplateFuncMap(ctx TemplateFuncContext) template.FuncMap {
 	tplFuncMap := template.FuncMap{}
 	for k, v := range m.tplFns {
 		switch v := v.(type) {

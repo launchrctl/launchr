@@ -22,36 +22,48 @@ type Loader interface {
 
 // LoadContext stores relevant and isolated data needed for processors.
 type LoadContext struct {
-	Action   *Action
-	Services launchr.ServiceManager
+	a   *Action
+	svc *launchr.ServiceManager
 
 	tplVars    map[string]any
 	tplFuncMap template.FuncMap
 }
 
-func (ctx *LoadContext) getActionTemplateProcessors() TemplateProcessors {
-	if ctx.Services == nil {
+// Action returns context's action.
+func (ctx *LoadContext) Action() *Action { return ctx.a }
+
+// Services returns a DI container.
+func (ctx *LoadContext) Services() *launchr.ServiceManager { return ctx.svc }
+
+func (ctx *LoadContext) getActionTemplateProcessors() *TemplateProcessors {
+	if ctx.Services() == nil {
+		// In case of tests.
 		return NewTemplateProcessors()
 	}
-	var tp TemplateProcessors
-	ctx.Services.Get(&tp)
+	var tp *TemplateProcessors
+	ctx.Services().Get(&tp)
 	return tp
 }
 
 func (ctx *LoadContext) getTemplateFuncMap() template.FuncMap {
 	if ctx.tplFuncMap == nil {
 		procs := ctx.getActionTemplateProcessors()
-		ctx.tplFuncMap = procs.GetTemplateFuncMap(TemplateFuncContext{Action: ctx.Action})
+		ctx.tplFuncMap = procs.GetTemplateFuncMap(
+			TemplateFuncContext{
+				a:   ctx.Action(),
+				svc: ctx.Services(),
+			},
+		)
 	}
 	return ctx.tplFuncMap
 }
 
 func (ctx *LoadContext) getTemplateData() map[string]any {
 	if ctx.tplVars == nil {
-		def := ctx.Action.ActionDef()
+		def := ctx.Action().ActionDef()
 		// Collect template variables.
-		ctx.tplVars = convertInputToTplVars(ctx.Action.Input(), def)
-		addPredefinedVariables(ctx.tplVars, ctx.Action)
+		ctx.tplVars = convertInputToTplVars(ctx.Action().Input(), def)
+		addPredefinedVariables(ctx.tplVars, ctx.Action())
 	}
 	return ctx.tplVars
 }
@@ -85,13 +97,13 @@ func (p *pipeProcessor) Process(ctx *LoadContext, s string) (string, error) {
 type envProcessor struct{}
 
 func (p envProcessor) Process(ctx *LoadContext, s string) (string, error) {
-	if ctx.Action == nil {
+	if ctx.Action() == nil {
 		panic("envProcessor received nil LoadContext.Action")
 	}
 	if !strings.Contains(s, "$") {
 		return s, nil
 	}
-	pv := newPredefinedVars(ctx.Action)
+	pv := newPredefinedVars(ctx.Action())
 	getenv := func(key string) string {
 		v, ok := pv.getenv(key)
 		if ok {
@@ -120,7 +132,7 @@ func (err errMissingVar) Error() string {
 }
 
 func (p inputProcessor) Process(ctx *LoadContext, s string) (string, error) {
-	if ctx.Action == nil {
+	if ctx.Action() == nil {
 		panic("inputProcessor received nil LoadContext.Action")
 	}
 	if !strings.Contains(s, "{{") {

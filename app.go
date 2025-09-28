@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/launchrctl/launchr/internal/launchr"
-	"github.com/launchrctl/launchr/pkg/action"
 	_ "github.com/launchrctl/launchr/plugins" // include default plugins
 )
 
@@ -18,11 +17,11 @@ type appImpl struct {
 	// FS related.
 	mFS     []ManagedFS
 	workDir string
-	cfgDir  string
 
 	// Services.
 	streams    Streams
-	services   ServiceManager
+	mask       *SensitiveMask
+	services   *ServiceManager
 	pluginMngr PluginManager
 }
 
@@ -38,15 +37,13 @@ func (app *appImpl) SetStreams(s Streams) { app.streams = s }
 func (app *appImpl) RegisterFS(fs ManagedFS)      { app.mFS = append(app.mFS, fs) }
 func (app *appImpl) GetRegisteredFS() []ManagedFS { return app.mFS }
 
-func (app *appImpl) SensitiveWriter(w io.Writer) io.Writer {
-	return NewMaskingWriter(w, app.SensitiveMask())
-}
-func (app *appImpl) SensitiveMask() *SensitiveMask { return launchr.GlobalSensitiveMask() }
+func (app *appImpl) SensitiveWriter(w io.Writer) io.Writer { return app.SensitiveMask().MaskWriter(w) }
+func (app *appImpl) SensitiveMask() *SensitiveMask         { return app.mask }
 
 func (app *appImpl) RootCmd() *Command                      { return app.cmd }
 func (app *appImpl) CmdEarlyParsed() launchr.CmdEarlyParsed { return app.earlyCmd }
 
-func (app *appImpl) Services() ServiceManager { return app.services }
+func (app *appImpl) Services() *ServiceManager { return app.services }
 
 func (app *appImpl) AddService(s Service) {
 	app.services.Add(s)
@@ -82,38 +79,25 @@ func (app *appImpl) init() error {
 	}
 	app.cmd.SetVersionTemplate(`{{ appVersionFull }}`)
 	app.earlyCmd = launchr.EarlyPeekCommand()
-	// Set io streams.
-	app.SetStreams(MaskedStdStreams(app.SensitiveMask()))
-	app.cmd.SetIn(app.streams.In().Reader())
-	app.cmd.SetOut(app.streams.Out())
-	app.cmd.SetErr(app.streams.Err())
+	app.mask = launchr.NewSensitiveMask("****")
 
-	// Set working dir and config dir.
-	app.cfgDir = "." + name
-	app.workDir = launchr.MustAbs(".")
-	actionsPath := launchr.MustAbs(EnvVarActionsPath.Get())
-	// Initialize managed FS for action discovery.
+	// Initialize managed FS for action discovery and set working dir
+	app.workDir = MustAbs(".")
 	app.mFS = make([]ManagedFS, 0, 4)
-	app.RegisterFS(action.NewDiscoveryFS(os.DirFS(actionsPath), app.GetWD()))
 
 	// Prepare dependencies.
 	app.services = launchr.NewServiceManager()
 	app.pluginMngr = launchr.NewPluginManagerWithRegistered()
-	// @todo consider home dir for global config.
-	config := launchr.ConfigFromFS(os.DirFS(app.cfgDir))
-	actionProcs := action.NewTemplateProcessors()
-	actionMngr := action.NewManager(
-		action.WithDefaultRuntime(config),
-		action.WithContainerRuntimeConfig(config, name+"_"),
-		action.WithServices(app.services),
-	)
-	actionMngr.SetTemplateProcessors(actionProcs)
 
 	// Register svcMngr for other modules.
-	app.services.Add(actionProcs)
-	app.services.Add(actionMngr)
+	app.services.Add(app.mask)
 	app.services.Add(app.pluginMngr)
-	app.services.Add(config)
+
+	// Set io streams.
+	app.SetStreams(MaskedStdStreams(app.mask))
+	app.cmd.SetIn(app.streams.In().Reader())
+	app.cmd.SetOut(app.streams.Out())
+	app.cmd.SetErr(app.streams.Err())
 
 	Log().Debug("initialising application")
 
@@ -126,7 +110,7 @@ func (app *appImpl) init() error {
 			return err
 		}
 	}
-	Log().Debug("init success", "wd", app.workDir, "actions_dir", actionsPath)
+	Log().Debug("init success", "wd", app.workDir)
 
 	return nil
 }

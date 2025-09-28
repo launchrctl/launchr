@@ -17,81 +17,10 @@ import (
 type DiscoverActionsFn func(ctx context.Context) ([]*Action, error)
 
 // Manager handles actions and its execution.
-type Manager interface {
-	launchr.Service
-	// All returns all actions copied and decorated.
-	All() map[string]*Action
-	// Get returns a copy of an action from the manager with default decorators.
-	Get(id string) (*Action, bool)
-	// Add saves an action in the manager.
-	Add(*Action) error
-	// Delete deletes the action from the manager.
-	Delete(id string)
-
-	// AddDecorators adds new decorators to manager.
-	AddDecorators(withFns ...DecorateWithFn)
-	// Decorate decorates an action with given behaviors.
-	// If functions withFn are not provided, default functions are applied.
-	Decorate(a *Action, withFn ...DecorateWithFn)
-
-	// GetIDFromAlias returns a real action ID by its alias. If not, returns alias.
-	GetIDFromAlias(alias string) string
-
-	// GetActionIDProvider returns global application action id provider.
-	GetActionIDProvider() IDProvider
-	// SetActionIDProvider sets global application action id provider.
-	// This id provider will be used as default on [Action] discovery process.
-	SetActionIDProvider(p IDProvider)
-
-	// GetPersistentFlags retrieves the instance of FlagsGroup containing global flag definitions and their
-	// current state.
-	GetPersistentFlags() *FlagsGroup
-
-	// TemplateProcessors for backward-compatibility.
-	// Deprecated: Use [TemplateProcessors] service directly.
-	TemplateProcessors
-	// SetTemplateProcessors sets [TemplateProcessors] for backward-compatibility.
-	// Deprecated: no replacement.
-	SetTemplateProcessors(TemplateProcessors)
-
-	// AddDiscovery registers a discovery callback to find actions.
-	AddDiscovery(DiscoverActionsFn)
-	// SetDiscoveryTimeout sets discovery timeout to stop on long-running callbacks.
-	SetDiscoveryTimeout(timeout time.Duration)
-
-	// ValidateInput validates an action input.
-	// @todo think about decoupling it from manager to separate service
-	ValidateInput(a *Action, input *Input) error
-
-	RunManager
-}
+type Manager = *actionManagerMap
 
 // RunManager runs actions and stores runtime information about them.
-type RunManager interface {
-	// Run executes an action in foreground.
-	Run(ctx context.Context, a *Action) (RunInfo, error)
-	// RunBackground executes an action in background.
-	RunBackground(ctx context.Context, a *Action, runID string) (RunInfo, chan error)
-	// RunInfoByAction returns all running actions by action id.
-	RunInfoByAction(aid string) []RunInfo
-	// RunInfoByID returns an action matching run id.
-	RunInfoByID(id string) (RunInfo, bool)
-}
-
-// ManagerUnsafe is an extension of the [Manager] interface that provides unsafe access to actions.
-// Warning: Use this with caution!
-type ManagerUnsafe interface {
-	Manager
-	// AllUnsafe returns all original action values from the storage.
-	// Use this method only if you need read-only access to the actions without allocating new memory.
-	// Warning: It is unsafe to manipulate these actions directly as they are the original instances
-	// affecting the entire application.
-	// Normally, for action execution you should use the [Manager.Get] or [Manager.All] methods,
-	// which provide actions configured for execution.
-	AllUnsafe() map[string]*Action
-	// GetUnsafe returns the original action value from the storage.
-	GetUnsafe(id string) (*Action, bool)
-}
+type RunManager = *runManagerMap
 
 // DecorateWithFn is a type alias for functions accepted in a [Manager.Decorate] interface method.
 type DecorateWithFn = func(m Manager, a *Action)
@@ -111,7 +40,7 @@ type actionManagerMap struct {
 	persistentFlags *FlagsGroup
 
 	runManagerMap
-	TemplateProcessors // TODO: It's here to support the interface. Refactor when the interface is updated.
+	*TemplateProcessors // TODO: It's here for backward compatibility. Refactor when the refs are deleted.
 }
 
 // NewManager constructs a new action manager.
@@ -135,6 +64,23 @@ func (m *actionManagerMap) ServiceInfo() launchr.ServiceInfo {
 	return launchr.ServiceInfo{}
 }
 
+func (m *actionManagerMap) ServiceCreate(svc *launchr.ServiceManager) launchr.Service {
+	var config launchr.Config
+	svc.Get(&config)
+	name := launchr.Version().Name
+	am := NewManager(
+		WithDefaultRuntime(config),
+		WithContainerRuntimeConfig(config, name+"_"),
+		WithServices(svc),
+	)
+
+	var tp *TemplateProcessors
+	svc.Get(&tp)
+	am.SetTemplateProcessors(tp)
+	return am
+}
+
+// Add saves an action in the manager.
 func (m *actionManagerMap) Add(a *Action) error {
 	m.mx.Lock()
 	defer m.mx.Unlock()
@@ -172,6 +118,12 @@ func (m *actionManagerMap) add(a *Action) error {
 	return nil
 }
 
+// AllUnsafe returns all original action values from the storage.
+// Use this method only if you need read-only access to the actions without allocating new memory.
+// Warning: It is unsafe to manipulate these actions directly as they are the original instances
+// affecting the entire application.
+// Normally, for action execution you should use the [Manager.Get] or [Manager.All] methods,
+// which provide actions configured for execution.
 func (m *actionManagerMap) AllUnsafe() map[string]*Action {
 	m.mx.Lock()
 	defer m.mx.Unlock()
@@ -181,6 +133,7 @@ func (m *actionManagerMap) AllUnsafe() map[string]*Action {
 	return maps.Clone(m.actionStore)
 }
 
+// GetIDFromAlias returns a real action ID by its alias. If not, returns alias.
 func (m *actionManagerMap) GetIDFromAlias(alias string) string {
 	if id, ok := m.actionAliases[alias]; ok {
 		return id
@@ -188,6 +141,7 @@ func (m *actionManagerMap) GetIDFromAlias(alias string) string {
 	return alias
 }
 
+// Delete deletes the action from the manager.
 func (m *actionManagerMap) Delete(id string) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
@@ -203,6 +157,7 @@ func (m *actionManagerMap) Delete(id string) {
 	}
 }
 
+// All returns all actions copied and decorated.
 func (m *actionManagerMap) All() map[string]*Action {
 	ret := m.AllUnsafe()
 	for k, v := range ret {
@@ -213,6 +168,7 @@ func (m *actionManagerMap) All() map[string]*Action {
 	return ret
 }
 
+// Get returns a copy of an action from the manager with default decorators.
 func (m *actionManagerMap) Get(id string) (*Action, bool) {
 	a, ok := m.GetUnsafe(id)
 	// Process action with default decorators and return a copy to have an isolated scope.
@@ -221,6 +177,7 @@ func (m *actionManagerMap) Get(id string) (*Action, bool) {
 	return a, ok
 }
 
+// GetUnsafe returns the original action value from the storage.
 func (m *actionManagerMap) GetUnsafe(id string) (a *Action, ok bool) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
@@ -252,10 +209,12 @@ func (m *actionManagerMap) get(id string) (*Action, bool) {
 	return a, ok
 }
 
+// SetDiscoveryTimeout sets discovery timeout to stop on long-running callbacks.
 func (m *actionManagerMap) SetDiscoveryTimeout(timeout time.Duration) {
 	m.discTimeout = timeout
 }
 
+// AddDiscovery registers a discovery callback to find actions.
 func (m *actionManagerMap) AddDiscovery(fn DiscoverActionsFn) {
 	if m.discoveryFns == nil {
 		m.discoveryFns = make([]DiscoverActionsFn, 0, 1)
@@ -292,14 +251,20 @@ func (m *actionManagerMap) callDiscoveryFn(ctx context.Context, fn DiscoverActio
 	return nil
 }
 
-func (m *actionManagerMap) SetTemplateProcessors(tp TemplateProcessors) {
+// SetTemplateProcessors sets [TemplateProcessors] for backward-compatibility.
+// TODO: Remove.
+// Deprecated: no replacement.
+func (m *actionManagerMap) SetTemplateProcessors(tp *TemplateProcessors) {
 	m.TemplateProcessors = tp
 }
 
+// AddDecorators adds new decorators to manager.
 func (m *actionManagerMap) AddDecorators(withFns ...DecorateWithFn) {
 	m.dwFns = append(m.dwFns, withFns...)
 }
 
+// Decorate decorates an action with given behaviors.
+// If functions withFn are not provided, default functions are applied.
 func (m *actionManagerMap) Decorate(a *Action, withFns ...DecorateWithFn) {
 	if a == nil {
 		return
@@ -313,6 +278,7 @@ func (m *actionManagerMap) Decorate(a *Action, withFns ...DecorateWithFn) {
 	}
 }
 
+// GetActionIDProvider returns global application action id provider.
 func (m *actionManagerMap) GetActionIDProvider() IDProvider {
 	if m.idProvider == nil {
 		m.SetActionIDProvider(nil)
@@ -320,6 +286,8 @@ func (m *actionManagerMap) GetActionIDProvider() IDProvider {
 	return m.idProvider
 }
 
+// SetActionIDProvider sets global application action id provider.
+// This id provider will be used as default on [Action] discovery process.
 func (m *actionManagerMap) SetActionIDProvider(p IDProvider) {
 	if p == nil {
 		p = DefaultIDProvider{}
@@ -327,10 +295,13 @@ func (m *actionManagerMap) SetActionIDProvider(p IDProvider) {
 	m.idProvider = p
 }
 
+// GetPersistentFlags retrieves the instance of FlagsGroup
+// containing global flag definitions and their current state.
 func (m *actionManagerMap) GetPersistentFlags() *FlagsGroup {
 	return m.persistentFlags
 }
 
+// ValidateInput validates an action input.
 func (m *actionManagerMap) ValidateInput(a *Action, input *Input) error {
 	// @todo move to a separate service with full input validation. See notes below.
 	// @todo think about a more elegant solution as right now it forces us to build workarounds for validation.
@@ -432,11 +403,13 @@ func (m *runManagerMap) updateRunStatus(id string, st string) {
 	}
 }
 
+// Run executes an action in foreground.
 func (m *runManagerMap) Run(ctx context.Context, a *Action) (RunInfo, error) {
 	// @todo add the same status change info
 	return m.registerRun(a, ""), a.Execute(ctx)
 }
 
+// RunBackground executes an action in background.
 func (m *runManagerMap) RunBackground(ctx context.Context, a *Action, runID string) (RunInfo, chan error) {
 	// @todo change runID to runOptions with possibility to create filestream names in webUI.
 	ri := m.registerRun(a, runID)
@@ -460,6 +433,7 @@ func (m *runManagerMap) RunBackground(ctx context.Context, a *Action, runID stri
 	return ri, chErr
 }
 
+// RunInfoByAction returns all running actions by action id.
 func (m *runManagerMap) RunInfoByAction(aid string) []RunInfo {
 	m.mx.Lock()
 	defer m.mx.Unlock()
@@ -472,6 +446,7 @@ func (m *runManagerMap) RunInfoByAction(aid string) []RunInfo {
 	return run
 }
 
+// RunInfoByID returns an action matching run id.
 func (m *runManagerMap) RunInfoByID(id string) (RunInfo, bool) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
@@ -526,7 +501,7 @@ func WithContainerRuntimeConfig(cfg launchr.Config, prefix string) DecorateWithF
 }
 
 // WithServices add global app to action. Helps with DI in actions.
-func WithServices(services launchr.ServiceManager) DecorateWithFn {
+func WithServices(services *launchr.ServiceManager) DecorateWithFn {
 	return func(_ Manager, a *Action) {
 		a.SetServices(services)
 	}

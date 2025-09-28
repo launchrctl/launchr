@@ -160,7 +160,7 @@ func NoopStreams() Streams { return launchr.NoopStreams() }
 func StdInOutErr() (stdIn io.ReadCloser, stdOut, stdErr io.Writer) { return launchr.StdInOutErr() }
 
 // NewServiceManager initializes ServiceManager.
-func NewServiceManager() ServiceManager { return launchr.NewServiceManager() }
+func NewServiceManager() *ServiceManager { return launchr.NewServiceManager() }
 
 // NewMaskingWriter initializes a new MaskingWriter.
 func NewMaskingWriter(w io.Writer, mask *SensitiveMask) io.WriteCloser {

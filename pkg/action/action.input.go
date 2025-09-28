@@ -205,6 +205,11 @@ func (input *Input) Streams() launchr.Streams {
 	return input.io
 }
 
+// SetStreams sets IO in input.
+func (input *Input) SetStreams(io launchr.Streams) {
+	input.io = io
+}
+
 func (input *Input) execValueProcessors() (err error) {
 	// TODO: Maybe it must run on value change. Need to review how we propagate errors.
 	def := input.action.ActionDef()

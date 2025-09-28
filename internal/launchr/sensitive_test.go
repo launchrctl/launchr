@@ -16,7 +16,10 @@ func Test_MaskingWriter(t *testing.T) {
 		mask   *SensitiveMask // Mask replacement
 		exp    string         // Expected output after masking
 	}
-	mask := NewSensitiveMask("****", "987-65-4321", "123-45-6789", "\"\\escaped\nnewline")
+	mask := NewSensitiveMask("****")
+	mask.AddString("987-65-4321")
+	mask.AddString("123-45-6789")
+	mask.AddString("\"\\escaped\nnewline")
 	tests := []testCase{
 		{
 			name:   "Empty mask",
@@ -57,7 +60,7 @@ func Test_MaskingWriter(t *testing.T) {
 			out := &bytes.Buffer{}
 
 			// Create the MaskingWriter wrapping the out
-			mwriter := NewMaskingWriter(out, tt.mask)
+			mwriter := tt.mask.MaskWriter(out)
 
 			// Simulate multiple writes
 			for _, part := range tt.chunks {

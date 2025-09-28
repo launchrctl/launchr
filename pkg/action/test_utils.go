@@ -98,7 +98,7 @@ type TestCaseValueProcessor struct {
 }
 
 // Test runs the test for [ValueProcessor].
-func (tt TestCaseValueProcessor) Test(t *testing.T, am Manager, tp TemplateProcessors) {
+func (tt TestCaseValueProcessor) Test(t *testing.T, am Manager, tp *TemplateProcessors) {
 	a := NewFromYAML(tt.Name, []byte(tt.Yaml))
 	// Init processors in the action.
 	err := a.setProcessors(tp.GetValueProcessors())

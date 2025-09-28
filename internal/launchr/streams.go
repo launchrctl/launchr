@@ -232,7 +232,7 @@ type StreamsModifierFn func(streams *appCli)
 // WithSensitiveMask decorates streams with a given mask.
 func WithSensitiveMask(m *SensitiveMask) StreamsModifierFn {
 	return func(streams *appCli) {
-		streams.out.out = NewMaskingWriter(streams.out.out, m)
-		streams.err.out = NewMaskingWriter(streams.err.out, m)
+		streams.out.out = m.MaskWriter(streams.out.out)
+		streams.err.out = m.MaskWriter(streams.err.out)
 	}
 }

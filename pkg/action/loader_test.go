@@ -1,6 +1,7 @@
 package action
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"testing"
@@ -45,21 +46,21 @@ func Test_EnvProcessor(t *testing.T) {
 	_ = os.Setenv("TEST_ENVPROC1", "VAL1")
 	_ = os.Setenv("TEST_ENVPROC2", "VAL2")
 	s := "$TEST_ENVPROC1$TEST_ENVPROC1,${TEST_ENVPROC2},$$TEST_ENVPROC1,${TEST_ENVPROC_UNDEF},${TEST_ENVPROC_UNDEF-$TEST_ENVPROC1},${TEST_ENVPROC_UNDEF:-$TEST_ENVPROC2},${TEST_ENVPROC2+$TEST_ENVPROC1},${TEST_ENVPROC1:+$TEST_ENVPROC2}"
-	res, err := proc.Process(&LoadContext{Action: act}, s)
+	res, err := proc.Process(&LoadContext{a: act}, s)
 	assert.NoError(t, err)
-	assert.Equal(t, "VAL1VAL1,VAL2,$TEST_ENVPROC1,,VAL1,VAL2,VAL1,VAL2", string(res))
+	assert.Equal(t, "VAL1VAL1,VAL2,$TEST_ENVPROC1,,VAL1,VAL2,VAL1,VAL2", res)
 	// Test action predefined env variables.
 	s = "$CBIN,$ACTION_ID,$ACTION_WD,$ACTION_DIR,$DISCOVERY_DIR"
-	res, err = proc.Process(&LoadContext{Action: act}, s)
+	res, err = proc.Process(&LoadContext{a: act}, s)
 	exp := fmt.Sprintf("%s,%s,%s,%s,%s", launchr.Executable(), act.ID, act.WorkDir(), act.Dir(), act.fs.Realpath())
 	assert.NoError(t, err)
-	assert.Equal(t, exp, string(res))
+	assert.Equal(t, exp, res)
 }
 
 func Test_InputProcessor(t *testing.T) {
 	t.Parallel()
 	act := testLoaderAction()
-	ctx := &LoadContext{Action: act}
+	ctx := &LoadContext{a: act, svc: launchr.NewServiceManager()}
 	proc := inputProcessor{}
 	input := NewInput(act, InputParams{"arg1": "arg1"}, InputParams{"optStr": "optVal1", "opt-str": "opt-val2"}, nil)
 	input.SetValidated(true)
@@ -85,31 +86,71 @@ func Test_InputProcessor(t *testing.T) {
 	assert.Equal(t, errMissVars, err)
 	assert.Equal(t, s, res)
 
-	// Remove line if a variable not exists or is nil.
+	// Test if a variable not exists or is nil.
 	s = `- "{{ if not (isNil .arg1) }}arg1 is not nil{{end}}"
 - "{{ if (isNil .optUnd) }}optUnd{{ end }}"`
 	res, err = proc.Process(ctx, s)
 	assert.NoError(t, err)
 	assert.Equal(t, "- \"arg1 is not nil\"\n- \"optUnd\"", res)
 
-	// Remove line if a variable not exists or is nil, 1 argument is not defined and not checked.
-	s = `- "{{ .arg2 }}"
-- "{{ if not (isNil .arg1) }}arg1 is not nil{{end}}"
-- "{{ if (isNil .optUnd) }}optUnd{{ end }}"`
-	_, err = proc.Process(ctx, s)
-	assert.Equal(t, errMissVars, err)
-
+	// Test isSet and isChanged.
 	s = `- "{{ if isSet .arg1 }}arg1 is set{{end}}"
 - "{{ if isChanged .arg1 }}arg1 is changed{{end}}"`
 	res, err = proc.Process(ctx, s)
 	assert.NoError(t, err)
 	assert.Equal(t, "- \"arg1 is set\"\n- \"arg1 is changed\"", res)
+
+	// Prepare a new load context for masked output.
+	ctx = &LoadContext{a: act, svc: launchr.NewServiceManager()}
+	outBuf := &bytes.Buffer{}
+	errBuf := &bytes.Buffer{}
+	streams := launchr.NewBasicStreams(nil, outBuf, errBuf)
+	mySecret := "my_secret_input"
+	input = NewInput(act, InputParams{"arg1": mySecret}, nil, streams)
+	input.SetValidated(true)
+	err = act.SetInput(input)
+	assert.NoError(t, err)
+
+	// Test we can mask sensitive data in a template when used in output.
+	s = `{{ .arg1 | mask }}`
+	res, err = proc.Process(ctx, s)
+	assert.NoError(t, err)
+	assert.Equal(t, mySecret, res)
+	// Test output was masked.
+	_, _ = act.Input().Streams().Out().Write([]byte(mySecret))
+	_, _ = act.Input().Streams().Err().Write([]byte(mySecret))
+	assert.Equal(t, "****", outBuf.String())
+	assert.Equal(t, "****", errBuf.String())
+	// Clean buffer for clean comparison
+	outBuf.Reset()
+	errBuf.Reset()
+	// Test original streams were not affected.
+	_, _ = streams.Out().Write([]byte(mySecret))
+	_, _ = streams.Err().Write([]byte(mySecret))
+	assert.Equal(t, mySecret, outBuf.String())
+	assert.Equal(t, mySecret, errBuf.String())
+	outBuf.Reset()
+	errBuf.Reset()
+
+	// Test previous run doesn't affect new runs.
+	s = `{{ .arg1 }}`
+	input = NewInput(act, InputParams{"arg1": mySecret}, nil, streams)
+	input.SetValidated(true)
+	err = act.SetInput(input)
+	assert.NoError(t, err)
+	res, err = proc.Process(ctx, s)
+	assert.NoError(t, err)
+	assert.Equal(t, mySecret, res)
+	_, _ = act.Input().Streams().Out().Write([]byte(mySecret))
+	_, _ = act.Input().Streams().Err().Write([]byte(mySecret))
+	assert.Equal(t, mySecret, outBuf.String())
+	assert.Equal(t, mySecret, errBuf.String())
 }
 
 func Test_PipeProcessor(t *testing.T) {
 	t.Parallel()
 	act := testLoaderAction()
-	ctx := &LoadContext{Action: act}
+	ctx := &LoadContext{a: act, svc: launchr.NewServiceManager()}
 	proc := NewPipeProcessor(
 		envProcessor{},
 		inputProcessor{},

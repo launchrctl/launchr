@@ -49,10 +49,12 @@ type App interface {
 	// Deprecated: use app.Services().Get(&v)
 	GetService(v any)
 	// Services returns a service manager.
-	Services() ServiceManager
+	Services() *ServiceManager
 	// SensitiveWriter wraps given writer with a sensitive mask.
+	// Deprecated: use app.Services().Get()
 	SensitiveWriter(w io.Writer) io.Writer
 	// SensitiveMask returns current sensitive mask to add values to mask.
+	// Deprecated: use app.Services().Get()
 	SensitiveMask() *SensitiveMask
 
 	// RegisterFS registers a File System in launchr.
@@ -192,14 +194,11 @@ func RegisterPlugin(p Plugin) {
 }
 
 // PluginManager handles plugins.
-type PluginManager interface {
-	Service
-	All() PluginsMap
-}
+type PluginManager = pluginManagerMap
 
 // NewPluginManagerWithRegistered creates [PluginManager] with registered plugins.
 func NewPluginManagerWithRegistered() PluginManager {
-	return pluginManagerMap(registeredPlugins)
+	return registeredPlugins
 }
 
 type pluginManagerMap PluginsMap

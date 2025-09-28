@@ -36,8 +36,10 @@ func (p *Plugin) OnAppInit(app launchr.App) error {
 
 // DiscoverActions implements [launchr.ActionDiscoveryPlugin] interface.
 func (p *Plugin) DiscoverActions(_ context.Context) ([]*action.Action, error) {
+	var mask *launchr.SensitiveMask
+	p.app.Services().Get(&mask)
 	return []*action.Action{
-		actionSensitive(p.app),
+		actionSensitive(p.app, mask),
 		actionLogLevels(),
 		embedContainerAction(),
 	}, nil

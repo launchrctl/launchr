@@ -27,11 +27,11 @@ func (p Plugin) PluginInfo() launchr.PluginInfo {
 func (p Plugin) OnAppInit(app launchr.App) error {
 	// Get services.
 	var cfg launchr.Config
-	var am action.Manager
+	var tp *action.TemplateProcessors
 	app.Services().Get(&cfg)
-	app.Services().Get(&am)
+	app.Services().Get(&tp)
 
-	addValueProcessors(am, cfg)
+	addValueProcessors(tp, cfg)
 
 	// @todo show somehow available processors to developer or document it.
 
@@ -44,7 +44,7 @@ type ConfigGetProcessorOptions = *action.GenericValueProcessorOptions[struct {
 }]
 
 // addValueProcessors submits new [action.ValueProcessor] to [action.Manager].
-func addValueProcessors(tp action.TemplateProcessors, cfg launchr.Config) {
+func addValueProcessors(tp *action.TemplateProcessors, cfg launchr.Config) {
 	procCfg := action.GenericValueProcessor[ConfigGetProcessorOptions]{
 		Fn: func(v any, opts ConfigGetProcessorOptions, ctx action.ValueProcessorContext) (any, error) {
 			return processorConfigGetByKey(v, opts, ctx, cfg)
