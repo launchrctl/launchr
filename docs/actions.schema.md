@@ -280,10 +280,10 @@ Or type implements `interface { IsEmpty() bool }`.
 
 **Usage:**
 ```gotemplate
-{{ config.Get "foo.bar" }}                          # retrieves value of any type
-{{ index (config.Get "foo.array-elem") 1 }}         # retrieves specific array element
-{{ config.Get "foo.null-elem" | default "foo" }}    # uses default if value is nil
-{{ config.Get "foo.missing-elem" | default "bar" }} # uses default if key doesn't exist
+{{ config "foo.bar" }}                          # retrieves value of any type
+{{ index (config "foo.array-elem") 1 }}         # retrieves specific array element
+{{ config "foo.null-elem" | default "foo" }}    # uses default if value is nil
+{{ config "foo.missing-elem" | default "bar" }} # uses default if key doesn't exist
 ```
 
 

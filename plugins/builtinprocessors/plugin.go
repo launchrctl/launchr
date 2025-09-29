@@ -52,7 +52,7 @@ func addValueProcessors(tp *action.TemplateProcessors, cfg launchr.Config) {
 	}
 	tp.AddValueProcessor(procGetConfigValue, procCfg)
 	tplCfg := &configTemplateFunc{cfg: cfg}
-	tp.AddTemplateFunc("config", func() *configTemplateFunc { return tplCfg })
+	tp.AddTemplateFunc("config", tplCfg.Get)
 }
 
 func processorConfigGetByKey(v any, opts ConfigGetProcessorOptions, ctx action.ValueProcessorContext, cfg launchr.Config) (any, error) {
@@ -76,7 +76,7 @@ func processorConfigGetByKey(v any, opts ConfigGetProcessorOptions, ctx action.V
 type configKeyNotFound string
 
 // IsEmpty implements a special interface to support "default" template function
-// Example: {{ config.Get "foo.bar" | default "buz" }}
+// Example: {{ Config "foo.bar" | default "buz" }}
 func (s configKeyNotFound) IsEmpty() bool { return true }
 
 // String implements [fmt.Stringer] to output a missing key to a template.
@@ -91,10 +91,10 @@ type configTemplateFunc struct {
 //
 // Usage:
 //
-//	{{ config.Get "foo.bar" }} - retrieves value of any type
-//	{{ index (config.Get "foo.array-elem") 1 }} - retrieves specific array element
-//	{{ config.Get "foo.null-elem" | default "foo" }} - uses default if value is nil
-//	{{ config.Get "foo.missing-elem" | default "bar" }} - uses default if key doesn't exist
+//	{{ config "foo.bar" }} - retrieves value of any type
+//	{{ index (config "foo.array-elem") 1 }} - retrieves specific array element
+//	{{ config "foo.null-elem" | default "foo" }} - uses default if value is nil
+//	{{ config "foo.missing-elem" | default "bar" }} - uses default if key doesn't exist
 func (t *configTemplateFunc) Get(path string) (any, error) {
 	var res any
 	if !t.cfg.Exists(path) {

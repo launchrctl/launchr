@@ -72,13 +72,13 @@ runtime:
   type: container
   image: alpine
   command:
-    - '{{ config.Get "my.string" }}'
-    - '{{ config.Get "my.int" }}'
-    - '{{ config.Get "my.bool" }}'
-    - '{{ config.Get "my.array" }}'
-    - '{{ index (config.Get "my.array") 1 }}'
-    - '{{ config.Get "my.null" | default "foo" }}'
-    - '{{ config.Get "my.missing" | default "bar" }}'
+    - '{{ config "my.string" }}'
+    - '{{ config "my.int" }}'
+    - '{{ config "my.bool" }}'
+    - '{{ config "my.array" }}'
+    - '{{ index (config "my.array") 1 }}'
+    - '{{ config "my.null" | default "foo" }}'
+    - '{{ config "my.missing" | default "bar" }}'
 `
 
 const testTplConfigGetMissing = `
@@ -88,7 +88,7 @@ runtime:
   type: container
   image: alpine
   command:
-    - '{{ config.Get "my.missing" }}'
+    - '{{ config "my.missing" }}'
 `
 
 const testTplConfigGetBadArgs = `
@@ -98,7 +98,7 @@ runtime:
   type: container
   image: alpine
   command:
-    - '{{ config.Get "my.string" "my.string" }}'
+    - '{{ config "my.string" "my.string" }}'
 `
 
 const testConfig = `
@@ -169,7 +169,7 @@ func Test_ConfigTemplateFunc(t *testing.T) {
 	tt := []testCase{
 		{Name: "valid", Yaml: testTplConfigGet, Exp: []string{"my_str", "42", "true", "[1 2 3]", "2", "foo", "bar"}},
 		{Name: "key not found", Yaml: testTplConfigGetMissing, Exp: []string{"<config key not found \"my.missing\">"}},
-		{Name: "incorrect call", Yaml: testTplConfigGetBadArgs, Err: "wrong number of args for Get: want 1 got 2"},
+		{Name: "incorrect call", Yaml: testTplConfigGetBadArgs, Err: "wrong number of args for config: want 1 got 2"},
 	}
 	for _, tt := range tt {
 		tt := tt
