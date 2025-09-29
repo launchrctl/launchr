@@ -1,6 +1,8 @@
 package builtinprocessors
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"testing/fstest"
 
@@ -65,7 +67,7 @@ action:
         - processor: config.GetValue
 `
 
-const testTplConfigGet = `
+const testTplConfig = `
 action:
   title: test config
 runtime:
@@ -81,7 +83,7 @@ runtime:
     - '{{ config "my.missing" | default "bar" }}'
 `
 
-const testTplConfigGetMissing = `
+const testTplConfigMissing = `
 action:
   title: test config
 runtime:
@@ -91,7 +93,7 @@ runtime:
     - '{{ config "my.missing" }}'
 `
 
-const testTplConfigGetBadArgs = `
+const testTplConfigBadArgs = `
 action:
   title: test config
 runtime:
@@ -107,6 +109,54 @@ my:
   int: 42
   bool: true
   array: ["1", "2", "3"]
+  null: null
+`
+
+const testTplYq = `
+action:
+  title: test yq
+  options:
+    - name: yamlPath
+      default: "foo/bar.yaml"
+runtime:
+  type: container
+  image: alpine
+  command:
+    - '{{ yq .yamlPath "foo.bar" }}'
+    - '{{ index (yq .yamlPath "foo") "bar" }}'
+    - '{{ yq .yamlPath "foo.null" | default "foo" }}'
+    - '{{ yq .yamlPath "my.missing" | default "bar" }}'
+`
+
+const testTplYqMissing = `
+action:
+  title: test yq
+  options:
+    - name: yamlPath
+      default: "foo/bar.yaml"
+runtime:
+  type: container
+  image: alpine
+  command:
+    - '{{ yq .yamlPath "my.missing" }}'
+`
+
+const testTplYqBadArgs = `
+action:
+  title: test yq
+  options:
+    - name: yamlPath
+      default: "foo/bar.yaml"
+runtime:
+  type: container
+  image: alpine
+  command:
+    - '{{ yq "1" "2" "3" }}'
+`
+
+const testYqFileContent = `
+foo:
+  bar: buz
   null: null
 `
 
@@ -167,15 +217,60 @@ func Test_ConfigTemplateFunc(t *testing.T) {
 	}
 
 	tt := []testCase{
-		{Name: "valid", Yaml: testTplConfigGet, Exp: []string{"my_str", "42", "true", "[1 2 3]", "2", "foo", "bar"}},
-		{Name: "key not found", Yaml: testTplConfigGetMissing, Exp: []string{"<config key not found \"my.missing\">"}},
-		{Name: "incorrect call", Yaml: testTplConfigGetBadArgs, Err: "wrong number of args for config: want 1 got 2"},
+		{Name: "valid", Yaml: testTplConfig, Exp: []string{"my_str", "42", "true", "[1 2 3]", "2", "foo", "bar"}},
+		{Name: "key not found", Yaml: testTplConfigMissing, Exp: []string{"<key not found \"my.missing\">"}},
+		{Name: "incorrect call", Yaml: testTplConfigBadArgs, Err: "wrong number of args for config: want 1 got 2"},
 	}
 	for _, tt := range tt {
 		tt := tt
 		t.Run(tt.Name, func(t *testing.T) {
 			t.Parallel()
 			a := action.NewFromYAML(tt.Name, []byte(tt.Yaml))
+			a.SetServices(svc)
+			err := a.EnsureLoaded()
+			if tt.Err != "" {
+				require.ErrorContains(t, err, tt.Err)
+				return
+			}
+			require.NoError(t, err)
+			rdef := a.RuntimeDef()
+			assert.Equal(t, tt.Exp, []string(rdef.Container.Command))
+		})
+	}
+}
+
+func Test_YqTemplateFunc(t *testing.T) {
+	// Prepare services.
+	tp := action.NewTemplateProcessors()
+	addValueProcessors(tp, nil)
+	svc := launchr.NewServiceManager()
+	svc.Add(tp)
+
+	// Prepare test data.
+	wd := t.TempDir()
+	err := os.MkdirAll(filepath.Join(wd, "foo"), 0750)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(wd, "foo", "bar.yaml"), []byte(testYqFileContent), 0600)
+	require.NoError(t, err)
+
+	type testCase struct {
+		Name string
+		Yaml string
+		Exp  []string
+		Err  string
+	}
+
+	tt := []testCase{
+		{Name: "valid", Yaml: testTplYq, Exp: []string{"buz", "buz", "foo", "bar"}},
+		{Name: "key not found", Yaml: testTplYqMissing, Exp: []string{"<key not found \"foo/bar.yaml:my.missing\">"}},
+		{Name: "incorrect call", Yaml: testTplYqBadArgs, Err: "wrong number of args for yq: want 2 got 3"},
+	}
+	for _, tt := range tt {
+		tt := tt
+		t.Run(tt.Name, func(t *testing.T) {
+			t.Parallel()
+			a := action.NewFromYAML(tt.Name, []byte(tt.Yaml))
+			a.SetWorkDir(wd)
 			a.SetServices(svc)
 			err := a.EnsureLoaded()
 			if tt.Err != "" {

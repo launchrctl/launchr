@@ -2,6 +2,14 @@
 package builtinprocessors
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/knadh/koanf"
+	yamlparser "github.com/knadh/koanf/parsers/yaml"
+	"github.com/knadh/koanf/providers/rawbytes"
+
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/action"
 	"github.com/launchrctl/launchr/pkg/jsonschema"
@@ -53,6 +61,10 @@ func addValueProcessors(tp *action.TemplateProcessors, cfg launchr.Config) {
 	tp.AddValueProcessor(procGetConfigValue, procCfg)
 	tplCfg := &configTemplateFunc{cfg: cfg}
 	tp.AddTemplateFunc("config", tplCfg.Get)
+	tp.AddTemplateFunc("yq", func(ctx action.TemplateFuncContext) any {
+		tplYq := &yamlQueryTemplateFunc{action: ctx.Action()}
+		return tplYq.Get
+	})
 }
 
 func processorConfigGetByKey(v any, opts ConfigGetProcessorOptions, ctx action.ValueProcessorContext, cfg launchr.Config) (any, error) {
@@ -71,16 +83,16 @@ func processorConfigGetByKey(v any, opts ConfigGetProcessorOptions, ctx action.V
 	return jsonschema.EnsureType(ctx.DefParam.Type, res)
 }
 
-// configKeyNotFound holds a config key element that was not found in config.
-// It will print a message in a template when a config key is missing.
-type configKeyNotFound string
+// tplKeyNotFound holds a key path element that was not found.
+// It will print a message in a template when a key is missing.
+type tplKeyNotFound string
 
 // IsEmpty implements a special interface to support "default" template function
 // Example: {{ Config "foo.bar" | default "buz" }}
-func (s configKeyNotFound) IsEmpty() bool { return true }
+func (s tplKeyNotFound) IsEmpty() bool { return true }
 
 // String implements [fmt.Stringer] to output a missing key to a template.
-func (s configKeyNotFound) String() string { return "<config key not found \"" + string(s) + "\">" }
+func (s tplKeyNotFound) String() string { return "<key not found \"" + string(s) + "\">" }
 
 // configTemplateFunc is a set of template functions to interact with [launchr.Config] in [action.TemplateProcessors].
 type configTemplateFunc struct {
@@ -98,11 +110,52 @@ type configTemplateFunc struct {
 func (t *configTemplateFunc) Get(path string) (any, error) {
 	var res any
 	if !t.cfg.Exists(path) {
-		return configKeyNotFound(path), nil
+		return tplKeyNotFound(path), nil
 	}
 	err := t.cfg.Get(path, &res)
 	if err != nil {
 		return nil, err
 	}
 	return res, nil
+}
+
+// yamlQueryTemplateFunc is a set of template funciton to parse and query yaml files like `yq`.
+type yamlQueryTemplateFunc struct {
+	action *action.Action
+}
+
+// Get returns a yaml file value by a key path.
+//
+// Usage:
+//
+//	{{ yq "foo.bar" }} - retrieves value of any type
+//	{{ index (yq "foo.array-elem") 1 }} - retrieves specific array element
+//	{{ yq "foo.null-elem" | default "foo" }} - uses default if value is nil
+//	{{ yq "foo.missing-elem" | default "bar" }} - uses default if key doesn't exist
+func (t *yamlQueryTemplateFunc) Get(filename, key string) (any, error) {
+	k := koanf.New(".")
+	absPath := filepath.ToSlash(filename)
+	if !filepath.IsAbs(absPath) {
+		absPath = filepath.Join(t.action.WorkDir(), absPath)
+	}
+
+	content, err := os.ReadFile(absPath) //nolint:gosec // G301 File inclusion is expected.
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("can't find yaml file %q", filename)
+		}
+		return nil, fmt.Errorf("can't read yaml file %q: %w", filename, err)
+	}
+
+	err = k.Load(rawbytes.Provider(content), yamlparser.Parser())
+	if err != nil {
+		return nil, err
+	}
+
+	if !k.Exists(key) {
+		return tplKeyNotFound(filename + ":" + key), nil
+	}
+
+	val := k.Get(key)
+	return val, nil
 }
