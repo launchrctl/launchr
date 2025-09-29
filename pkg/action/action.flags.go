@@ -25,6 +25,12 @@ func NewFlagsGroup(name string) *FlagsGroup {
 	}
 }
 
+// GetName returns the name of the flags group.
+// Deprecated: use Name().
+func (p *FlagsGroup) GetName() string {
+	return p.Name()
+}
+
 // Name returns the name of the flags group.
 func (p *FlagsGroup) Name() string {
 	return p.name
