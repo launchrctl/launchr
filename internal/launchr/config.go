@@ -21,7 +21,7 @@ var (
 	ErrNoConfigFile = errors.New("config file is not found") // ErrNoConfigFile when config file doesn't exist in FS.
 )
 
-// Config is a launchr config storage interface.
+// Config is a launchr global config service.
 type Config = *config
 
 type cachedProps = map[string]reflect.Value
