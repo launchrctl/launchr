@@ -114,7 +114,7 @@ my:
 
 const testTplYq = `
 action:
-  title: test yq
+  title: test YamlQuery
   options:
     - name: yamlPath
       default: "foo/bar.yaml"
@@ -122,15 +122,15 @@ runtime:
   type: container
   image: alpine
   command:
-    - '{{ yq .yamlPath "foo.bar" }}'
-    - '{{ index (yq .yamlPath "foo") "bar" }}'
-    - '{{ yq .yamlPath "foo.null" | default "foo" }}'
-    - '{{ yq .yamlPath "my.missing" | default "bar" }}'
+    - '{{ YamlQuery .yamlPath "foo.bar" }}'
+    - '{{ index (YamlQuery .yamlPath "foo") "bar" }}'
+    - '{{ YamlQuery .yamlPath "foo.null" | default "foo" }}'
+    - '{{ YamlQuery .yamlPath "my.missing" | default "bar" }}'
 `
 
 const testTplYqMissing = `
 action:
-  title: test yq
+  title: test YamlQuery
   options:
     - name: yamlPath
       default: "foo/bar.yaml"
@@ -138,12 +138,12 @@ runtime:
   type: container
   image: alpine
   command:
-    - '{{ yq .yamlPath "my.missing" }}'
+    - '{{ YamlQuery .yamlPath "my.missing" }}'
 `
 
 const testTplYqBadArgs = `
 action:
-  title: test yq
+  title: test YamlQuery
   options:
     - name: yamlPath
       default: "foo/bar.yaml"
@@ -151,7 +151,7 @@ runtime:
   type: container
   image: alpine
   command:
-    - '{{ yq "1" "2" "3" }}'
+    - '{{ YamlQuery "1" "2" "3" }}'
 `
 
 const testYqFileContent = `
@@ -263,7 +263,7 @@ func Test_YqTemplateFunc(t *testing.T) {
 	tt := []testCase{
 		{Name: "valid", Yaml: testTplYq, Exp: []string{"buz", "buz", "foo", "bar"}},
 		{Name: "key not found", Yaml: testTplYqMissing, Exp: []string{"<key not found \"foo/bar.yaml:my.missing\">"}},
-		{Name: "incorrect call", Yaml: testTplYqBadArgs, Err: "wrong number of args for yq: want 2 got 3"},
+		{Name: "incorrect call", Yaml: testTplYqBadArgs, Err: "wrong number of args for YamlQuery: want 2 got 3"},
 	}
 	for _, tt := range tt {
 		tt := tt

@@ -61,7 +61,7 @@ func addValueProcessors(tp *action.TemplateProcessors, cfg launchr.Config) {
 	tp.AddValueProcessor(procGetConfigValue, procCfg)
 	tplCfg := &configTemplateFunc{cfg: cfg}
 	tp.AddTemplateFunc("config", tplCfg.Get)
-	tp.AddTemplateFunc("yq", func(ctx action.TemplateFuncContext) any {
+	tp.AddTemplateFunc("YamlQuery", func(ctx action.TemplateFuncContext) any {
 		tplYq := &yamlQueryTemplateFunc{action: ctx.Action()}
 		return tplYq.Get
 	})
@@ -128,10 +128,10 @@ type yamlQueryTemplateFunc struct {
 //
 // Usage:
 //
-//	{{ yq "foo.bar" }} - retrieves value of any type
-//	{{ index (yq "foo.array-elem") 1 }} - retrieves specific array element
-//	{{ yq "foo.null-elem" | default "foo" }} - uses default if value is nil
-//	{{ yq "foo.missing-elem" | default "bar" }} - uses default if key doesn't exist
+//	{{ YamlQuery "foo.bar" }} - retrieves value of any type
+//	{{ index (YamlQuery "foo.array-elem") 1 }} - retrieves specific array element
+//	{{ YamlQuery "foo.null-elem" | default "foo" }} - uses default if value is nil
+//	{{ YamlQuery "foo.missing-elem" | default "bar" }} - uses default if key doesn't exist
 func (t *yamlQueryTemplateFunc) Get(filename, key string) (any, error) {
 	k := koanf.New(".")
 	absPath := filepath.ToSlash(filename)
