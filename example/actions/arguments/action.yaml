@@ -32,11 +32,7 @@ runtime:
     - /action/main.sh
     - "{{ .arg1 }}"
     - "{{ .arg2 }}"
-    - "{{ .firstoption|removeLineIfNil }}"
-    - "{{ if not (isNil .secondoption) }}--secondoption={{ .secondoption }}{{ else }}{{ removeLine }}{{ end }}"
+    - "{{ if not (isNil .secondoption) }}--secondoption={{ .secondoption }}{{else}}Second option is nil{{ end }}"
     - "{{ if isSet .thirdoption }}--thirdoption={{ .thirdoption }}{{else}}Third option is not set{{ end }}"
-    - "{{ removeLineIfSet .thirdoption }}"
-    - '{{ if not (isChanged "thirdoption")}}Third Option is not Changed{{else}}{{ removeLine }}{{ end }}'
-    - '{{ removeLineIfChanged "thirdoption" }}'
-    - '{{ if isChanged "thirdoption"}}Third Option is Changed{{else}}{{ removeLine }}{{ end }}'
-    - '{{ removeLineIfNotChanged "thirdoption" }}'
+    - '{{ if not (isChanged "thirdoption")}}Third Option is not Changed{{ end }}'
+    - '{{ if isChanged "thirdoption"}}Third Option is Changed{{ end }}'

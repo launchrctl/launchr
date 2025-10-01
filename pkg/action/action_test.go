@@ -65,13 +65,16 @@ func Test_Action(t *testing.T) {
 	// Test templating in executable.
 	envVar1 := "envval1"
 	_ = os.Setenv("TEST_ENV_1", envVar1)
+	defer func() {
+		_ = os.Unsetenv("TEST_ENV_1")
+	}()
 	execExp := []string{
 		"/bin/sh",
 		"-c",
 		"ls -lah",
 		fmt.Sprintf("%v %v %v %v", inputArgs["arg2"], inputArgs["arg1"], inputArgs["arg-1"], inputArgs["arg_12"]),
 		fmt.Sprintf("%v %v %v %v %v %v", inputOpts["opt3"], inputOpts["opt2"], inputOpts["opt1"], inputOpts["opt-1"], inputOpts["opt4"], inputOpts["optarr"]),
-		fmt.Sprintf("%v", envVar1),
+		fmt.Sprintf("%v ", envVar1),
 		fmt.Sprintf("%v ", envVar1),
 	}
 	act.Reset()
@@ -125,6 +128,26 @@ func Test_Action_NewYAMLFromFS(t *testing.T) {
 	err = launchr.Cleanup()
 	assert.NoError(t, err)
 	assert.NoFileExists(t, fpath)
+}
+
+func Test_ActionMultiline(t *testing.T) {
+	t.Parallel()
+	a := NewFromYAML("multiline_test", []byte(validMultilineYaml))
+
+	envvar1 := "foo\nbar\nbaz"
+	_ = os.Setenv("TEST_MULTILINE_ENV1", envvar1)
+	defer func() {
+		_ = os.Unsetenv("TEST_MULTILINE_ENV1")
+	}()
+	input := NewInput(a, nil, nil, nil)
+	require.NotNil(t, input)
+	input.SetValidated(true)
+	require.NoError(t, a.SetInput(input))
+
+	rdef := a.RuntimeDef()
+	assert.Contains(t, rdef.Container.Env, "MY_MULTILINE_ENV1="+envvar1)
+	assert.Contains(t, rdef.Container.Env, "MY_MULTILINE_ENV2="+envvar1)
+	assert.Contains(t, rdef.Container.Env, "MY_MULTILINE_ENV3="+envvar1+"\n")
 }
 
 func Test_ActionInput(t *testing.T) {

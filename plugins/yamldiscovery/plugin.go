@@ -5,6 +5,7 @@ package yamldiscovery
 import (
 	"context"
 	"math"
+	"os"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/action"
@@ -33,8 +34,11 @@ func (p *Plugin) PluginInfo() launchr.PluginInfo {
 
 // OnAppInit implements [launchr.Plugin] interface to provide discovered actions.
 func (p *Plugin) OnAppInit(app launchr.App) error {
-	app.GetService(&p.am)
+	app.Services().Get(&p.am)
 	p.app = app
+	actionsPath := launchr.MustAbs(launchr.EnvVarActionsPath.Get())
+	app.RegisterFS(action.NewDiscoveryFS(os.DirFS(actionsPath), app.GetWD()))
+	launchr.Log().Debug("init yamldiscovery", "actions_dir", actionsPath)
 	return nil
 }
 

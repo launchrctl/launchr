@@ -26,7 +26,7 @@ func (p *Plugin) PluginInfo() launchr.PluginInfo {
 func (p *Plugin) OnAppInit(app launchr.App) error {
 	p.app = app
 	var am action.Manager
-	app.GetService(&am)
+	app.Services().Get(&am)
 	// Add custom fs to default discovery.
 	app.RegisterFS(action.NewDiscoveryFS(registeredEmbedFS, app.GetWD()))
 	// Create a special decorator to output given input.
@@ -36,8 +36,10 @@ func (p *Plugin) OnAppInit(app launchr.App) error {
 
 // DiscoverActions implements [launchr.ActionDiscoveryPlugin] interface.
 func (p *Plugin) DiscoverActions(_ context.Context) ([]*action.Action, error) {
+	var mask *launchr.SensitiveMask
+	p.app.Services().Get(&mask)
 	return []*action.Action{
-		actionSensitive(p.app),
+		actionSensitive(p.app, mask),
 		actionLogLevels(),
 		embedContainerAction(),
 	}, nil

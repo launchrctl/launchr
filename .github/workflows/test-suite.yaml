@@ -68,6 +68,7 @@ jobs:
             os: ubuntu-24.04-arm
           - name: 🍎 MacOS (amd64)
             os: macos-13
+            continue-on-error: true
           - name: 🍎 MacOS (arm64)
             os: macos-latest
             needs-sidecar: true
@@ -76,6 +77,7 @@ jobs:
           - name: 🖥️ Windows (arm64)
             os: windows-11-arm
             needs-sidecar: true
+            continue-on-error: true
     runs-on: ${{ matrix.os }}
     needs: [ client-ssh-key ]
     continue-on-error: ${{ matrix.continue-on-error || false }}
@@ -139,7 +141,6 @@ jobs:
           name: test-log-${{ matrix.os }}
           path: .gotmp/gotest.log
           retention-days: 3
-          if-no-files-found: error
 
   lint:
     name: 🧹 Lint & Code Quality

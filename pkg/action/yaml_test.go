@@ -58,8 +58,9 @@ func Test_CreateFromYaml(t *testing.T) {
 
 		// Command declaration as array of strings.
 		{"valid command - strings array", validCmdArrYaml, nil},
-		{"invalid command - object", invalidCmdObjYaml, yamlTypeErrorLine(sErrArrOrStrEl, 8, 5)},
-		{"invalid command - various array", invalidCmdArrVarYaml, yamlTypeErrorLine(sErrArrOrStrEl, 8, 5)},
+		{"invalid command - string", invalidCmdStringYaml, yamlTypeErrorLine(sErrArrEl, 7, 12)},
+		{"invalid command - object", invalidCmdObjYaml, yamlTypeErrorLine(sErrArrEl, 8, 5)},
+		{"invalid command - various array", invalidCmdArrVarYaml, yamlTypeErrorLine(sErrArrEl, 8, 5)},
 
 		// Build image.
 		{"build image - short", validBuildImgShortYaml, nil},
@@ -77,7 +78,7 @@ func Test_CreateFromYaml(t *testing.T) {
 		{"invalid env declaration - object", invalidEnvObj, yamlTypeErrorLine(sErrArrOrMapEl, 9, 5)},
 
 		// Templating.
-		{"unescaped template val", validUnescTplStr, errTestAny{}},
+		{"unescaped template val", invalidUnescTplStr, errTestAny{}},
 	}
 	for _, tt := range ttYaml {
 		tt := tt
@@ -89,28 +90,4 @@ func Test_CreateFromYaml(t *testing.T) {
 	}
 
 	// @todo test that the content is in place
-}
-
-func Test_CreateFromYamlTpl(t *testing.T) {
-	t.Parallel()
-
-	type testCase struct {
-		name   string
-		input  string
-		expErr error
-	}
-
-	ttYaml := []testCase{
-		{"supported unescaped template val", validUnescTplStr, nil},
-		{"unsupported unescaped template key", invalidUnescUnsupKeyTplStr, errTestAny{}},
-		{"unsupported unescaped template array", invalidUnescUnsupArrTplStr, errTestAny{}},
-	}
-	for _, tt := range ttYaml {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			_, err := NewDefFromYamlTpl([]byte(tt.input))
-			assertIsSameError(t, tt.expErr, err)
-		})
-	}
 }

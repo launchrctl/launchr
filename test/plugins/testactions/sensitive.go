@@ -19,16 +19,13 @@ action:
       required: true
 `
 
-func init() {
+func actionSensitive(app launchr.App, mask *launchr.SensitiveMask) *action.Action {
 	// Create an action that outputs a secret in a terminal.
 	secret := os.Getenv("TEST_SECRET")
 	if secret != "" {
-		mask := launchr.GlobalSensitiveMask()
 		mask.AddString(secret)
 	}
-}
 
-func actionSensitive(app launchr.App) *action.Action {
 	a := action.NewFromYAML("testplugin:sensitive", []byte(sensitiveYaml))
 	a.SetRuntime(action.NewFnRuntime(func(_ context.Context, a *action.Action) error {
 		arg := a.Input().Arg("arg").(string)

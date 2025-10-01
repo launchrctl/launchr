@@ -3,6 +3,7 @@ package launchr
 import (
 	"errors"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -20,20 +21,8 @@ var (
 	ErrNoConfigFile = errors.New("config file is not found") // ErrNoConfigFile when config file doesn't exist in FS.
 )
 
-// Config is a launchr config storage interface.
-type Config interface {
-	Service
-	// DirPath returns an absolute path to config directory.
-	DirPath() string
-	// Path provides an absolute path to launchr config directory.
-	Path(parts ...string) string
-	// Exists checks if key exists in config. Key level delimiter is dot.
-	// For example - `path.to.something`.
-	Exists(key string) bool
-	// Get returns a value by key to a parameter v. Parameter v must be a pointer to a value.
-	// Error may be returned on decode.
-	Get(key string, v any) error
-}
+// Config is a launchr global config service.
+type Config = *config
 
 type cachedProps = map[string]reflect.Value
 type config struct {
@@ -72,14 +61,33 @@ func (cfg *config) ServiceInfo() ServiceInfo {
 	return ServiceInfo{}
 }
 
+func (cfg *config) ServiceCreate(_ *ServiceManager) Service {
+	cfgDir := "." + name
+	return ConfigFromFS(os.DirFS(cfgDir))
+}
+
+// DirPath returns an absolute path to config directory.
 func (cfg *config) DirPath() string {
 	return cfg.rootPath
 }
 
-func (cfg *config) Exists(path string) bool {
+func (cfg *config) exists(path string) bool {
 	return cfg.koanf != nil && cfg.koanf.Exists(path)
 }
 
+// Exists checks if key exists in config. Key level delimiter is dot.
+// For example - `path.to.something`.
+func (cfg *config) Exists(path string) bool {
+	var v any
+	err := cfg.Get(path, &v)
+	if err != nil {
+		return false
+	}
+	return cfg.exists(path)
+}
+
+// Get returns a value by key to a parameter v. Parameter v must be a pointer to a value.
+// Error may be returned on decode.
 func (cfg *config) Get(key string, v any) error {
 	cfg.mx.Lock()
 	defer cfg.mx.Unlock()
@@ -100,7 +108,7 @@ func (cfg *config) Get(key string, v any) error {
 		}
 	}
 
-	ok = cfg.Exists(key)
+	ok = cfg.exists(key)
 	if !ok {
 		// Return default value.
 		return nil
@@ -137,6 +145,7 @@ func (cfg *config) parse() error {
 	return nil
 }
 
+// Path provides an absolute path to launchr config directory.
 func (cfg *config) Path(parts ...string) string {
 	parts = append([]string{cfg.rootPath}, parts...)
 	return filepath.Clean(filepath.Join(parts...))

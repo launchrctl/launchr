@@ -232,8 +232,8 @@ runtime:
     context: ./context                    # Custom build context subdirectory
     buildfile: test.Dockerfile            # Custom Dockerfile name
     args:
-      USER_ID: {{ .current_uid }}         # Template: current user ID
-      GROUP_ID: {{ .current_gid }}        # Template: current group ID
+      USER_ID: "$UID"                     # Template: current user ID
+      GROUP_ID: "$UID"                    # Template: current group ID
       USER_NAME: foobar                   # Static build argument
   command:
     - id                                  # Command to display user info

@@ -169,7 +169,7 @@ Add the processor to the Action Manager:
 
 ```go
 var am action.Manager
-app.GetService(&am)
+app.Services().Get(&am)
 
 procReplace := GenericValueProcessor[procTestReplaceOptions]{
 	Types: []jsonschema.Type{jsonschema.String},

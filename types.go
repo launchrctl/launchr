@@ -99,6 +99,8 @@ type (
 	GenerateConfig = launchr.GenerateConfig
 	// PluginManager handles plugins.
 	PluginManager = launchr.PluginManager
+	// ServiceManager is a basic Dependency Injection container storing registered [Service].
+	ServiceManager = launchr.ServiceManager
 	// ServiceInfo provides service info for its initialization.
 	ServiceInfo = launchr.ServiceInfo
 	// Service is a common interface for a service to register.
@@ -156,6 +158,9 @@ func NoopStreams() Streams { return launchr.NoopStreams() }
 // supported, or falls back to terminal emulation. On Unix, this returns
 // the standard [os.Stdin], [os.Stdout] and [os.Stderr].
 func StdInOutErr() (stdIn io.ReadCloser, stdOut, stdErr io.Writer) { return launchr.StdInOutErr() }
+
+// NewServiceManager initializes ServiceManager.
+func NewServiceManager() *ServiceManager { return launchr.NewServiceManager() }
 
 // NewMaskingWriter initializes a new MaskingWriter.
 func NewMaskingWriter(w io.Writer, mask *SensitiveMask) io.WriteCloser {

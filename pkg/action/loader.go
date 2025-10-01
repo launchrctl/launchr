@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"reflect"
 	"regexp"
 	"strings"
 	"text/template"
@@ -11,29 +12,66 @@ import (
 	"github.com/launchrctl/launchr/internal/launchr"
 )
 
-const tokenRmLine = "<TOKEN_REMOVE_THIS_LINE>" //nolint:gosec // G101: Not a credential.
-
-var rgxTokenRmLine = regexp.MustCompile(`.*` + tokenRmLine + `.*\n?`)
-
 // Loader is an interface for loading an action file.
 type Loader interface {
 	// Content returns the raw file content.
 	Content() ([]byte, error)
 	// Load parses Content to a Definition with substituted values.
-	Load(LoadContext) (*Definition, error)
-	// LoadRaw parses Content to a Definition raw values. Template strings are escaped.
-	LoadRaw() (*Definition, error)
+	Load(*LoadContext) (*Definition, error)
 }
 
 // LoadContext stores relevant and isolated data needed for processors.
 type LoadContext struct {
-	Action *Action
+	a   *Action
+	svc *launchr.ServiceManager
+
+	tplVars    map[string]any
+	tplFuncMap template.FuncMap
+}
+
+// Action returns context's action.
+func (ctx *LoadContext) Action() *Action { return ctx.a }
+
+// Services returns a DI container.
+func (ctx *LoadContext) Services() *launchr.ServiceManager { return ctx.svc }
+
+func (ctx *LoadContext) getActionTemplateProcessors() *TemplateProcessors {
+	if ctx.Services() == nil {
+		// In case of tests.
+		return NewTemplateProcessors()
+	}
+	var tp *TemplateProcessors
+	ctx.Services().Get(&tp)
+	return tp
+}
+
+func (ctx *LoadContext) getTemplateFuncMap() template.FuncMap {
+	if ctx.tplFuncMap == nil {
+		procs := ctx.getActionTemplateProcessors()
+		ctx.tplFuncMap = procs.GetTemplateFuncMap(
+			TemplateFuncContext{
+				a:   ctx.Action(),
+				svc: ctx.Services(),
+			},
+		)
+	}
+	return ctx.tplFuncMap
+}
+
+func (ctx *LoadContext) getTemplateData() map[string]any {
+	if ctx.tplVars == nil {
+		def := ctx.Action().ActionDef()
+		// Collect template variables.
+		ctx.tplVars = convertInputToTplVars(ctx.Action().Input(), def)
+		addPredefinedVariables(ctx.tplVars, ctx.Action())
+	}
+	return ctx.tplVars
 }
 
 // LoadProcessor is an interface for processing input on load.
 type LoadProcessor interface {
 	// Process gets an input action file data and returns a processed result.
-	Process(LoadContext, []byte) ([]byte, error)
+	Process(*LoadContext, string) (string, error)
 }
 
 type pipeProcessor struct {
@@ -45,21 +83,27 @@ func NewPipeProcessor(p ...LoadProcessor) LoadProcessor {
 	return &pipeProcessor{p: p}
 }
 
-func (p *pipeProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
+func (p *pipeProcessor) Process(ctx *LoadContext, s string) (string, error) {
 	var err error
 	for _, proc := range p.p {
-		b, err = proc.Process(ctx, b)
+		s, err = proc.Process(ctx, s)
 		if err != nil {
-			return b, err
+			return s, err
 		}
 	}
-	return b, nil
+	return s, nil
 }
 
 type envProcessor struct{}
 
-func (p envProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
-	pv := newPredefinedVars(ctx.Action)
+func (p envProcessor) Process(ctx *LoadContext, s string) (string, error) {
+	if ctx.Action() == nil {
+		panic("envProcessor received nil LoadContext.Action")
+	}
+	if !strings.Contains(s, "$") {
+		return s, nil
+	}
+	pv := newPredefinedVars(ctx.Action())
 	getenv := func(key string) string {
 		v, ok := pv.getenv(key)
 		if ok {
@@ -67,8 +111,7 @@ func (p envProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
 		}
 		return launchr.Getenv(key)
 	}
-	s := os.Expand(string(b), getenv)
-	return []byte(s), nil
+	return os.Expand(s, getenv), nil
 }
 
 type inputProcessor struct{}
@@ -88,126 +131,46 @@ func (err errMissingVar) Error() string {
 	return fmt.Sprintf("the following variables were used but never defined: %v", f)
 }
 
-// actionTplFuncs defined template functions available during parsing of an action yaml.
-func actionTplFuncs(input *Input) template.FuncMap {
-	// Helper function to get value by name from args or opts
-	getValue := func(name string) any {
-		args := input.Args()
-		if arg, ok := args[name]; ok {
-			return arg
-		}
-
-		opts := input.Opts()
-		if opt, ok := opts[name]; ok {
-			return opt
-		}
-
-		return nil
+func (p inputProcessor) Process(ctx *LoadContext, s string) (string, error) {
+	if ctx.Action() == nil {
+		panic("inputProcessor received nil LoadContext.Action")
+	}
+	if !strings.Contains(s, "{{") {
+		return s, nil
 	}
 
-	// Helper function to check if a parameter is changed
-	isParamChanged := func(name string) bool {
-		return input.IsOptChanged(name) || input.IsArgChanged(name)
-	}
-
-	return template.FuncMap{
-		// Checks if a value is nil. Used in conditions.
-		"isNil": func(v any) bool {
-			return v == nil
-		},
-		// Checks if a value is not nil. Used in conditions.
-		"isSet": func(v any) bool {
-			return v != nil
-		},
-		// Checks if a value is changed. Used in conditions.
-		"isChanged": func(v any) bool {
-			name, ok := v.(string)
-			if !ok {
-				return false
-			}
-
-			return isParamChanged(name)
-		},
-		// Removes a line if a given value is nil or pass through.
-		"removeLineIfNil": func(v any) any {
-			if v == nil {
-				return tokenRmLine
-			}
-			return v
-		},
-		// Removes a line if a given value is not nil or pass through.
-		"removeLineIfSet": func(v any) any {
-			if v != nil {
-				return tokenRmLine
-			}
-
-			return v
-		},
-		// Removes a line if a given value is changed or pass through.
-		"removeLineIfChanged": func(name string) any {
-			if isParamChanged(name) {
-				return tokenRmLine
-			}
-
-			return getValue(name)
-		},
-		// Removes a line if a given value is not changed or pass through.
-		"removeLineIfNotChanged": func(name string) any {
-			if !isParamChanged(name) {
-				return tokenRmLine
-			}
-
-			return getValue(name)
-		},
-		// Removes current line.
-		"removeLine": func() string {
-			return tokenRmLine
-		},
-	}
-}
-
-func (p inputProcessor) Process(ctx LoadContext, b []byte) ([]byte, error) {
-	if ctx.Action == nil {
-		return b, nil
-	}
-	a := ctx.Action
-	def := ctx.Action.ActionDef()
 	// Collect template variables.
-	data := ConvertInputToTplVars(a.Input(), def)
-	addPredefinedVariables(data, a)
+	data := ctx.getTemplateData()
 
-	// Parse action without variables to validate
-	tpl := template.New(a.ID).Funcs(actionTplFuncs(a.Input()))
+	// Parse action yaml.
+	tpl := template.New(s).Funcs(ctx.getTemplateFuncMap())
+	_, err := tpl.Parse(s)
 
-	_, err := tpl.Parse(string(b))
 	// Check if variables have dashes to show the error properly.
 	err = checkDashErr(err, data)
 	if err != nil {
-		return nil, err
+		return s, err
 	}
 
 	// Execute template.
-	buf := bytes.NewBuffer(make([]byte, 0, len(b)))
+	buf := bytes.NewBuffer(make([]byte, 0, len(s)))
 	err = tpl.Execute(buf, data)
 	if err != nil {
-		return nil, err
+		return s, err
 	}
 
 	// Find if some vars were used but not defined in arguments or options.
-	res := buf.Bytes()
-	err = findMissingVars(b, res, data)
+	res := buf.String()
+	err = findMissingVars(s, res, data)
 	if err != nil {
-		return nil, err
+		return s, err
 	}
-
-	// Remove all lines containing [tokenRmLine].
-	res = rgxTokenRmLine.ReplaceAll(res, []byte(""))
 
 	return res, nil
 }
 
-// ConvertInputToTplVars creates a map with input variables suitable for template engine.
-func ConvertInputToTplVars(input *Input, ac *DefAction) map[string]any {
+// convertInputToTplVars creates a map with input variables suitable for template engine.
+func convertInputToTplVars(input *Input, ac *DefAction) map[string]any {
 	args := input.Args()
 	opts := input.Opts()
 	values := make(map[string]any, len(args)+len(opts))
@@ -264,14 +227,14 @@ Action definition is correct, but dashes are not allowed in templates, replace "
 	return err
 }
 
-func findMissingVars(orig, repl []byte, data map[string]any) error {
+func findMissingVars(orig, repl string, data map[string]any) error {
 	miss := make(map[string]struct{})
-	if !bytes.Contains(repl, []byte("<no value>")) {
+	if !strings.Contains(repl, "<no value>") {
 		return nil
 	}
-	matches := rgxTplVar.FindAllSubmatch(orig, -1)
+	matches := rgxTplVar.FindAllStringSubmatch(orig, -1)
 	for _, m := range matches {
-		k := string(m[1])
+		k := m[1]
 		if _, ok := data[k]; !ok {
 			miss[k] = struct{}{}
 		}
@@ -281,5 +244,142 @@ func findMissingVars(orig, repl []byte, data map[string]any) error {
 	if len(miss) != 0 {
 		return errMissingVar{miss}
 	}
+	return nil
+}
+
+// processStructStringsInPlace walks over a struct recursively and processes string fields in-place using the provided processor function.
+func processStructStringsInPlace(v any, processor func(string) (string, error)) error {
+	return processStructValueInPlace(reflect.ValueOf(v), processor)
+}
+
+func processStructValueInPlace(v reflect.Value, processor func(string) (string, error)) error {
+	// Handle pointers and interfaces
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return nil
+		}
+		return processStructValueInPlace(v.Elem(), processor)
+	}
+
+	if v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return nil
+		}
+		return processStructValueInPlace(v.Elem(), processor)
+	}
+
+	switch v.Kind() {
+	case reflect.String:
+		return processStringValueInPlace(v, processor)
+	case reflect.Struct:
+		return processStructFieldsInPlace(v, processor)
+	case reflect.Slice, reflect.Array:
+		return processSliceOrArrayInPlace(v, processor)
+	case reflect.Map:
+		return processMapValueInPlace(v, processor)
+	default:
+		return nil
+	}
+}
+
+func processStringValueInPlace(v reflect.Value, processor func(string) (string, error)) error {
+	if !v.CanSet() {
+		return nil
+	}
+
+	processed, err := processor(v.String())
+	if err != nil {
+		return err
+	}
+
+	// Only process basic string types directly
+	if v.Type() == reflect.TypeOf("") {
+		v.SetString(processed)
+		return nil
+	}
+
+	// For custom string types, try to convert and set
+	newVal := reflect.ValueOf(processed)
+	if newVal.Type().ConvertibleTo(v.Type()) {
+		v.Set(newVal.Convert(v.Type()))
+	}
+
+	return nil
+}
+
+func processStructFieldsInPlace(v reflect.Value, processor func(string) (string, error)) error {
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Field(i)
+		structField := v.Type().Field(i)
+
+		// Skip unexported fields
+		if !structField.IsExported() {
+			continue
+		}
+
+		if field.CanInterface() {
+			if err := processStructValueInPlace(field, processor); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func processSliceOrArrayInPlace(v reflect.Value, processor func(string) (string, error)) error {
+	for i := 0; i < v.Len(); i++ {
+		if err := processStructValueInPlace(v.Index(i), processor); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func processMapValueInPlace(v reflect.Value, processor func(string) (string, error)) error {
+	// For maps, we need to handle key processing differently since map keys are not addressable
+	keysToUpdate := make(map[reflect.Value]reflect.Value)
+
+	for _, key := range v.MapKeys() {
+		value := v.MapIndex(key)
+
+		// Process the value in-place if possible
+		if err := processStructValueInPlace(value, processor); err != nil {
+			return err
+		}
+
+		// Check if key needs processing (only for string keys)
+		if key.Kind() == reflect.String {
+			processed, err := processor(key.String())
+			if err != nil {
+				return err
+			}
+
+			// If the key changed, we need to update the map
+			if processed != key.String() {
+				var newKey reflect.Value
+				if key.Type() == reflect.TypeOf("") {
+					newKey = reflect.ValueOf(processed)
+				} else {
+					newKeyVal := reflect.ValueOf(processed)
+					if newKeyVal.Type().ConvertibleTo(key.Type()) {
+						newKey = newKeyVal.Convert(key.Type())
+					} else {
+						continue // Skip if not convertible
+					}
+				}
+				keysToUpdate[key] = newKey
+			}
+		}
+	}
+
+	// Update map keys that changed
+	for oldKey, newKey := range keysToUpdate {
+		value := v.MapIndex(oldKey)
+		v.SetMapIndex(oldKey, reflect.Value{}) // Delete old key
+		v.SetMapIndex(newKey, value)           // Set with new key
+	}
+
 	return nil
 }

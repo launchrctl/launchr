@@ -165,13 +165,13 @@ func (c *runtimeContainer) GetFlags() *FlagsGroup {
 }
 
 func (c *runtimeContainer) ValidateInput(input *Input) error {
-	err := c.flags.ValidateFlags(input.GroupFlags(c.flags.GetName()))
+	err := c.flags.ValidateFlags(input.GroupFlags(c.flags.Name()))
 	if err != nil {
 		return err
 	}
 
 	// early peak for an exec flag.
-	exec := input.GetFlagInGroup(c.flags.GetName(), containerFlagExec)
+	exec := input.GetFlagInGroup(c.flags.Name(), containerFlagExec)
 	if exec != nil && exec.(bool) {
 		// Mark input as validated because arguments are passed directly to exec.
 		input.SetValidated(true)
@@ -181,7 +181,7 @@ func (c *runtimeContainer) ValidateInput(input *Input) error {
 }
 
 func (c *runtimeContainer) SetFlags(input *Input) error {
-	flags := input.GroupFlags(c.flags.GetName())
+	flags := input.GroupFlags(c.flags.Name())
 
 	if v, ok := flags[containerFlagRemote]; ok {
 		c.isSetRemote = v.(bool)

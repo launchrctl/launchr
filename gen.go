@@ -46,7 +46,7 @@ func (app *appImpl) gen() error {
 
 	// Do not fail if some flags change in future builds.
 	flags := app.cmd.Flags()
-	flags.ParseErrorsWhitelist.UnknownFlags = true
+	flags.ParseErrorsAllowlist.UnknownFlags = true
 	// Working directory flag is helpful because "go run" can't be run outside
 	// a project directory and use all its go.mod dependencies.
 	flags.StringVar(&config.WorkDir, "work-dir", config.WorkDir, "Working directory")

@@ -68,7 +68,7 @@ runtime:
   command: 
     - python3 
     - {{ .myArg1 }} {{ .myArg2 }}
-    - {{ .optStr }}
+    - '{{ .optStr }}'
     - ${ENV_VAR}
 ```
 

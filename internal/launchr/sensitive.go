@@ -3,18 +3,8 @@ package launchr
 import (
 	"bytes"
 	"io"
+	"sync"
 )
-
-var globalSensitiveMask *SensitiveMask
-
-func init() {
-	globalSensitiveMask = NewSensitiveMask("****")
-}
-
-// GlobalSensitiveMask returns global app sensitive mask.
-func GlobalSensitiveMask() *SensitiveMask {
-	return globalSensitiveMask
-}
 
 // MaskingWriter is a writer that masks sensitive data in the input stream.
 // It buffers data to handle cases where sensitive data spans across writes.
@@ -95,7 +85,7 @@ func (m *MaskingWriter) shouldFlush(p []byte) bool {
 
 // hasPotentialSensitiveData checks if buffer might contain partial sensitive data
 func (m *MaskingWriter) hasPotentialSensitiveData() bool {
-	if len(m.mask.strings) == 0 {
+	if m.mask == nil || len(m.mask.strings) == 0 {
 		return false
 	}
 
@@ -143,8 +133,53 @@ func (m *MaskingWriter) Close() error {
 
 // SensitiveMask replaces sensitive strings with a mask.
 type SensitiveMask struct {
+	mx      sync.Mutex
 	strings [][]byte
 	mask    []byte
+}
+
+// ServiceInfo implements [Service] interface.
+func (p *SensitiveMask) ServiceInfo() ServiceInfo {
+	return ServiceInfo{}
+}
+
+// ServiceCreate implements [ServiceCreate] interface.
+func (p *SensitiveMask) ServiceCreate(_ *ServiceManager) Service {
+	return NewSensitiveMask("****")
+}
+
+// MaskWriter returns a wrapped writer with masked output.
+func (p *SensitiveMask) MaskWriter(w io.Writer) io.WriteCloser {
+	return NewMaskingWriter(w, p)
+}
+
+// Clone creates a copy of a sensitive mask.
+func (p *SensitiveMask) Clone() *SensitiveMask {
+	p.mx.Lock()
+	defer p.mx.Unlock()
+
+	// Create a new slice with the same length and capacity
+	clonedStrings := make([][]byte, len(p.strings))
+
+	// Deep copy each []byte slice
+	for i, str := range p.strings {
+		if str != nil {
+			clonedStrings[i] = make([]byte, len(str))
+			copy(clonedStrings[i], str)
+		}
+	}
+
+	// Clone the mask slice as well
+	var clonedMask []byte
+	if p.mask != nil {
+		clonedMask = make([]byte, len(p.mask))
+		copy(clonedMask, p.mask)
+	}
+
+	return &SensitiveMask{
+		strings: clonedStrings,
+		mask:    clonedMask,
+	}
 }
 
 // String implements [fmt.Stringer] to occasionally not render sensitive data.
@@ -162,7 +197,7 @@ func (p *SensitiveMask) ReplaceAll(b []byte) (resultBytes []byte, lastBefore, la
 	lastBefore = -1
 	lastAfter = -1
 
-	if len(p.strings) == 0 {
+	if p == nil || len(p.strings) == 0 {
 		return b, lastBefore, lastAfter
 	}
 
@@ -210,17 +245,14 @@ func (p *SensitiveMask) ReplaceAll(b []byte) (resultBytes []byte, lastBefore, la
 
 // AddString adds a string to mask.
 func (p *SensitiveMask) AddString(s string) {
+	p.mx.Lock()
+	defer p.mx.Unlock()
 	p.strings = append(p.strings, []byte(s))
 }
 
 // NewSensitiveMask creates a sensitive mask replacing strings with mask value.
-func NewSensitiveMask(mask string, strings ...string) *SensitiveMask {
-	bytestrings := make([][]byte, len(strings))
-	for i := 0; i < len(strings); i++ {
-		bytestrings[i] = []byte(strings[i])
-	}
+func NewSensitiveMask(mask string) *SensitiveMask {
 	return &SensitiveMask{
-		mask:    []byte(mask),
-		strings: bytestrings,
+		mask: []byte(mask),
 	}
 }

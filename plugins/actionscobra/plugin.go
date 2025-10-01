@@ -38,8 +38,8 @@ func (p *Plugin) PluginInfo() launchr.PluginInfo {
 // OnAppInit implements [launchr.Plugin] interface.
 func (p *Plugin) OnAppInit(app launchr.App) error {
 	p.app = app.(launchr.AppInternal)
-	app.GetService(&p.am)
-	app.GetService(&p.pm)
+	app.Services().Get(&p.am)
+	app.Services().Get(&p.pm)
 	return p.discoverActions()
 }
 

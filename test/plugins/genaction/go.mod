@@ -1,6 +1,6 @@
 module example.com/genaction
 
-go 1.24.1
+go 1.25.0
 
 // Have replace for local development
 replace github.com/launchrctl/launchr => ../../../

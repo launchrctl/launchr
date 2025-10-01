@@ -2,13 +2,10 @@ package launchr
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"os"
-	"reflect"
 
 	"github.com/launchrctl/launchr/internal/launchr"
-	"github.com/launchrctl/launchr/pkg/action"
 	_ "github.com/launchrctl/launchr/plugins" // include default plugins
 )
 
@@ -20,11 +17,11 @@ type appImpl struct {
 	// FS related.
 	mFS     []ManagedFS
 	workDir string
-	cfgDir  string
 
 	// Services.
 	streams    Streams
-	services   map[ServiceInfo]Service
+	mask       *SensitiveMask
+	services   *ServiceManager
 	pluginMngr PluginManager
 }
 
@@ -40,46 +37,20 @@ func (app *appImpl) SetStreams(s Streams) { app.streams = s }
 func (app *appImpl) RegisterFS(fs ManagedFS)      { app.mFS = append(app.mFS, fs) }
 func (app *appImpl) GetRegisteredFS() []ManagedFS { return app.mFS }
 
-func (app *appImpl) SensitiveWriter(w io.Writer) io.Writer {
-	return NewMaskingWriter(w, app.SensitiveMask())
-}
-func (app *appImpl) SensitiveMask() *SensitiveMask { return launchr.GlobalSensitiveMask() }
+func (app *appImpl) SensitiveWriter(w io.Writer) io.Writer { return app.SensitiveMask().MaskWriter(w) }
+func (app *appImpl) SensitiveMask() *SensitiveMask         { return app.mask }
 
 func (app *appImpl) RootCmd() *Command                      { return app.cmd }
 func (app *appImpl) CmdEarlyParsed() launchr.CmdEarlyParsed { return app.earlyCmd }
 
+func (app *appImpl) Services() *ServiceManager { return app.services }
+
 func (app *appImpl) AddService(s Service) {
-	info := s.ServiceInfo()
-	launchr.InitServiceInfo(&info, s)
-	if _, ok := app.services[info]; ok {
-		panic(fmt.Errorf("service %s already exists, review your code", info))
-	}
-	app.services[info] = s
+	app.services.Add(s)
 }
 
 func (app *appImpl) GetService(v any) {
-	// Check v is a pointer and implements [Service] to set a value later.
-	t := reflect.TypeOf(v)
-	isPtr := t != nil && t.Kind() == reflect.Pointer
-	var stype reflect.Type
-	if isPtr {
-		stype = t.Elem()
-	}
-
-	// v must be [Service] but can't equal it because all elements implement it
-	// and the first value will always be returned.
-	intService := reflect.TypeOf((*Service)(nil)).Elem()
-	if !isPtr || !stype.Implements(intService) || stype == intService {
-		panic(fmt.Errorf("argument must be a pointer to a type (interface) implementing Service, %q given", t))
-	}
-	for _, srv := range app.services {
-		st := reflect.TypeOf(srv)
-		if st.AssignableTo(stype) {
-			reflect.ValueOf(v).Elem().Set(reflect.ValueOf(srv))
-			return
-		}
-	}
-	panic(fmt.Sprintf("service %q does not exist", stype))
+	app.services.Get(v)
 }
 
 // init initializes application and plugins.
@@ -108,34 +79,25 @@ func (app *appImpl) init() error {
 	}
 	app.cmd.SetVersionTemplate(`{{ appVersionFull }}`)
 	app.earlyCmd = launchr.EarlyPeekCommand()
+	app.mask = launchr.NewSensitiveMask("****")
+
+	// Initialize managed FS for action discovery and set working dir
+	app.workDir = MustAbs(".")
+	app.mFS = make([]ManagedFS, 0, 4)
+
+	// Prepare dependencies.
+	app.services = launchr.NewServiceManager()
+	app.pluginMngr = launchr.NewPluginManagerWithRegistered()
+
+	// Register svcMngr for other modules.
+	app.services.Add(app.mask)
+	app.services.Add(app.pluginMngr)
+
 	// Set io streams.
-	app.SetStreams(MaskedStdStreams(app.SensitiveMask()))
+	app.SetStreams(MaskedStdStreams(app.mask))
 	app.cmd.SetIn(app.streams.In().Reader())
 	app.cmd.SetOut(app.streams.Out())
 	app.cmd.SetErr(app.streams.Err())
-
-	// Set working dir and config dir.
-	app.cfgDir = "." + name
-	app.workDir = launchr.MustAbs(".")
-	actionsPath := launchr.MustAbs(EnvVarActionsPath.Get())
-	// Initialize managed FS for action discovery.
-	app.mFS = make([]ManagedFS, 0, 4)
-	app.RegisterFS(action.NewDiscoveryFS(os.DirFS(actionsPath), app.GetWD()))
-
-	// Prepare dependencies.
-	app.services = make(map[ServiceInfo]Service)
-	app.pluginMngr = launchr.NewPluginManagerWithRegistered()
-	// @todo consider home dir for global config.
-	config := launchr.ConfigFromFS(os.DirFS(app.cfgDir))
-	actionMngr := action.NewManager(
-		action.WithDefaultRuntime(config),
-		action.WithContainerRuntimeConfig(config, name+"_"),
-	)
-
-	// Register services for other modules.
-	app.AddService(actionMngr)
-	app.AddService(app.pluginMngr)
-	app.AddService(config)
 
 	Log().Debug("initialising application")
 
@@ -148,7 +110,7 @@ func (app *appImpl) init() error {
 			return err
 		}
 	}
-	Log().Debug("init success", "wd", app.workDir, "actions_dir", actionsPath)
+	Log().Debug("init success", "wd", app.workDir)
 
 	return nil
 }

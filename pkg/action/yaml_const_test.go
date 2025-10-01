@@ -82,6 +82,20 @@ runtime:
     - "${TEST_ENV_1} ${TEST_ENV_UND}"
 `
 
+const validMultilineYaml = `
+action:
+  title: Title
+runtime:
+  type: container
+  image: python:3.7-slim
+  env:
+    MY_MULTILINE_ENV1: "${TEST_MULTILINE_ENV1}"
+    MY_MULTILINE_ENV2: ${TEST_MULTILINE_ENV1}
+    MY_MULTILINE_ENV3: |
+      ${TEST_MULTILINE_ENV1}
+  command: [pwd]
+`
+
 const validCmdArrYaml = `
 action:
   title: Title
@@ -92,6 +106,15 @@ runtime:
     - /bin/sh
     - -c
     - for i in $(seq 3); do echo $$i; sleep 1; done
+`
+
+const invalidCmdStringYaml = `
+action:
+  title: Title
+runtime:
+  type: container
+  image: python:3.7-slim
+  command: pwd
 `
 
 const invalidCmdObjYaml = `
@@ -129,7 +152,7 @@ const invalidEmptyImgYaml = `
 version:
 action:
   title: Title
-  command: python3
+  command: [pwd]
 runtime:
   type: container
 `
@@ -140,7 +163,7 @@ action:
   title: Title
 runtime:
   type: container
-  command: python3
+  command: [pwd]
   image: ""
 `
 
@@ -302,7 +325,7 @@ runtime:
   type: container
   image: python:3.7-slim
   build: ./
-  command: ls
+  command: [pwd]
 `
 
 const validBuildImgLongYaml = `
@@ -320,7 +343,7 @@ runtime:
     tags:
       - my/image:v1
       - my/image:v2
-  command: ls
+  command: [pwd]
 `
 
 // Extra hosts key.
@@ -333,7 +356,7 @@ runtime:
   extra_hosts:
     - "host.docker.internal:host-gateway"
     - "example.com:127.0.0.1"
-  command: ls
+  command: [pwd]
 `
 
 const invalidExtraHostsYaml = `
@@ -343,7 +366,7 @@ runtime:
   type: container
   image: python:3.7-slim
   extra_hosts: "host.docker.internal:host-gateway"
-  command: ls
+  command: [pwd]
 `
 
 // Environmental variables.
@@ -353,7 +376,7 @@ action:
 runtime:
   type: container
   image: my/image:v1
-  command: ls
+  command: [pwd]
   env:
     - MY_ENV_1=test1
     - MY_ENV_2=test2
@@ -365,7 +388,7 @@ action:
 runtime:
   type: container
   image: my/image:v1
-  command: ls
+  command: [pwd]
   env:
     MY_ENV_1: test1
     MY_ENV_2: test2
@@ -377,7 +400,7 @@ action:
 runtime:
   type: container
   image: my/image:v1
-  command: ls
+  command: [pwd]
   env:
     - MY_ENV_1=test1
     MY_ENV_2: test2
@@ -389,7 +412,7 @@ action:
 runtime:
   type: container
   image: my/image:v1
-  command: ls
+  command: [pwd]
   env: MY_ENV_1=test1
 `
 
@@ -399,40 +422,22 @@ action:
 runtime:
   type: container
   image: my/image:v1
-  command: ls
+  command: [pwd]
   env:
     MY_ENV_1: { MY_ENV_2: test2 }
 `
 
 // Unescaped template strings.
-const validUnescTplStr = `
+const invalidUnescTplStr = `
 action:
   title: Title
 runtime:
   type: container
-  image: {{ .A1 }}
-  command:    {{ .A1 }}
+  image:   {{ .A1 }}
+  command: [pwd]
   env:
     - {{ .A2 }} {{ .A3 }}
     - {{ .A2 }} {{ .A3 }} asafs
-`
-
-const invalidUnescUnsupKeyTplStr = `
-action:
-  title: Title
-runtime:
-  type: container
-  image: {{ .A1 }}:latest
-  {{ .A1 }}: ls
-`
-
-const invalidUnescUnsupArrTplStr = `
-action:
-  title: Title
-runtime:
-  type: container
-  image: {{ .A1 }}
-  command: [{{ .A1 }}, {{ .A1 }}]
 `
 
 const validArgString = `

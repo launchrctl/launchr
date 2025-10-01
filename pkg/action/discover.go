@@ -64,8 +64,8 @@ func (f DiscoveryFS) Realpath() string {
 	return f.real
 }
 
-// IsExists checks if the underlying filesystem path is available for discovery.
-func (f DiscoveryFS) IsExists() bool {
+// IsDiscoverable checks if the underlying filesystem path is available for discovery.
+func (f DiscoveryFS) IsDiscoverable() bool {
 	if f.real == "" {
 		// Virtual fs is always available.
 		return true
@@ -173,7 +173,7 @@ func (ad *Discovery) Discover(ctx context.Context) ([]*Action, error) {
 	defer launchr.EstimateTime(func(diff time.Duration) {
 		launchr.Log().Debug("action discovering elapsed time", "time", diff.Round(time.Millisecond), "path", ad.fs.Realpath())
 	})
-	if !ad.fs.IsExists() {
+	if !ad.fs.IsDiscoverable() {
 		return nil, nil
 	}
 	wg := sync.WaitGroup{}

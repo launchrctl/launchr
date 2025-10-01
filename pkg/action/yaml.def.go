@@ -16,7 +16,6 @@ const (
 	sErrFieldMustBeArr = "field must be an array"
 	sErrArrElMustBeObj = "array element must be an object"
 	sErrArrEl          = "element must be an array of strings"
-	sErrArrOrStrEl     = "element must be an array of strings or a string"
 	sErrArrOrMapEl     = "element must be an array of strings or a key-value object"
 
 	sErrEmptyRuntimeImg        = "image field cannot be empty"
@@ -52,9 +51,7 @@ func (err errUnsupportedActionVersion) Is(cmp error) bool {
 }
 
 var (
-	rgxUnescTplRow = regexp.MustCompile(`(?:-|\S+:)(?:\s*)?({{.*}}.*)`)
-	rgxTplRow      = regexp.MustCompile(`({{.*}}.*)`)
-	rgxVarName     = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_\\-]*$`)
+	rgxVarName = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_\\-]*$`)
 )
 
 // NewDefFromYaml creates an action file definition from yaml configuration.
@@ -80,16 +77,6 @@ func NewDefFromYaml(b []byte) (*Definition, error) {
 	return &d, nil
 }
 
-// NewDefFromYamlTpl creates an action file definition from yaml configuration
-// as [NewDefFromYaml] but considers that it has unescaped template values.
-func NewDefFromYamlTpl(b []byte) (*Definition, error) {
-	// Find unescaped occurrences of template elements.
-	bufRaw := rgxUnescTplRow.ReplaceAllFunc(b, func(match []byte) []byte {
-		return rgxTplRow.ReplaceAll(match, []byte(`"$1"`))
-	})
-	return NewDefFromYaml(bufRaw)
-}
-
 // Definition is a representation of an action file.
 type Definition struct {
 	Version string      `yaml:"version"`
@@ -106,12 +93,7 @@ func (d *Definition) Content() ([]byte, error) {
 }
 
 // Load implements [Loader] interface.
-func (d *Definition) Load(_ LoadContext) (*Definition, error) {
-	return d.LoadRaw()
-}
-
-// LoadRaw implements [Loader] interface.
-func (d *Definition) LoadRaw() (*Definition, error) {
+func (d *Definition) Load(_ *LoadContext) (*Definition, error) {
 	return d, nil
 }
 
@@ -187,7 +169,7 @@ func (r *DefRuntimeType) UnmarshalYAML(n *yaml.Node) (err error) {
 
 // DefRuntimeContainer has container-specific runtime configuration.
 type DefRuntimeContainer struct {
-	Command    StrSliceOrStr           `yaml:"command"`
+	Command    StrSlice                `yaml:"command"`
 	Image      string                  `yaml:"image"`
 	Build      *driver.BuildDefinition `yaml:"build"`
 	ExtraHosts StrSlice                `yaml:"extra_hosts"`
@@ -281,7 +263,7 @@ func (r *DefRuntime) UnmarshalYAML(n *yaml.Node) (err error) {
 	}
 }
 
-// StrSlice is an array of strings for command execution.
+// StrSlice is an array of strings.
 type StrSlice []string
 
 // UnmarshalYAML implements [yaml.Unmarshaler] to parse a string or a list of strings.
@@ -289,33 +271,13 @@ func (l *StrSlice) UnmarshalYAML(n *yaml.Node) (err error) {
 	if n.Kind == yaml.ScalarNode {
 		return yamlTypeErrorLine(sErrArrEl, n.Line, n.Column)
 	}
-	var s StrSliceOrStr
-	err = n.Decode(&s)
-	if err != nil {
-		return err
-	}
-	*l = StrSlice(s)
-	return err
-}
-
-// StrSliceOrStr is an array of strings for command execution.
-type StrSliceOrStr []string
-
-// UnmarshalYAML implements [yaml.Unmarshaler] to parse a string or a list of strings.
-func (l *StrSliceOrStr) UnmarshalYAML(n *yaml.Node) (err error) {
-	type yamlT StrSliceOrStr
-	if n.Kind == yaml.ScalarNode {
-		var s string
-		err = n.Decode(&s)
-		*l = StrSliceOrStr{s}
-		return err
-	}
+	type yamlT StrSlice
 	var s yamlT
 	err = n.Decode(&s)
 	if err != nil {
-		return yamlTypeErrorLine(sErrArrOrStrEl, n.Line, n.Column)
+		return yamlTypeErrorLine(sErrArrEl, n.Line, n.Column)
 	}
-	*l = StrSliceOrStr(s)
+	*l = StrSlice(s)
 	return err
 }
 
@@ -374,7 +336,6 @@ type DefParameter struct {
 	// Name is an action unique parameter name used.
 	Name string `yaml:"name"`
 	// Shorthand is a short name 1 syllable name used in Console.
-	// @todo test definition, validate, catch panic if overlay, add to readme.
 	Shorthand string `yaml:"shorthand"`
 	// Required indicates if the parameter is mandatory.
 	// It's not correct json schema, and it's processed to a correct place later.
@@ -424,6 +385,9 @@ func (p *DefParameter) UnmarshalYAML(n *yaml.Node) (err error) {
 		v, err := jsonschema.EnsureType(p.Type, p.Enum[i])
 		if err != nil {
 			enumNode := yamlFindNodeByKey(n, "enum")
+			if enumNode == nil {
+				panic("enum node not found after successfully parsed")
+			}
 			return yamlTypeErrorLine(err.Error(), enumNode.Line, enumNode.Column)
 		}
 		p.Enum[i] = v
