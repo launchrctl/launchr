@@ -33,3 +33,4 @@ jobs:
     with:
       use-docker-sidecar: true        # 🐳 Enable full testing environment
       use-sidecar-remote-share: true  # 📁 Enable remote file sharing for testing
+      use-local-docker: true            # 🐳 Install local docker on non-linux runners
