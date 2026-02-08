@@ -83,11 +83,12 @@ Launchr is a CLI action runner that executes tasks defined in YAML files across 
 - Mutex-protected operations for concurrency safety
 - `fs.FS` interface for filesystem abstraction
 - JSON Schema validation for inputs and configuration
-- **Plugin Replacement Logic**: In `plugins/builder/environment.go:133-149`, when downloading plugins during build, the system uses a two-phase approach:
+- **Plugin Replacement Logic**: In `plugins/builder/environment.go`, when downloading plugins during build, the system handles replaced modules via `getOrRequire()`:
   1. **Subpath Detection**: Skip plugins that are subpaths of replaced modules (`p.Path != repl && strings.HasPrefix(p.Path, repl)`) using labeled loop control
-  2. **Exact Match Handling**: Process plugins that exactly match replaced modules (`p.Path == repl`) as replaced plugins requiring special handling
+  2. **Replaced Module Handling**: For modules that exactly match a replacement entry, `go get` is called without the version suffix (just the module path). This is necessary because when a module is replaced with a local path, `go get module@version` tries to resolve the version from the network, which fails. Stripping the version lets Go resolve the module from the local replacement.
+  3. **Non-replaced Modules**: Downloaded normally with `go get module@version`
 
-  This prevents downloading dependencies for sub-plugins when their parent module is replaced while ensuring exact matches are handled correctly.
+  This prevents downloading dependencies for sub-plugins when their parent module is replaced, ensures replaced modules are properly required in go.mod, and avoids "replaced but not required" errors.
 - **Environment Variable Handling**: Different runtimes handle environment variables differently:
   - **Shell Runtime** (`pkg/action/runtime.shell.go:47`): Automatically inherits all host environment variables using `append(os.Environ(), rt.Shell.Env...)`, making all host variables available to the script.
   - **Container Runtime** (`pkg/action/runtime.container.go:527`): Only passes explicitly defined environment variables from `runtime.env` in action YAML. Host environment variables must be explicitly referenced using `${VAR}` expansion syntax during action loading (`pkg/action/loader.go:59`).
