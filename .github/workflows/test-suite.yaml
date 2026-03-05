@@ -65,6 +65,7 @@ jobs:
   test:
     name: 🧪 Test ${{ matrix.name }} ${{ matrix.needs-sidecar && '(sidecar)' }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - name: 🐧 Linux (amd64)
@@ -76,6 +77,7 @@ jobs:
             needs-sidecar: true
           - name: 🖥️ Windows (amd64)
             os: windows-latest
+            continue-on-error: true  # WSL .exe interop broken on GH runners since image 20260202
           - name: 🖥️ Windows (arm64)
             os: windows-11-arm
             needs-sidecar: true

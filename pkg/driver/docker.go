@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/build"
@@ -199,31 +200,45 @@ func (d *dockerRuntime) ContainerCreate(ctx context.Context, opts ContainerDefin
 		volume += opts.Volumes[i].MountPath
 	}
 
-	resp, err := d.cli.ContainerCreate(
-		ctx,
-		&container.Config{
-			Hostname:     opts.Hostname,
-			Image:        opts.Image,
-			Cmd:          opts.Command,
-			WorkingDir:   opts.WorkingDir,
-			OpenStdin:    opts.Streams.Stdin,
-			AttachStdin:  opts.Streams.Stdin,
-			AttachStdout: opts.Streams.Stdout,
-			AttachStderr: opts.Streams.Stderr,
-			Tty:          opts.Streams.TTY,
-			Env:          opts.Env,
-			User:         opts.User,
-			Volumes:      volumes,
-			Entrypoint:   opts.Entrypoint,
-		},
-		hostCfg,
-		nil, nil, opts.ContainerName,
-	)
-	if err != nil {
-		return "", err
+	containerCfg := &container.Config{
+		Hostname:     opts.Hostname,
+		Image:        opts.Image,
+		Cmd:          opts.Command,
+		WorkingDir:   opts.WorkingDir,
+		OpenStdin:    opts.Streams.Stdin,
+		AttachStdin:  opts.Streams.Stdin,
+		AttachStdout: opts.Streams.Stdout,
+		AttachStderr: opts.Streams.Stderr,
+		Tty:          opts.Streams.TTY,
+		Env:          opts.Env,
+		User:         opts.User,
+		Volumes:      volumes,
+		Entrypoint:   opts.Entrypoint,
 	}
 
-	return resp.ID, nil
+	// Retry on transient Docker daemon errors (e.g., containerd gRPC connection drops
+	// after image GC on Windows). ContainerCreate is idempotent - safe to retry.
+	const maxRetries = 3
+	var resp container.CreateResponse
+	var err error
+	for attempt := range maxRetries {
+		resp, err = d.cli.ContainerCreate(ctx, containerCfg, hostCfg, nil, nil, opts.ContainerName)
+		if err == nil {
+			return resp.ID, nil
+		}
+		// Don't retry if caller's context is done.
+		if ctx.Err() != nil {
+			return "", err
+		}
+		// Don't retry on non-transient errors.
+		if cerrdefs.IsNotFound(err) || cerrdefs.IsInvalidArgument(err) || cerrdefs.IsConflict(err) {
+			return "", err
+		}
+		launchr.Log().Debug("retrying container create after transient error", "attempt", attempt+1, "error", err)
+		time.Sleep(time.Duration(attempt+1) * time.Second)
+	}
+
+	return "", err
 }
 
 func (d *dockerRuntime) ContainerStart(ctx context.Context, cid string, runConfig ContainerDefinition) (<-chan int, *ContainerInOut, error) {
