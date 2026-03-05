@@ -134,6 +134,80 @@ type DefAction struct {
 	Aliases     []string       `yaml:"alias"`
 	Arguments   ParametersList `yaml:"arguments"`
 	Options     ParametersList `yaml:"options"`
+	Result      *DefResult     `yaml:"result"`
+}
+
+// DefResult holds the result schema definition for structured output.
+// It uses standard JSON Schema format to define the structure of action output.
+type DefResult struct {
+	raw map[string]any
+}
+
+// UnmarshalYAML implements [yaml.Unmarshaler] to parse [DefResult].
+func (r *DefResult) UnmarshalYAML(n *yaml.Node) (err error) {
+	if err = n.Decode(&r.raw); err != nil {
+		return err
+	}
+	// Validate that type is specified.
+	if _, ok := r.raw["type"]; !ok {
+		return yamlTypeErrorLine("result schema must have a type field", n.Line, n.Column)
+	}
+	return nil
+}
+
+// MarshalYAML implements [yaml.Marshaler] to serialize [DefResult].
+func (r *DefResult) MarshalYAML() (any, error) {
+	return r.raw, nil
+}
+
+// Raw returns the raw JSON Schema map.
+func (r *DefResult) Raw() map[string]any {
+	if r == nil {
+		return nil
+	}
+	return r.raw
+}
+
+// Type returns the JSON Schema type of the result.
+func (r *DefResult) Type() jsonschema.Type {
+	if r == nil || r.raw == nil {
+		return ""
+	}
+	if t, ok := r.raw["type"].(string); ok {
+		return jsonschema.TypeFromString(t)
+	}
+	return ""
+}
+
+// JSONSchema returns [jsonschema.Schema] for the result.
+func (r *DefResult) JSONSchema() jsonschema.Schema {
+	if r == nil || r.raw == nil {
+		return jsonschema.Schema{}
+	}
+
+	s := jsonschema.Schema{
+		Type: r.Type(),
+	}
+
+	if title, ok := r.raw["title"].(string); ok {
+		s.Title = title
+	}
+	if desc, ok := r.raw["description"].(string); ok {
+		s.Description = desc
+	}
+	if props, ok := r.raw["properties"].(map[string]any); ok {
+		s.Properties = props
+	}
+	if req, ok := r.raw["required"].([]any); ok {
+		s.Required = make([]string, 0, len(req))
+		for _, v := range req {
+			if str, okStr := v.(string); okStr {
+				s.Required = append(s.Required, str)
+			}
+		}
+	}
+
+	return s
 }
 
 // UnmarshalYAML implements [yaml.Unmarshaler] to parse action definition.

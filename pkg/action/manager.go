@@ -364,12 +364,20 @@ func (m *actionManagerMap) ValidateInput(a *Action, input *Input) error {
 	return nil
 }
 
+// Run status constants.
+const (
+	runStatusCreated  = "created"
+	runStatusError    = "error"
+	runStatusFinished = "finished"
+)
+
 // RunInfo stores information about a running action.
 type RunInfo struct {
 	ID     string
 	Action *Action
 	Status string
-	// @todo add more info for status like error message or exit code. Or have it in output.
+	Result any    // Result contains the structured result if the runtime implements RuntimeResultProvider.
+	Error  string // Error contains the error message if the action failed.
 }
 
 type runManagerMap struct {
@@ -388,7 +396,7 @@ func (m *runManagerMap) registerRun(a *Action, id string) RunInfo {
 	ri := RunInfo{
 		ID:     id,
 		Action: a,
-		Status: "created",
+		Status: runStatusCreated,
 	}
 	m.runStore[id] = ri
 	return ri
@@ -403,10 +411,32 @@ func (m *runManagerMap) updateRunStatus(id string, st string) {
 	}
 }
 
+func (m *runManagerMap) updateRunInfo(ri RunInfo) {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+	m.runStore[ri.ID] = ri
+}
+
 // Run executes an action in foreground.
 func (m *runManagerMap) Run(ctx context.Context, a *Action) (RunInfo, error) {
-	// @todo add the same status change info
-	return m.registerRun(a, ""), a.Execute(ctx)
+	ri := m.registerRun(a, "")
+	err := a.Execute(ctx)
+
+	// Capture result if the runtime implements RuntimeResultProvider.
+	if rp, ok := a.Runtime().(RuntimeResultProvider); ok {
+		ri.Result = rp.Result()
+	}
+
+	// Capture error message.
+	if err != nil {
+		ri.Error = err.Error()
+		ri.Status = runStatusError
+	} else {
+		ri.Status = runStatusFinished
+	}
+	m.updateRunInfo(ri)
+
+	return ri, err
 }
 
 // RunBackground executes an action in background.
@@ -419,15 +449,23 @@ func (m *runManagerMap) RunBackground(ctx context.Context, a *Action, runID stri
 		err := a.Execute(ctx)
 		chErr <- err
 		close(chErr)
+
+		// Capture result if the runtime implements RuntimeResultProvider.
+		if rp, ok := a.Runtime().(RuntimeResultProvider); ok {
+			ri.Result = rp.Result()
+		}
+
 		if err != nil {
+			ri.Error = err.Error()
 			if errors.Is(err, context.Canceled) {
-				m.updateRunStatus(ri.ID, "canceled")
+				ri.Status = "canceled"
 			} else {
-				m.updateRunStatus(ri.ID, "error")
+				ri.Status = "error"
 			}
 		} else {
-			m.updateRunStatus(ri.ID, "finished")
+			ri.Status = "finished"
 		}
+		m.updateRunInfo(ri)
 	}()
 	// @todo rethink returned values.
 	return ri, chErr

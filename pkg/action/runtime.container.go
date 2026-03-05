@@ -1,7 +1,9 @@
 package action
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/archive"
@@ -35,6 +38,7 @@ type runtimeContainer struct {
 	WithLogger
 	WithTerm
 	WithFlagsGroup
+	WithResult
 
 	// crt is a container runtime.
 	crt driver.ContainerRunner
@@ -59,6 +63,9 @@ type runtimeContainer struct {
 	entrypointSet bool
 	exec          bool
 	volumeFlags   string
+
+	// Structured output capture
+	stdoutBuf *bytes.Buffer
 }
 
 // ContainerNameProvider provides an ability to generate a random container name
@@ -336,8 +343,18 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 		return err
 	}
 
+	// If action has a result schema, capture stdout for JSON parsing.
+	// Launchr will handle output formatting based on --json flag.
+	hasResultSchema := a.ActionDef().Result != nil
+	if hasResultSchema {
+		c.stdoutBuf = &bytes.Buffer{}
+	}
+
 	// Stream container io and watch tty resize.
+	var streamWg sync.WaitGroup
+	streamWg.Add(1)
 	go func() {
+		defer streamWg.Done()
 		if cio == nil {
 			return
 		}
@@ -346,7 +363,12 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 			launchr.Log().Debug("watching TTY resize")
 			cio.TtyMonitor.Start(ctx, streams)
 		}
-		errStream := cio.Stream(ctx, streams)
+		// Use capturing streams if action has result schema.
+		targetStreams := streams
+		if hasResultSchema {
+			targetStreams = launchr.NewCapturingStreams(streams, c.stdoutBuf)
+		}
+		errStream := cio.Stream(ctx, targetStreams)
 		if errStream != nil {
 			launchr.Log().Error("error on streaming container io. The container may still run, waiting for it to finish", "error", err)
 		}
@@ -359,6 +381,21 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 	log.Info("action finished with the exit code", "exit_code", status)
 	if status != 0 {
 		err = launchr.NewExitError(status, fmt.Sprintf("action %q finished with exit code %d", a.ID, status))
+	}
+
+	// Wait for streaming to complete before parsing result.
+	streamWg.Wait()
+
+	// Parse stdout as JSON result if action has result schema.
+	if hasResultSchema && err == nil && c.stdoutBuf != nil {
+		var result any
+		if jsonErr := json.Unmarshal(c.stdoutBuf.Bytes(), &result); jsonErr != nil {
+			log.Debug("failed to parse stdout as JSON result, displaying raw output", "error", jsonErr)
+			// If not valid JSON, display the raw output to user
+			_, _ = streams.Out().Write(c.stdoutBuf.Bytes())
+		} else {
+			c.SetResult(result)
+		}
 	}
 
 	// Copy back the result from the volume.

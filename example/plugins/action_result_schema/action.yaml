@@ -1,0 +1,49 @@
+runtime: plugin
+action:
+  title: Result Schema Example
+  description: Demonstrates structured output with result schema
+
+  arguments:
+    - name: count
+      type: integer
+      default: 3
+      description: Number of items to generate
+
+  options:
+    - name: prefix
+      type: string
+      default: "item"
+      description: Prefix for generated items
+
+  result:
+    type: object
+    description: Generated items with summary
+    properties:
+      items:
+        type: array
+        description: List of generated items
+        items:
+          type: object
+          properties:
+            id:
+              type: integer
+              description: Item identifier
+            name:
+              type: string
+              description: Item name
+            created_at:
+              type: string
+              description: Creation timestamp
+      summary:
+        type: object
+        description: Summary statistics
+        properties:
+          total:
+            type: integer
+            description: Total number of items
+          prefix:
+            type: string
+            description: Prefix used for generation
+    required:
+      - items
+      - summary

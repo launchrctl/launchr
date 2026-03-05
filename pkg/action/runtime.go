@@ -125,3 +125,28 @@ func (c *WithFlagsGroup) SetFlagsGroup(group *FlagsGroup) {
 func (c *WithFlagsGroup) GetFlagsGroup() *FlagsGroup {
 	return c.flags
 }
+
+// RuntimeResultProvider is an interface for runtimes that can provide structured results.
+// Runtimes implementing this interface can return structured output that will be
+// serialized as JSON when the --json flag is used.
+type RuntimeResultProvider interface {
+	Runtime
+	// Result returns the structured result of the action execution.
+	// This is called after Execute() completes successfully.
+	Result() any
+}
+
+// WithResult provides a composition with result utilities.
+type WithResult struct {
+	result any
+}
+
+// SetResult sets the result of the action execution.
+func (c *WithResult) SetResult(result any) {
+	c.result = result
+}
+
+// Result implements [RuntimeResultProvider] interface.
+func (c *WithResult) Result() any {
+	return c.result
+}

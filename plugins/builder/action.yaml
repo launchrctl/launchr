@@ -10,9 +10,8 @@ action:
       description: Result application name
       type: string
       default: DEFAULT_NAME_PLACEHOLDER
-    - name: output
-      shorthand: o
-      title: Output
+    - name: out-file
+      title: Output File
       description: Build output file, by default application name is used
       type: string
       default: ""

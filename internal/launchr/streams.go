@@ -236,3 +236,29 @@ func WithSensitiveMask(m *SensitiveMask) StreamsModifierFn {
 		streams.err.out = m.MaskWriter(streams.err.out)
 	}
 }
+
+// capturingStreams wraps a Streams and captures stdout to a buffer.
+type capturingStreams struct {
+	base      Streams
+	stdoutBuf io.Writer
+	captureW  *Out
+}
+
+// NewCapturingStreams creates a Streams wrapper that captures stdout to a buffer
+// WITHOUT writing to the original stream. This is used for actions with result schemas
+// where stdout contains structured data (JSON) that launchr will parse and format.
+// stderr still flows through normally for logs/debug messages.
+func NewCapturingStreams(base Streams, stdoutBuf io.Writer) Streams {
+	return &capturingStreams{
+		base:      base,
+		stdoutBuf: stdoutBuf,
+		captureW:  NewOut(stdoutBuf), // Capture only, no terminal passthrough
+	}
+}
+
+func (c *capturingStreams) In() *In   { return c.base.In() }
+func (c *capturingStreams) Out() *Out { return c.captureW }
+func (c *capturingStreams) Err() *Out { return c.base.Err() }
+func (c *capturingStreams) Close() error {
+	return c.base.Close()
+}

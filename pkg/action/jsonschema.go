@@ -13,6 +13,7 @@ const (
 	jsonschemaPropOpts       = "options"
 	jsonschemaPropRuntime    = "runtime"
 	jsonschemaPropPersistent = "persistent"
+	jsonschemaPropResult     = "result"
 )
 
 // validateJSONSchema validates arguments and options according to
@@ -50,26 +51,41 @@ func (a *DefAction) JSONSchema() jsonschema.Schema {
 	args, argsReq := a.Arguments.JSONSchema()
 	opts, optsReq := a.Options.JSONSchema()
 
-	return jsonschema.Schema{
-		Type:     jsonschema.Object,
-		Required: []string{jsonschemaPropArgs, jsonschemaPropOpts},
-		Properties: map[string]any{
-			jsonschemaPropArgs: map[string]any{
-				"type":                 "object",
-				"title":                "Arguments",
-				"properties":           args,
-				"required":             argsReq,
-				"additionalProperties": false,
-			},
-			jsonschemaPropOpts: map[string]any{
-				"type":                 "object",
-				"title":                "Options",
-				"properties":           opts,
-				"required":             optsReq,
-				"additionalProperties": false,
-			},
+	props := map[string]any{
+		jsonschemaPropArgs: map[string]any{
+			"type":                 "object",
+			"title":                "Arguments",
+			"properties":           args,
+			"required":             argsReq,
+			"additionalProperties": false,
+		},
+		jsonschemaPropOpts: map[string]any{
+			"type":                 "object",
+			"title":                "Options",
+			"properties":           opts,
+			"required":             optsReq,
+			"additionalProperties": false,
 		},
 	}
+
+	// Add result schema if defined.
+	if a.Result != nil {
+		props[jsonschemaPropResult] = a.Result.Raw()
+	}
+
+	return jsonschema.Schema{
+		Type:       jsonschema.Object,
+		Required:   []string{jsonschemaPropArgs, jsonschemaPropOpts},
+		Properties: props,
+	}
+}
+
+// ResultJSONSchema returns the result schema if defined, nil otherwise.
+func (a *DefAction) ResultJSONSchema() map[string]any {
+	if a.Result == nil {
+		return nil
+	}
+	return a.Result.Raw()
 }
 
 // JSONSchema collects all arguments json schema definition and also returns fields that are required.

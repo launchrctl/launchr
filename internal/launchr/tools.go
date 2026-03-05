@@ -84,10 +84,11 @@ func IsSELinuxEnabled() bool {
 
 // CmdEarlyParsed is all parsed command information on early stage.
 type CmdEarlyParsed struct {
-	Command   string   // Command is the requested command.
-	Args      []string // Args are all arguments provided in the command line.
-	IsVersion bool     // IsVersion when version was requested.
-	IsGen     bool     // IsGen when in generate mod.
+	Command      string   // Command is the requested command.
+	Args         []string // Args are all arguments provided in the command line.
+	IsVersion    bool     // IsVersion when version was requested.
+	IsGen        bool     // IsGen when in generate mod.
+	IsCompletion bool     // IsCompletion when shell completion was requested.
 }
 
 // EarlyPeekCommand parses all available information during init stage.

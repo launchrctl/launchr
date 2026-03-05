@@ -1,7 +1,9 @@
 package action
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -18,6 +20,7 @@ type shellContext struct {
 
 type runtimeShell struct {
 	WithLogger
+	WithResult
 }
 
 // NewShellRuntime creates a new action shell runtime.
@@ -48,9 +51,19 @@ func (r *runtimeShell) Execute(ctx context.Context, a *Action) (err error) {
 	cmd := exec.CommandContext(ctx, shctx.Shell, shctx.Script) //nolint:gosec // G204 user script is expected.
 	cmd.Dir = a.WorkDir()
 	cmd.Env = shctx.Env
-	cmd.Stdout = streams.Out()
 	cmd.Stderr = streams.Err()
 	// Do no attach stdin, as it may not work as expected.
+
+	// If action has a result schema, capture stdout to parse as JSON.
+	// Launchr will handle output formatting based on --json flag.
+	// Otherwise, stream stdout directly to the terminal.
+	var stdoutBuf *bytes.Buffer
+	if a.ActionDef().Result != nil {
+		stdoutBuf = &bytes.Buffer{}
+		cmd.Stdout = stdoutBuf
+	} else {
+		cmd.Stdout = streams.Out()
+	}
 
 	err = cmd.Start()
 	if err != nil {
@@ -79,6 +92,17 @@ func (r *runtimeShell) Execute(ctx context.Context, a *Action) (err error) {
 		log.Info("action finished with exit code", "exit_code", exitCode)
 		return launchr.NewExitError(exitCode, msg)
 	}
+
+	// Parse stdout as JSON result if action has result schema.
+	if stdoutBuf != nil && cmdErr == nil {
+		var result any
+		if err := json.Unmarshal(stdoutBuf.Bytes(), &result); err != nil {
+			log.Debug("failed to parse stdout as JSON result", "error", err)
+		} else {
+			r.SetResult(result)
+		}
+	}
+
 	return cmdErr
 }
 

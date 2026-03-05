@@ -7,6 +7,7 @@ import (
 	_ "github.com/launchrctl/launchr/plugins/actionscobra"
 	_ "github.com/launchrctl/launchr/plugins/builder"
 	_ "github.com/launchrctl/launchr/plugins/builtinprocessors"
+	_ "github.com/launchrctl/launchr/plugins/jsonoutput"
 	_ "github.com/launchrctl/launchr/plugins/verbosity"
 	_ "github.com/launchrctl/launchr/plugins/yamldiscovery"
 )

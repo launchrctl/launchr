@@ -60,7 +60,7 @@ func (p *Plugin) DiscoverActions(_ context.Context) ([]*action.Action, error) {
 		input := a.Input()
 		flags := builderInput{
 			name:    input.Opt("name").(string),
-			out:     input.Opt("output").(string),
+			out:     input.Opt("out-file").(string),
 			version: input.Opt("build-version").(string),
 			timeout: input.Opt("timeout").(string),
 			tags:    action.InputOptSlice[string](input, "tag"),

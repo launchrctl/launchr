@@ -1,12 +1,16 @@
 package actionscobra
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"reflect"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"gopkg.in/yaml.v3"
 
 	"github.com/launchrctl/launchr/internal/launchr"
 	"github.com/launchrctl/launchr/pkg/action"
@@ -73,7 +77,40 @@ func CobraImpl(a *action.Action, streams launchr.Streams, manager action.Manager
 			// Don't show usage help on a runtime error.
 			cmd.SilenceUsage = true
 
-			_, err = manager.Run(cmd.Context(), a)
+			// Check structured output flags.
+			persistentFlags := manager.GetPersistentFlags()
+			outputFormat, _ := a.Input().GetFlagInGroup(persistentFlags.Name(), "output").(string)
+			structuredOutput := outputFormat == "json" || outputFormat == "yaml"
+
+			// Fail early if structured output is requested but not supported.
+			if structuredOutput && a.ActionDef().Result == nil {
+				return fmt.Errorf("action %q does not support structured output (no result schema defined)", a.ID)
+			}
+
+			// Fail early on unknown output format.
+			if outputFormat != "" && !structuredOutput {
+				return fmt.Errorf("unknown output format %q, supported: json, yaml", outputFormat)
+			}
+
+			// When structured output is requested, silence terminal output
+			// so only the encoded result goes to stdout.
+			if structuredOutput {
+				if rt, ok := a.Runtime().(action.RuntimeTermAware); ok {
+					rt.Term().SetOutput(io.Discard)
+				}
+			}
+
+			ri, err := manager.Run(cmd.Context(), a)
+
+			// Encode structured output.
+			if outputFormat == "json" {
+				return outputJSON(cmd, ri, err)
+			}
+			if outputFormat == "yaml" {
+				return outputYAML(cmd, ri, err)
+			}
+
+			// Text mode: action already printed its human-readable output via term.
 			return err
 		},
 	}
@@ -218,3 +255,78 @@ func derefOpt(v any) any {
 		return v
 	}
 }
+
+// JSONOutput is the structured output format when --json flag is used.
+type JSONOutput struct {
+	Result any        `json:"result,omitempty"`
+	Error  *JSONError `json:"error,omitempty"`
+}
+
+// JSONError is the error format for JSON output.
+type JSONError struct {
+	Message string `json:"message"`
+	Code    string `json:"code,omitempty"`
+}
+
+// outputJSON handles JSON output for action results.
+func outputJSON(cmd *launchr.Command, ri action.RunInfo, execErr error) error {
+	out := JSONOutput{}
+
+	if execErr != nil {
+		out.Error = &JSONError{Message: execErr.Error()}
+		// Include exit code if available.
+		var exitErr launchr.ExitError
+		if errors.As(execErr, &exitErr) {
+			out.Error.Code = fmt.Sprintf("EXIT_%d", exitErr.ExitCode())
+		}
+	} else {
+		out.Result = ri.Result
+	}
+
+	enc := json.NewEncoder(cmd.OutOrStdout())
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(out); err != nil {
+		return fmt.Errorf("failed to encode JSON output: %w", err)
+	}
+
+	// Return the original error to preserve exit code.
+	return execErr
+}
+
+// YAMLOutput is the structured output format when --yaml flag is used.
+type YAMLOutput struct {
+	Result any        `yaml:"result,omitempty"`
+	Error  *YAMLError `yaml:"error,omitempty"`
+}
+
+// YAMLError is the error format for YAML output.
+type YAMLError struct {
+	Message string `yaml:"message"`
+	Code    string `yaml:"code,omitempty"`
+}
+
+// outputYAML handles YAML output for action results.
+func outputYAML(cmd *launchr.Command, ri action.RunInfo, execErr error) error {
+	out := YAMLOutput{}
+
+	if execErr != nil {
+		out.Error = &YAMLError{Message: execErr.Error()}
+		// Include exit code if available.
+		var exitErr launchr.ExitError
+		if errors.As(execErr, &exitErr) {
+			out.Error.Code = fmt.Sprintf("EXIT_%d", exitErr.ExitCode())
+		}
+	} else {
+		out.Result = ri.Result
+	}
+
+	enc := yaml.NewEncoder(cmd.OutOrStdout())
+	enc.SetIndent(2)
+	if err := enc.Encode(out); err != nil {
+		return fmt.Errorf("failed to encode YAML output: %w", err)
+	}
+
+	// Return the original error to preserve exit code.
+	return execErr
+}
+
