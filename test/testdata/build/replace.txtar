@@ -1,0 +1,22 @@
+# Launchr Replace Module Test
+#
+# Validates that replaced modules are properly required in go.mod.
+# Regression test for: "replaced but not required" error when using --replace flag.
+# When a module is replaced, `go mod edit -require` must be used to add it
+# to go.mod, otherwise Go compilation fails.
+
+env HOME=$REAL_HOME
+env APP_PLUGIN_LOCAL=example.com/genaction@v1.1.1
+env APP_PLUGIN_LOCAL_PATH=$REPO_PATH/test/plugins/genaction
+
+# Test 1: Build with only replaced plugin (no external plugins).
+# This is the minimal reproduction of the "replaced but not required" bug.
+! exists launchr
+exec launchr build -r $CORE_PKG=$REPO_PATH -p $APP_PLUGIN_LOCAL -r $APP_PLUGIN_LOCAL=$APP_PLUGIN_LOCAL_PATH
+! stderr .
+exists launchr
+
+# Test 2: Verify the built binary works.
+exec ./launchr genaction:example
+stdout 'hello world'
+! stderr .

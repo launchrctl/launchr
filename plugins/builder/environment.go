@@ -108,7 +108,7 @@ func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptio
 	}
 
 	// Download core.
-	err = env.execGoGet(ctx, opts.CorePkg.String())
+	err = env.getOrRequire(ctx, opts.CorePkg, opts.ModReplace)
 	if err != nil {
 		return err
 	}
@@ -122,7 +122,7 @@ nextPlugin:
 				continue nextPlugin
 			}
 		}
-		err = env.execGoGet(ctx, p.String())
+		err = env.getOrRequire(ctx, p, opts.ModReplace)
 		if err != nil {
 			return err
 		}
@@ -143,6 +143,16 @@ func (env *buildEnvironment) NewCommand(ctx context.Context, command string, arg
 	cmd.Stdout = env.Term()
 	cmd.Stderr = env.Term()
 	return cmd
+}
+
+// getOrRequire downloads the module with "go get". For replaced modules,
+// the version is stripped because it can't be resolved from the network
+// when the module is replaced with a local path.
+func (env *buildEnvironment) getOrRequire(ctx context.Context, p UsePluginInfo, modReplace map[string]string) error {
+	if _, replaced := modReplace[p.Path]; replaced {
+		return env.execGoGet(ctx, p.Path)
+	}
+	return env.execGoGet(ctx, p.String())
 }
 
 func (env *buildEnvironment) execGoMod(ctx context.Context, args ...string) error {
