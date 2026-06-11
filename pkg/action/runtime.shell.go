@@ -80,6 +80,26 @@ func (r *runtimeShell) Execute(ctx context.Context, a *Action) (err error) {
 	defer launchr.StopCatchSignals(sigc)
 
 	cmdErr := cmd.Wait()
+
+	// If the action declares a result schema, stdout was captured instead of
+	// streamed to the terminal. Surface it so it is never swallowed:
+	//   - success + valid JSON   -> structured result
+	//   - success + invalid JSON -> display the raw output
+	//   - failure                -> display the raw output (for debugging)
+	if stdoutBuf != nil {
+		if cmdErr == nil {
+			var result any
+			if jsonErr := json.Unmarshal(stdoutBuf.Bytes(), &result); jsonErr != nil {
+				log.Debug("failed to parse stdout as JSON result, displaying raw output", "error", jsonErr)
+				_, _ = streams.Out().Write(stdoutBuf.Bytes())
+			} else {
+				r.SetResult(result)
+			}
+		} else {
+			_, _ = streams.Out().Write(stdoutBuf.Bytes())
+		}
+	}
+
 	var exitErr *exec.ExitError
 	if errors.As(cmdErr, &exitErr) {
 		exitCode := exitErr.ExitCode()
@@ -91,16 +111,6 @@ func (r *runtimeShell) Execute(ctx context.Context, a *Action) (err error) {
 		}
 		log.Info("action finished with exit code", "exit_code", exitCode)
 		return launchr.NewExitError(exitCode, msg)
-	}
-
-	// Parse stdout as JSON result if action has result schema.
-	if stdoutBuf != nil && cmdErr == nil {
-		var result any
-		if err := json.Unmarshal(stdoutBuf.Bytes(), &result); err != nil {
-			log.Debug("failed to parse stdout as JSON result", "error", err)
-		} else {
-			r.SetResult(result)
-		}
 	}
 
 	return cmdErr

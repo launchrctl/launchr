@@ -386,15 +386,24 @@ func (c *runtimeContainer) Execute(ctx context.Context, a *Action) (err error) {
 	// Wait for streaming to complete before parsing result.
 	streamWg.Wait()
 
-	// Parse stdout as JSON result if action has result schema.
-	if hasResultSchema && err == nil && c.stdoutBuf != nil {
-		var result any
-		if jsonErr := json.Unmarshal(c.stdoutBuf.Bytes(), &result); jsonErr != nil {
-			log.Debug("failed to parse stdout as JSON result, displaying raw output", "error", jsonErr)
-			// If not valid JSON, display the raw output to user
-			_, _ = streams.Out().Write(c.stdoutBuf.Bytes())
+	// If the action declares a result schema, stdout was captured instead of
+	// streamed to the terminal. Surface it so it is never swallowed:
+	//   - success + valid JSON   -> structured result
+	//   - success + invalid JSON -> display the raw output
+	//   - failure                -> display the raw output (for debugging)
+	if hasResultSchema && c.stdoutBuf != nil {
+		if err == nil {
+			var result any
+			if jsonErr := json.Unmarshal(c.stdoutBuf.Bytes(), &result); jsonErr != nil {
+				log.Debug("failed to parse stdout as JSON result, displaying raw output", "error", jsonErr)
+				// If not valid JSON, display the raw output to user.
+				_, _ = streams.Out().Write(c.stdoutBuf.Bytes())
+			} else {
+				c.SetResult(result)
+			}
 		} else {
-			c.SetResult(result)
+			// Action failed: display the captured stdout raw (for debugging).
+			_, _ = streams.Out().Write(c.stdoutBuf.Bytes())
 		}
 	}
 
