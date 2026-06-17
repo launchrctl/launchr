@@ -27,7 +27,7 @@
 Action has the following top-level configuration:
 
   * `version` - action schema version.
-  * `working_directory` - Working directory where the action will be executed, by default current working directory. See [Predefined variables](#predefined-variables) for possible substitutions. 
+  * `working_directory` - Working directory where the action will be executed, by default current working directory. See [Predefined variables](#predefined-variables) for possible substitutions.
   * `action` (required) - declares action title, description and parameters (arguments and options).
   * `runtime` (required) - declares where the action will be executed, e.g. container, shell, custom environment.
 
@@ -47,11 +47,13 @@ runtime:
 
 ## JSON Schema, Arguments and options
 
-Arguments and options are defined in `action.yaml`, parsed according to the schema and replaced on run.  
-Parameter declaration follows [JSON Schema](https://json-schema.org/). The declaration is the same for both.  
+Arguments and options are defined in `action.yaml`, parsed according to the schema and replaced on run.
+Parameter declaration follows [JSON Schema](https://json-schema.org/). The declaration is the same for both.
 
-Both arguments and options can be required and optional, be of various types and have a default value.  
+Both arguments and options can be required and optional, be of various types and have a default value.
 The only difference is how the parameters are provided in the terminal. Arguments are positional, options are named.
+
+Options support a `shorthand` field - a single character alias for the option name (e.g., `shorthand: v` allows `-v` in addition to `--verbose`).
 
 See [examples](#examples) of how required and default are used and more complex parameter validation.
 
@@ -101,7 +103,7 @@ action:
     - name: MyArg2
       title: Argument 2 - Integer
       description: |
-        This is a required argument of type int with a default value. 
+        This is a required argument of type int with a default value.
         It can be omitted, default value is used.
       type: integer
       required: true
@@ -112,9 +114,9 @@ action:
       type: string
       enum: [enum1, enum2]
       description: |
-        This is an optional argument without a default value of type enum<string>. 
+        This is an optional argument without a default value of type enum<string>.
         Only enum values are allowed.
-        It can be omitted, nil value is used. 
+        It can be omitted, nil value is used.
         Since arguments are positional in the terminal, MyArg2 must be provided.
 
   # Options declaration
@@ -123,13 +125,13 @@ action:
       title: Option default string
       default: ""
       description: |
-        This is an option of implicit type "string". 
+        This is an option of implicit type "string".
         It can be omitted, empty string is used.
 
     - name: optStrNil
       title: Option string
       description: |
-        This is an option of implicit type "string". 
+        This is an option of implicit type "string".
         It can be omitted, no default value, nil value is used.
 
     - name: optBool
@@ -171,7 +173,7 @@ action:
       description: |
         This is an optional option of type enum<string>. By default `enum1` is used.
         Only enum values may allowed. This is validated by JSON Schema.
-        
+
     - name: optip
       title: Option IP string
       type: string
@@ -203,6 +205,7 @@ Arguments and Options are available by their machine names - `{{ .myArg1 }}`, `{
 5. `action_dir` or `$ACTION_DIR` - directory of the action file.
 6. `current_bin` or `$CBIN` - path to the Currently executed Binary. Works only in "shell" runtime.
     On Windows, the path is converted to unix style.
+7. `$ACTION_ID` - unique action identifier.
 
 ### Environment variables
 
@@ -264,14 +267,23 @@ runtime:
 
 ### `default`
 
-**Description:** Returns a default value when the first parameter is `nil` or empty. 
-Emptiness is determined by its zero value - empty string `""`, integer `0`, structs with all zero-value fields, etc. 
+**Description:** Returns a default value when the first parameter is `nil` or empty.
+Emptiness is determined by its zero value - empty string `""`, integer `0`, structs with all zero-value fields, etc.
 Or type implements `interface { IsEmpty() bool }`.
 
 **Usage:**
 ```gotemplate
 {{ .nil_value | default "foo" }}
 {{ default .nil_value "bar" }}
+```
+
+### `mask`
+
+**Description:** Masks a sensitive value in the output. The value will be replaced with `****` in terminal output.
+
+**Usage:**
+```gotemplate
+{{ .password | mask }}
 ```
 
 ### `config.Get`
@@ -286,7 +298,6 @@ Or type implements `interface { IsEmpty() bool }`.
 {{ config "foo.missing-elem" | default "bar" }} # uses default if key doesn't exist
 ```
 
-
 ## Runtimes
 
 Action can be executed in different runtime environments. This section covers their declaration.
@@ -295,6 +306,15 @@ Action can be executed in different runtime environments. This section covers th
 
 Container runtime executes the action in a container. Basic definition must have `type`, `image` and `command` to run an action.
 
+Available container runtime fields:
+  * `type` (required) - must be `container`
+  * `image` (required) - container image to use
+  * `command` (required) - command to execute
+  * `env` - environment variables
+  * `build` - image build definition
+  * `extra_hosts` - additional host entries
+  * `user` - user to run the container as
+
 Here is an example:
 
 ```yaml
@@ -302,6 +322,7 @@ Here is an example:
 runtime:
   type: container
   image: alpine:latest
+  user: "1000:1000"
   env:
     ENV1: val1
   build:
@@ -391,7 +412,7 @@ Or
 action:
   title: Test
   description: Test
-  
+
 runtime:
   type: container
   image: alpine:latest
@@ -474,7 +495,6 @@ runtime:
       USER_NAME: plasma
 ```
 
-
 Can be used as:
 ```
 FROM alpine:latest
@@ -512,8 +532,8 @@ A more detailed definition of each property can be found below.
 
 #### Script
 
-The script is executed in the default user shell provided by `$SHELL` environment variable. If it's empty, `/bin/bash` is used by default.  
-Compared to `container` runtime with a command defined as an array, here we can define a multiline script: 
+The script is executed in the default user shell provided by `$SHELL` environment variable. If it's empty, `/bin/bash` is used by default.
+Compared to `container` runtime with a command defined as an array, here we can define a multiline script:
 
 ```yaml
 # ...
@@ -528,8 +548,8 @@ runtime:
 
 #### Environment variables
 
-To pass environment variables to the execution environment, add `env` section. They work exactly the same as in container.  
-**NB!** If you need to use an environment variable in the script, you must escape it with a double `$$` like `$$MY_ENV`. 
+To pass environment variables to the execution environment, add `env` section. They work exactly the same as in container.
+**NB!** If you need to use an environment variable in the script, you must escape it with a double `$$` like `$$MY_ENV`.
 If not escaped, the variable will be replaced during templating and not during the execution. That may lead to an unwanted result.
 
 ```yaml

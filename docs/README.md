@@ -1,10 +1,21 @@
-# Launchr documentation
+# Launchr Documentation
 
-1. [Built-in functionality](#built-in-functionality)
-2. [Actions](actions.md)
-3. [Actions Schema](actions.schema.md)
-4. [Global configuration](config.md)
-5. [Development](development)
+## User Documentation
+1. [Actions](actions.md) - Action definition and usage
+2. [Actions Schema](actions.schema.md) - Schema validation for actions
+3. [Global Configuration](config.md) - Application configuration
+4. [Built-in functionality](#built-in-functionality)
+
+## Developer Documentation
+5. **[Developer Guidelines](DEVELOPER_GUIDELINES.md)** - Comprehensive development guide
+6. **[Architecture](architecture/)** - System architecture documentation
+   - [Architectural Patterns](architecture/ARCHITECTURAL_PATTERNS.md)
+   - [Logging Architecture](architecture/LOGGING_ARCHITECTURE.md)
+   - [Plugin System](architecture/PLUGIN_SYSTEM.md)
+   - [Service System](architecture/SERVICE_SYSTEM.md)
+7. [Development](development) - Specific development topics
+   - [Plugin Development](development/plugin.md)
+   - [Service Development](development/service.md)
 
 ## Build plugin
 
