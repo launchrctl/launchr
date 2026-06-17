@@ -81,6 +81,15 @@ func newBuildEnvironment(b *Builder) (*buildEnvironment, error) {
 	return env, nil
 }
 
+// ensureModuleRequired adds a replaced module to go.mod as a requirement.
+// Replaced modules need an explicit require directive with a placeholder version,
+// otherwise Go reports "replaced but not required" errors during compilation.
+func (env *buildEnvironment) ensureModuleRequired(ctx context.Context, pkg string) error {
+	// Strip version suffix if present, use placeholder version for replaced modules.
+	mod, _, _ := strings.Cut(pkg, "@")
+	return env.execGoMod(ctx, "edit", "-require", mod+"@v0.0.0")
+}
+
 func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptions) error {
 	var err error
 	// Create go.mod.
@@ -89,7 +98,7 @@ func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptio
 		return err
 	}
 
-	// Replace requested modules.
+	// Apply requested module replacements.
 	for o, n := range opts.ModReplace {
 		err = env.execGoMod(ctx, "edit", "-replace", o+"="+n)
 		if err != nil {
@@ -97,39 +106,59 @@ func (env *buildEnvironment) CreateModFile(ctx context.Context, opts *BuildOptio
 		}
 	}
 
-	// Download the requested dependencies directly.
+	// Download dependencies.
 	if opts.NoCache {
-		domains := make([]string, len(opts.Plugins))
-		for i := 0; i < len(domains); i++ {
-			domains[i] = opts.Plugins[i].Path
+		// Set GONOSUMDB and GONOPROXY for modules that should not be cached or verified.
+		domains := make([]string, 0, len(opts.Plugins)+1)
+		for _, p := range opts.Plugins {
+			domains = append(domains, p.Path)
+		}
+		if opts.CorePkg.Path != "" {
+			domains = append(domains, opts.CorePkg.Path)
 		}
 		noproxy := strings.Join(domains, ",")
 		env.env = append(env.env, "GONOSUMDB="+noproxy, "GONOPROXY="+noproxy)
 	}
 
-	// Download core.
-	err = env.execGoGet(ctx, opts.CorePkg.String())
-	if err != nil {
+	// Download core package.
+	// Replaced modules need an explicit require directive first, otherwise Go
+	// reports "replaced but not required" errors during compilation.
+	if _, ok := opts.ModReplace[opts.CorePkg.Path]; ok {
+		if err = env.ensureModuleRequired(ctx, opts.CorePkg.String()); err != nil {
+			return err
+		}
+	}
+	if err = env.execGoGet(ctx, opts.CorePkg.String()); err != nil {
 		return err
 	}
 
 	// Download plugins.
-nextPlugin:
 	for _, p := range opts.Plugins {
-		// Do not get plugins of module subpath.
+		// Skip plugins that are subpaths of replaced modules.
+		isSubpath := false
 		for repl := range opts.ModReplace {
 			if p.Path != repl && strings.HasPrefix(p.Path, repl) {
-				continue nextPlugin
+				isSubpath = true
+				break
 			}
 		}
-		err = env.execGoGet(ctx, p.String())
-		if err != nil {
+		if isSubpath {
+			continue
+		}
+
+		// Replaced modules need an explicit require directive before go get.
+		if _, ok := opts.ModReplace[p.Path]; ok {
+			if err = env.ensureModuleRequired(ctx, p.String()); err != nil {
+				return err
+			}
+		}
+		if err = env.execGoGet(ctx, p.String()); err != nil {
 			return err
 		}
 	}
 	// @todo update all but with fixed versions if requested
 
-	return err
+	return nil
 }
 
 func (env *buildEnvironment) Filepath(s string) string {
